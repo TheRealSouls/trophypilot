@@ -3,8 +3,8 @@
 # restarts and sleeping. See README, "Deploying for free (Render + Neon)".
 services:
   - type: web
-    # Kept from before the TrophyPilot rename: changing it makes Render create a second service.
-    name: huntresser
+    # Also the free address: https://trophypilot.onrender.com. Renaming it makes Render create a new service.
+    name: trophypilot
     runtime: node
     plan: free
     region: frankfurt

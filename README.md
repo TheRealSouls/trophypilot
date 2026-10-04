@@ -298,7 +298,7 @@ Render hosts the website, Neon holds the data. Both have free plans that don't n
    `npx prisma db push` and `npm run db:from-sqlite`.
 3. **Create the website.** At dashboard.render.com: **New**, then **Blueprint**, pick `TheRealSouls/huntresser` (the repository keeps its original name).
 4. When Render asks for values: `DATABASE_URL` is the Neon string, `PSN_NPSSO` is your token, and
-   `NEXT_PUBLIC_SITE_URL` is `https://huntresser.onrender.com` (or the address Render shows), or `https://trophypilot.com` once your domain points at Render.
+   `NEXT_PUBLIC_SITE_URL` is `https://trophypilot.onrender.com` (or the address Render shows), or `https://trophypilot.com` once your domain points at Render.
 5. Click **Apply** and wait for **Live**. `/api/health` should show `"mode":"live"`.
 6. **Keep it awake.** At cron-job.org (free), add a job for `https://<your-site>/api/ping` every 10 minutes. Render's
    free plan puts the site to sleep after 15 minutes without visitors and waking it takes about 40 seconds; the ping stops
