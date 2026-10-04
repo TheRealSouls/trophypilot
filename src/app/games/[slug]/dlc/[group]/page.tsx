@@ -50,7 +50,7 @@ export default async function DlcPage({ params }: { params: Promise<Params> }) {
         <Link href={`/games/${game.slug}`} className="hover:text-text">{game.title}</Link> <span className="mx-1">/</span> DLC
       </nav>
       <header className="card mb-6 flex flex-wrap items-center gap-5 p-6">
-        <GameArt title={dlc.name} hue={(game.coverHue + 40) % 360} className="w-24" />
+        <GameArt title={dlc.name} hue={(game.coverHue + 40) % 360} iconUrl={dlc.iconUrl ?? game.iconUrl} className="w-24" />
         <div className="flex-1">
           <span className="chip border-very/40 text-very">DLC · {game.title}</span>
           <h1 className="mt-2 text-3xl font-bold">{dlc.name}</h1>

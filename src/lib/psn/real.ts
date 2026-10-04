@@ -220,7 +220,7 @@ export class RealPsnProvider implements TrophyProvider {
       throw toPsnError(e);
     });
     return {
-      groups: groups.trophyGroups.map((g) => ({ psnGroupId: g.trophyGroupId, name: g.trophyGroupName })),
+      groups: groups.trophyGroups.map((g) => ({ psnGroupId: g.trophyGroupId, name: g.trophyGroupName, iconUrl: g.trophyGroupIconUrl ?? null })),
       trophies: trophies.trophies.map((t) => ({
         psnTrophyId: t.trophyId,
         psnGroupId: t.trophyGroupId ?? "default",

@@ -127,3 +127,8 @@ export function titleKey(title: string) {
 export function secureUrl<T extends string | null | undefined>(url: T): T {
   return (url ? url.replace(/^http:\/\//i, "https://") : url) as T;
 }
+
+/** How a PSN platform code reads on the page ("PSVITA" is "PS Vita"). */
+export function platformName(code: string) {
+  return code === "PSVITA" ? "PS Vita" : code;
+}

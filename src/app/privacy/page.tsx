@@ -47,9 +47,13 @@ export default function PrivacyPage() {
           <li>Profile extras you choose to add: streaming links, a banner, a profile picture and card theme (picked from built-in art or your games; we don't take uploads), your Trophy Vault and a &quot;playing now&quot; status.</li>
           <li>
             Anything you send through the <Link href="/contact">contact form</Link>: your email, the message, and your name, username
-            or PSN Online ID if you include them.
+            or PSN Online ID if you include them. To limit messages to one a day, we keep a scrambled (hashed) form of your IP
+            address, and your account if you&apos;re signed in, for up to two days. We can&apos;t get your IP address back from it.
           </li>
-          <li>One essential cookie that keeps you signed in. We don&apos;t use advertising or analytics cookies.</li>
+          <li>
+            Two essential cookies that keep you signed in, and your theme and account name saved in your browser so pages
+            show them straight away. We don&apos;t use advertising or analytics cookies.
+          </li>
           <li>
             On the contact page only, Google reCAPTCHA checks that a person is sending the message. Google collects information such
             as your IP address, browser and how you use the page, and may set its own cookie, under{" "}

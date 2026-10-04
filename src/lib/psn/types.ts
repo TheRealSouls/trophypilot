@@ -24,7 +24,7 @@ export type PsnTitle = {
   definedTrophies?: number;
 };
 
-export type PsnGroupDef = { psnGroupId: string; name: string };
+export type PsnGroupDef = { psnGroupId: string; name: string; iconUrl?: string | null };
 
 export type PsnTrophyDef = {
   psnTrophyId: number;

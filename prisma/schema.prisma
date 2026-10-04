@@ -290,6 +290,8 @@ model TrophyGroup {
   gameId      String
   psnGroupId  String // "default", "001", ...
   name        String
+  // PSN's own picture for the pack (each DLC has one); the game's icon is shown when it's missing.
+  iconUrl     String?
   isDlc       Boolean   @default(false)
   releaseDate DateTime?
   createdAt   DateTime  @default(now())
@@ -709,4 +711,15 @@ model Message {
   author       User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([conversationId, createdAt])
+}
+
+// Contact form sends, for the one-message-a-day limit. `key` is "ip:<hash>" (a keyed hash, never the
+// address itself) or "user:<id>". Rows older than two days are deleted as new messages come in.
+model ContactSend {
+  id        String   @id @default(cuid())
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+  @@index([createdAt])
 }

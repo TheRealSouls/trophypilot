@@ -5,6 +5,9 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { cached } from "@/lib/cache";
 import { familiesFor } from "@/lib/games";
+import { platformName } from "@/lib/utils";
+
+const PLATFORMS = ["PS5", "PS4", "PS3", "PSVITA"];
 import { GameCard } from "@/components/GameCard";
 import { EmptyState, PageHeader } from "@/components/ui";
 
@@ -59,8 +62,8 @@ export default async function GamesPage({ searchParams }: { searchParams: Promis
         <input id="gq" name="q" defaultValue={sp.q} placeholder="Search by title…" className="input" />
         <select name="platform" defaultValue={sp.platform ?? ""} className="input" aria-label="Platform">
           <option value="">All platforms</option>
-          {["PS5", "PS4", "PS3", "PSVITA"].map((p) => (
-            <option key={p} value={p}>{p}</option>
+          {PLATFORMS.map((p) => (
+            <option key={p} value={p}>{platformName(p)}</option>
           ))}
         </select>
         <select name="genre" defaultValue={sp.genre ?? ""} className="input" aria-label="Genre">
@@ -77,7 +80,22 @@ export default async function GamesPage({ searchParams }: { searchParams: Promis
         </label>
       </form>
 
-      <div className="mb-5 flex flex-wrap gap-2">
+      <nav aria-label="Platform" className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="w-20 text-xs uppercase tracking-wider text-muted">Platform</span>
+        {["", ...PLATFORMS].map((p) => (
+          <Link
+            key={p || "all"}
+            href={qs({ platform: p || undefined })}
+            aria-current={(sp.platform ?? "") === p ? "true" : undefined}
+            className={clsx("chip min-h-7 px-3", (sp.platform ?? "") === p && "chip-active")}
+          >
+            {p ? platformName(p) : "All"}
+          </Link>
+        ))}
+      </nav>
+
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <span className="w-20 text-xs uppercase tracking-wider text-muted">Sort</span>
         {Object.entries(SORTS).map(([k, l]) => (
           <Link key={k} href={qs({ sort: k as keyof typeof SORTS })} className={clsx("chip min-h-6", sort === k && "chip-active")}>
             {l}

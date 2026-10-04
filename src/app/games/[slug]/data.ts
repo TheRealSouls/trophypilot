@@ -27,7 +27,8 @@ export const loadGame = cache(async (slug: string) => {
   if (game.trophies.length === 0 && game.npCommunicationId && !isDemoMode()) {
     try {
       if (await ensureGameTrophies(getProvider(), game)) {
-        bust(`game:${slug}`);
+        // This list and its other platforms' pages ("list not loaded") change.
+        bust(`game:${slug}`, `lists:${game.titleKey || game.id}`);
         game = (await query(slug))!;
       }
     } catch (err) {

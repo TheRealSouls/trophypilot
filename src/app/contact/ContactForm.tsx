@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useForm, ValidationError } from "@formspree/react";
 import clsx from "clsx";
 import { Recaptcha, type RecaptchaHandle } from "@/components/Recaptcha";
+import { claimContactSlot, releaseContactSlot } from "@/actions/contact";
 import { TOPICS, type Topic } from "./topics";
 
 /** Topics where knowing the PSN account saves a round trip. */
@@ -34,19 +35,46 @@ export function ContactForm({
     data: captchaSiteKey ? { "g-recaptcha-response": () => token.current ?? "" } : undefined,
   });
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  // One message a day: the server claims today's slot before the message goes to Formspree.
+  const [limitProblem, setLimitProblem] = useState<string | null>(null);
+  const [claiming, setClaiming] = useState(false);
+  const claimed = useRef<string[]>([]);
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     if (captchaSiteKey && !token.current) {
-      e.preventDefault();
       setCaptchaProblem("Tick \"I'm not a robot\" before sending.");
       return;
     }
-    return submit(e);
+    const data = new FormData(e.currentTarget);
+    setLimitProblem(null);
+    setClaiming(true);
+    try {
+      const slot = await claimContactSlot();
+      if (!slot.ok) {
+        setLimitProblem(slot.error);
+        return;
+      }
+      claimed.current = slot.ids;
+    } catch {
+      setLimitProblem("We couldn't send that just now. Check your connection and try again.");
+      return;
+    } finally {
+      setClaiming(false);
+    }
+    await submit(data);
   };
 
-  // A token works once: after a failed send, ask for a fresh tick.
+  // A token works once: after a failed send, ask for a fresh tick and give the day's slot back.
   useEffect(() => {
-    if (state.errors) captcha.current?.reset();
+    if (!state.errors) return;
+    captcha.current?.reset();
+    if (claimed.current.length) {
+      void releaseContactSlot(claimed.current);
+      claimed.current = [];
+    }
   }, [state.errors]);
+  const sending = claiming || state.submitting;
   const [topic, setTopic] = useState<Topic>(initialTopic);
   const needsPsn = NEEDS_PSN.includes(topic);
 
@@ -156,6 +184,12 @@ export function ContactForm({
         <ValidationError field="message" prefix="Message" errors={state.errors} className="mt-1 block text-xs text-bad" />
       </div>
 
+      {limitProblem && (
+        <p role="alert" className="border border-bad/50 px-3 py-2 text-sm text-bad">
+          {limitProblem}
+        </p>
+      )}
+
       {formErrors.length > 0 && (
         <p role="alert" className="border border-bad/50 px-3 py-2 text-sm text-bad">
           {formErrors.map((e) => e.message).join(" ")}
@@ -193,11 +227,11 @@ export function ContactForm({
       )}
 
       <div className="flex flex-wrap items-center gap-4">
-        <button type="submit" disabled={state.submitting} aria-busy={state.submitting} className="btn-primary">
-          {state.submitting ? "Sending…" : "Send message"}
+        <button type="submit" disabled={sending} aria-busy={sending} className="btn-primary">
+          {sending ? "Sending…" : "Send message"}
         </button>
         <p className="text-xs text-muted">
-          Sent through Formspree. See the{" "}
+          One message a day. Sent through Formspree. See the{" "}
           <Link href="/privacy" className="link">
             privacy policy
           </Link>

@@ -155,11 +155,18 @@ export async function ensureGameTrophies(
       gameId: game.id,
       psnGroupId: g.psnGroupId,
       name: g.name,
+      iconUrl: g.iconUrl ?? null,
       isDlc: g.psnGroupId !== "default",
       addedLater: refresh,
     })),
     skipDuplicates: true,
   });
+  // Packs stored before we kept their pictures get them now.
+  for (const g of def.groups) {
+    if (g.iconUrl) {
+      await prisma.trophyGroup.updateMany({ where: { gameId: game.id, psnGroupId: g.psnGroupId, iconUrl: null }, data: { iconUrl: g.iconUrl } });
+    }
+  }
   const groupIds = new Map(
     (await prisma.trophyGroup.findMany({ where: { gameId: game.id }, select: { id: true, psnGroupId: true } })).map((g) => [
       g.psnGroupId,

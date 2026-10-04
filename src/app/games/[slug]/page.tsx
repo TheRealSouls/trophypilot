@@ -12,7 +12,7 @@ import { siblingLists } from "@/lib/games";
 import { probeSiblings } from "@/lib/psn/siblings";
 import { enrichGame, igdbEnabled } from "@/lib/igdb";
 import { isDemoMode } from "@/lib/psn/sync";
-import { formatDate, parseJsonArray, timeAgo } from "@/lib/utils";
+import { formatDate, parseJsonArray, platformName, timeAgo } from "@/lib/utils";
 import { GameArt, SceneArt } from "@/components/art";
 import { RevealAllButton, SpoilerGroup } from "@/components/client";
 import { TrophyList } from "@/components/TrophyList";
@@ -51,7 +51,7 @@ export default async function GamePage({ params, searchParams }: { params: Promi
   const viewer = await getCurrentUser();
   const viewerId = viewer?.id ?? null;
   // The same for every visitor, so shared for a while (cleared with the game, see bust("game:<slug>")).
-  const lists = await cached(`game:${slug}:lists`, () => siblingLists(game), { ttlMs: 10 * 60_000 });
+  const lists = await cached(`lists:${game.titleKey || game.id}`, () => siblingLists(game), { ttlMs: 10 * 60_000 });
   const familyIds = lists.length ? lists.map((l) => l.id) : [game.id];
 
   const family = game.titleKey ? { game: { titleKey: game.titleKey } } : { gameId: game.id };
@@ -122,9 +122,15 @@ export default async function GamePage({ params, searchParams }: { params: Promi
           <div>
             <div className="flex flex-wrap gap-1.5">
               {game.platforms.split(",").map((p) => (
-                <span key={p} className="chip text-text">{p}</span>
+                <Link key={p} href={`/games?platform=${p}`} className="chip min-h-6 text-text hover:border-line-strong" title={`All ${platformName(p)} games`}>
+                  {platformName(p)}
+                </Link>
               ))}
-              {game.genre && <span className="chip">{game.genre}</span>}
+              {game.genre && (
+                <Link href={`/games?genre=${encodeURIComponent(game.genre)}`} className="chip min-h-6 hover:border-line-strong hover:text-text" title={`All ${game.genre} games`}>
+                  {game.genre}
+                </Link>
+              )}
               {game.hasOnlineTrophies && <span className="chip border-rare/50 text-rare">Online trophies</span>}
               {unob && <span className="chip border-bad/50 text-bad">{unob.short}</span>}
             </div>
@@ -364,8 +370,9 @@ export default async function GamePage({ params, searchParams }: { params: Promi
               <ul className="space-y-2">
                 {dlcs.map((d) => (
                   <li key={d.id}>
-                    <Link href={`/games/${game.slug}/dlc/${d.psnGroupId}`} className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-surface-2">
-                      <span className="font-semibold">{d.name}</span>
+                    <Link href={`/games/${game.slug}/dlc/${d.psnGroupId}`} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-surface-2">
+                      <GameArt title={d.name} hue={game.coverHue} iconUrl={d.iconUrl ?? game.iconUrl} size="sm" className="w-9" />
+                      <span className="min-w-0 flex-1 font-semibold">{d.name}</span>
                       <span className="text-xs text-muted">{d.releaseDate ? formatDate(d.releaseDate, { month: "short", year: "numeric" }) : ""}</span>
                     </Link>
                   </li>

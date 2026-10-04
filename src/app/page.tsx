@@ -204,7 +204,7 @@ export default async function Home() {
           <ul className="divide-y divide-line">
             {dlcs.map((d) => (
               <li key={d.id} className="flex items-center gap-3 py-3">
-                <GameArt title={d.game.title} hue={d.game.coverHue} iconUrl={d.game.iconUrl} size="sm" className="w-11 rounded-md" />
+                <GameArt title={d.name} hue={d.game.coverHue} iconUrl={d.iconUrl ?? d.game.iconUrl} size="sm" className="w-11 rounded-md" />
                 <div className="min-w-0 flex-1">
                   <Link href={`/games/${d.game.slug}/dlc/${d.psnGroupId}`} className={rowLink}>
                     {d.name}
