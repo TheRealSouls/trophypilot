@@ -46,7 +46,7 @@ async function main() {
       if (hide || unhide) await prisma.psnPlayer.update({ where: { accountId: r.player.accountId }, data: { hidden: hide } });
       const p = r.player;
       console.log(
-        `${p.onlineId}: ${p.trophiesPrivate ? "trophies private, not ranked" : `level ${p.trophyLevel}, ${p.platinum} platinums, ${r.titles} recent games, ${r.platinumsDated} platinum dates`}, ${countryName(p.country) || "unknown country"}${hide ? " (hidden)" : unhide ? " (visible)" : ""}`,
+        `${p.onlineId}: ${p.trophiesPrivate ? "trophies private, not ranked" : `level ${p.trophyLevel}, ${p.platinum} platinums, ${r.titles} games, ${r.platinumsDated} platinum dates, ultra rares counted in ${r.ultraRaresCounted} lists`}, ${countryName(p.country) || "unknown country"}${hide ? " (hidden)" : unhide ? " (visible)" : ""}`,
       );
     } catch (err) {
       const e = toPsnError(err);

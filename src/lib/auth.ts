@@ -5,6 +5,12 @@ import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "./db";
 
 const COOKIE = "trophypilot_session";
+/**
+ * Readable by the page (not secret): changes whenever someone signs in or
+ * out, so the navbar knows to fetch /api/me again. The pages themselves don't
+ * read the session, which lets them be cached.
+ */
+export const SIGNED_IN_COOKIE = "tp_signed_in";
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 function secret() {
@@ -27,10 +33,18 @@ export async function createSession(userId: string) {
     path: "/",
     maxAge: MAX_AGE,
   });
+  (await cookies()).set(SIGNED_IN_COOKIE, Date.now().toString(36), {
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: MAX_AGE,
+  });
 }
 
 export async function destroySession() {
-  (await cookies()).delete(COOKIE);
+  const jar = await cookies();
+  jar.delete(COOKIE);
+  jar.delete(SIGNED_IN_COOKIE);
 }
 
 export const getSessionUserId = cache(async (): Promise<string | null> => {

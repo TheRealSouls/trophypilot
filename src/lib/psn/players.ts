@@ -6,8 +6,9 @@ import {
   getUserTrophiesEarnedForTitle,
   type ProfileFromUserNameResponse,
 } from "psn-api";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
-import { pointsFor } from "../trophies";
+import { pointsFor, ULTRA_RARE_MAX } from "../trophies";
 import { importTitles } from "./catalogue";
 import { countryFromNpId } from "./npid";
 import { psnAuth, sumCounts, toPsnError, withTimeout } from "./real";
@@ -94,12 +95,29 @@ export function snapshotFromProfile(profile: ProfileFromUserNameResponse["profil
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** PSN's largest page of trophy lists. */
+const TITLES_PAGE = 800;
+
+/** Every trophy list a player has, newest first: one PSN request per 800 lists. */
+async function allTitles(accountId: string) {
+  const out: RawTitle[] = [];
+  let offset = 0;
+  for (let page = 0; page < 10; page++) {
+    const res = await withTimeout(getUserTitles(await psnAuth(), accountId, { limit: TITLES_PAGE, offset }));
+    out.push(...(res.trophyTitles as unknown as RawTitle[]));
+    if (!res.trophyTitles.length || out.length >= res.totalItemCount || !res.nextOffset) break;
+    offset = res.nextOffset;
+  }
+  return out;
+}
+
 /**
- * Re-reads a player's summary and their most recently played trophy lists.
- * New platinums get their exact date from the trophy list (a few per run, to
- * stay polite to PSN). Returns null if PSN has no such player.
+ * Re-reads a player's summary and their full games list (for games played and
+ * average completion), dates a few new platinums and counts ultra rares in a
+ * few more lists. Each part is capped per run to stay polite to PSN. Returns
+ * null if PSN has no such player.
  */
-export async function refreshPlayer(onlineId: string, { recentTitles = 50, platinumLookups = 5 } = {}) {
+export async function refreshPlayer(onlineId: string, { platinumLookups = 5, rareLookups = 40 } = {}) {
   let profile: ProfileFromUserNameResponse["profile"];
   try {
     ({ profile } = await withTimeout(getProfileFromUserName(await psnAuth(), onlineId)));
@@ -113,22 +131,30 @@ export async function refreshPlayer(onlineId: string, { recentTitles = 50, plati
   const player = await prisma.psnPlayer.findUniqueOrThrow({ where: { accountId: snap.accountId } });
   if (player.trophiesPrivate || player.hidden) return { player, titles: 0, platinumsDated: 0 };
 
-  let res;
+  let raw: RawTitle[];
   try {
-    res = await withTimeout(getUserTitles(await psnAuth(), snap.accountId, { limit: recentTitles }));
+    raw = await allTitles(snap.accountId);
   } catch (err) {
     const e = toPsnError(err);
     if (e.kind === "private") {
       await markTrophiesPrivate(snap.accountId, true);
-      return { player, titles: 0, platinumsDated: 0 };
+      return { player, titles: 0, platinumsDated: 0, ultraRaresCounted: 0 };
     }
     throw e;
   }
 
-  const titles = await storePlayerTitles(snap.accountId, res.trophyTitles);
+  const titles = await storePlayerTitles(snap.accountId, raw);
   const platinumsDated = await datePlatinums(snap.accountId, platinumLookups);
-  await prisma.psnPlayer.update({ where: { accountId: snap.accountId }, data: { titlesRefreshedAt: new Date() } });
-  return { player, titles, platinumsDated };
+  const rares = await countUltraRares(snap.accountId, rareLookups);
+  await prisma.psnPlayer.update({
+    where: { accountId: snap.accountId },
+    data: {
+      titlesRefreshedAt: new Date(),
+      gamesPlayed: raw.length,
+      avgCompletion: raw.length ? Math.round(raw.reduce((s, t) => s + (t.progress ?? 0), 0) / raw.length) : null,
+    },
+  });
+  return { player, titles, platinumsDated, ultraRaresCounted: rares.counted };
 }
 
 type RawTitle = {
@@ -154,7 +180,24 @@ export async function storePlayerTitles(accountId: string, raw: RawTitle[]) {
     lastUpdated: new Date(t.lastUpdatedDateTime),
     definedTrophies: sumCounts(t.definedTrophies),
   }));
-  await importTitles(titles, accountId);
+  // Only lists that changed since we last stored them need writing.
+  const stored = new Map(
+    (
+      await prisma.psnPlayerTitle.findMany({
+        where: { accountId, npCommunicationId: { in: titles.map((t) => t.npCommunicationId) } },
+        select: { npCommunicationId: true, lastUpdated: true, progress: true },
+      })
+    ).map((s) => [s.npCommunicationId, s]),
+  );
+  const changed = raw.filter((t) => {
+    const s = stored.get(t.npCommunicationId);
+    return !s || s.lastUpdated.getTime() !== new Date(t.lastUpdatedDateTime).getTime() || s.progress !== (t.progress ?? 0);
+  });
+  if (!changed.length) return titles.length;
+  await importTitles(
+    titles.filter((t) => changed.some((c) => c.npCommunicationId === t.npCommunicationId)),
+    accountId,
+  );
   const games = new Map(
     (
       await prisma.game.findMany({
@@ -163,22 +206,115 @@ export async function storePlayerTitles(accountId: string, raw: RawTitle[]) {
       })
     ).map((g) => [g.npCommunicationId!, g.id]),
   );
-  for (const t of raw) {
+  const rows = changed.flatMap((t) => {
     const gameId = games.get(t.npCommunicationId);
-    if (!gameId) continue;
-    const data = {
-      gameId,
-      progress: t.progress ?? 0,
-      hasPlatinum: (t.earnedTrophies?.platinum ?? 0) > 0,
-      lastUpdated: new Date(t.lastUpdatedDateTime),
-    };
-    await prisma.psnPlayerTitle.upsert({
-      where: { accountId_npCommunicationId: { accountId, npCommunicationId: t.npCommunicationId } },
-      create: { accountId, npCommunicationId: t.npCommunicationId, ...data },
-      update: data,
-    });
+    if (!gameId) return [];
+    return [
+      {
+        accountId,
+        npCommunicationId: t.npCommunicationId,
+        gameId,
+        progress: t.progress ?? 0,
+        hasPlatinum: (t.earnedTrophies?.platinum ?? 0) > 0,
+        lastUpdated: new Date(t.lastUpdatedDateTime),
+      },
+    ];
+  });
+  // New lists in one statement (a big library's first refresh is thousands of them), changed ones one by one.
+  const fresh = rows.filter((r) => !stored.has(r.npCommunicationId));
+  for (let i = 0; i < fresh.length; i += 1000) {
+    await prisma.psnPlayerTitle.createMany({ data: fresh.slice(i, i + 1000), skipDuplicates: true });
+  }
+  for (const { accountId: _a, npCommunicationId, ...data } of rows.filter((r) => stored.has(r.npCommunicationId))) {
+    await prisma.psnPlayerTitle.update({ where: { accountId_npCommunicationId: { accountId, npCommunicationId } }, data });
   }
   return titles.length;
+}
+
+/**
+ * Counts the ultra rare trophies (earned by ULTRA_RARE_MAX% of players or
+ * fewer) a tracked player has, list by list, and stores the running total on
+ * PsnPlayer. Lists they haven't started count as 0 and finished lists we hold
+ * in full (with rarity) are counted from the catalogue, both for free; the
+ * rest cost one PSN request each, at most `maxLookups` per call. A list is
+ * counted again when it changes. `ultraRarePending` is how many are left.
+ */
+export async function countUltraRares(accountId: string, maxLookups = 40) {
+  const titles = await prisma.psnPlayerTitle.findMany({
+    where: { accountId },
+    select: {
+      npCommunicationId: true,
+      gameId: true,
+      progress: true,
+      lastUpdated: true,
+      rareCheckedAt: true,
+      game: { select: { npServiceName: true, definedTrophies: true } },
+    },
+    orderBy: { lastUpdated: "desc" },
+  });
+  const due = titles.filter((t) => !t.rareCheckedAt || t.rareCheckedAt < t.lastUpdated);
+
+  // What the catalogue knows about the finished lists: how many trophies, how many with a rarity, how many ultra rare.
+  const finished = [...new Set(due.filter((t) => t.progress === 100).map((t) => t.gameId))];
+  const [held, ultra] = finished.length
+    ? await Promise.all([
+        prisma.trophy.groupBy({ by: ["gameId"], where: { gameId: { in: finished } }, _count: { _all: true, earnedRate: true } }),
+        prisma.trophy.groupBy({ by: ["gameId"], where: { gameId: { in: finished }, earnedRate: { lte: ULTRA_RARE_MAX } }, _count: { _all: true } }),
+      ])
+    : [[], []];
+  const heldBy = new Map(held.map((h) => [h.gameId, h._count]));
+  const ultraBy = new Map(ultra.map((u) => [u.gameId, u._count._all]));
+
+  const counted: { id: string; n: number }[] = [];
+  const toFetch: typeof due = [];
+  for (const t of due) {
+    const h = heldBy.get(t.gameId);
+    if (t.progress === 0) counted.push({ id: t.npCommunicationId, n: 0 });
+    else if (t.progress === 100 && h && t.game.definedTrophies && h._all >= t.game.definedTrophies && h.earnedRate === h._all)
+      counted.push({ id: t.npCommunicationId, n: ultraBy.get(t.gameId) ?? 0 });
+    else toFetch.push(t);
+  }
+
+  let lookups = 0;
+  let stopped = false;
+  // A few at a time: quicker than one by one, still gentle on PSN.
+  for (let i = 0; i < toFetch.length && lookups < maxLookups && !stopped; i += 4) {
+    const batch = toFetch.slice(i, Math.min(i + 4, i + maxLookups - lookups));
+    lookups += batch.length;
+    await Promise.all(
+      batch.map(async (t) => {
+        try {
+          const opts = t.game.npServiceName === "trophy" ? { npServiceName: "trophy" as const } : {};
+          const res = await withTimeout(getUserTrophiesEarnedForTitle(await psnAuth(), accountId, t.npCommunicationId, "all", opts));
+          const n = res.trophies.filter((x) => x.earned && Number(x.trophyEarnedRate) <= ULTRA_RARE_MAX).length;
+          counted.push({ id: t.npCommunicationId, n });
+        } catch (err) {
+          // Rate limited: stop for now. Anything else: try this list again next time.
+          if (toPsnError(err).kind === "rate_limited") stopped = true;
+        }
+      }),
+    );
+    await sleep(150);
+  }
+
+  // Write the counts in a few statements rather than one per list.
+  const now = new Date();
+  for (let i = 0; i < counted.length; i += 500) {
+    const chunk = counted.slice(i, i + 500);
+    await prisma.$executeRaw`
+      UPDATE "PsnPlayerTitle" AS t SET "ultraRare" = v.n, "rareCheckedAt" = ${now}
+      FROM (VALUES ${Prisma.join(chunk.map((c) => Prisma.sql`(${c.id}, ${c.n}::int)`))}) AS v(id, n)
+      WHERE t."accountId" = ${accountId} AND t."npCommunicationId" = v.id`;
+  }
+
+  const total = await prisma.psnPlayerTitle.aggregate({ where: { accountId, rareCheckedAt: { not: null } }, _sum: { ultraRare: true } });
+  const pending = due.length - counted.length;
+  const anyCounted = titles.length - due.length + counted.length > 0;
+  await prisma.psnPlayer.update({
+    where: { accountId },
+    data: { ultraRare: anyCounted ? (total._sum.ultraRare ?? 0) : null, ultraRarePending: pending },
+  });
+  return { counted: counted.length, lookups, pending };
 }
 
 /** Looks up the exact date of the newest platinums we only know exist (one PSN request each). */

@@ -34,7 +34,7 @@ export default async function CommunityPage({ searchParams }: { searchParams: Pr
       },
       orderBy: [{ followers: { _count: "desc" } }, { posts: { _count: "desc" } }],
       take: 5,
-      select: { id: true, username: true, avatarHue: true, psn: { select: { onlineId: true, avatarUrl: true } }, _count: { select: { followers: true } } },
+      select: { id: true, username: true, avatarHue: true, avatar: true, psn: { select: { onlineId: true, avatarUrl: true } }, _count: { select: { followers: true } } },
     }),
   ]);
 
@@ -95,7 +95,7 @@ export default async function CommunityPage({ searchParams }: { searchParams: Pr
                   const name = u.psn?.onlineId ?? u.username;
                   return (
                     <li key={u.id} className="flex items-center gap-3 text-sm">
-                      <Avatar name={name} hue={u.avatarHue} url={u.psn?.avatarUrl} size={32} />
+                      <Avatar name={name} hue={u.avatarHue} url={u.psn?.avatarUrl} avatar={u.avatar} size={32} />
                       <div className="min-w-0 flex-1">
                         <Link href={`/u/${u.username}`} className="block truncate font-semibold hover:underline hover:underline-offset-4">{name}</Link>
                         <div className="text-xs text-muted">

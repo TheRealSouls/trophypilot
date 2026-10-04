@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { DeletedNotice, HomeCta } from "@/components/HomeAccount";
 import { prisma } from "@/lib/db";
 import { trophyHref } from "@/lib/trophy-slug";
-import { getCurrentUser } from "@/lib/auth";
 import { getLeaderboard } from "@/lib/leaderboard";
 import { formatDate, formatNumber, timeAgo } from "@/lib/utils";
 import { flag } from "@/lib/countries";
@@ -9,9 +10,9 @@ import { GameArt } from "@/components/art";
 import { GameCard } from "@/components/GameCard";
 import { TrophyIcon } from "@/components/TrophyIcon";
 import { HeroCovers } from "@/components/HeroCovers";
-import { Avatar, MoreLink, Notice, Panel, RarityBadge } from "@/components/ui";
+import { SpoilerName } from "@/components/client";
+import { Avatar, MoreLink, Panel, RarityBadge } from "@/components/ui";
 import {
-  ArrowRightIcon,
   BookIcon,
   CalendarIcon,
   ChartIcon,
@@ -37,14 +38,14 @@ import {
 } from "@/lib/activity";
 import { familiesFor } from "@/lib/games";
 
-export const dynamic = "force-dynamic";
+// The same page for everyone, rebuilt in the background at most once a minute. The parts that depend on
+// who's looking (navbar, main button, notices) fill in on the client.
+export const revalidate = 60;
 
 const publicActivity = { showActivity: true, profileVisibility: "PUBLIC" } as const;
 const rowLink = "block truncate text-sm font-semibold hover:underline hover:underline-offset-4";
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ deleted?: string }> }) {
-  const { deleted } = await searchParams;
-  const user = await getCurrentUser();
+export default async function Home() {
   const monthAgo = new Date(Date.now() - 30 * 86_400_000);
 
   const [totals, recentPlats, rareUnlocks, weekly, guides, trending, needGuides, newLists, dlcs, sessions, covers] = await Promise.all([
@@ -86,15 +87,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
     })
     .slice(0, 6);
 
-  const primaryCta = !user
-    ? { href: "/register", label: "Create a free account" }
-    : !user.psn?.verified
-      ? { href: "/settings#psn", label: "Link your PSN account" }
-      : { href: `/u/${user.username}`, label: "View my trophies" };
-
   return (
     <div className="space-y-8">
-      {deleted && <Notice tone="good">Your account and all of its data have been deleted.</Notice>}
+      <Suspense>
+        <DeletedNotice />
+      </Suspense>
 
       {/* Hero: text on the left, real game art behind the lookup card on the right. */}
       <section className="relative -mt-8 grid gap-10 pb-6 pt-10 lg:min-h-[470px] lg:grid-cols-[1.1fr_1fr] lg:items-end">
@@ -116,11 +113,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
             in the world, your country and your friends list.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link href={primaryCta.href} className="btn-primary px-5 py-3 text-[15px]">
-              <TrophyLineIcon size={18} />
-              {primaryCta.label}
-              <ArrowRightIcon size={16} />
-            </Link>
+            <HomeCta />
             <Link href="/games" className="btn-ghost px-5 py-3 text-[15px]">
               <GamepadIcon size={18} />
               Browse games
@@ -265,7 +258,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
             {weekly.map((r) => (
               <li key={r.key} className="flex items-center gap-3 py-3">
                 <span className="w-6 text-right text-sm font-semibold tabular-nums text-muted">{r.rank}.</span>
-                <Avatar name={r.name} hue={r.avatarHue} url={r.avatarUrl} size={34} className="rounded-md" />
+                <Avatar name={r.name} hue={r.avatarHue} url={r.avatarUrl} avatar={r.avatar} size={34} className="rounded-md" />
                 <Link href={r.href} className="min-w-0 flex-1 truncate text-sm font-semibold hover:underline hover:underline-offset-4">
                   {r.name} <span className="text-xs">{flag(r.country)}</span>
                 </Link>
@@ -373,9 +366,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
               <li key={u.id} className="flex items-center gap-3 py-3">
                 <TrophyIcon type={u.trophy.type} size={24} />
                 <div className="min-w-0 flex-1">
-                  <Link href={u.trophy.slug ? trophyHref(u.trophy.game.slug, u.trophy.slug) : `/trophies/${u.trophy.id}`} className={rowLink}>
-                    {u.trophy.name}
-                  </Link>
+                  <SpoilerName hidden={u.trophy.hidden}>
+                    <Link href={u.trophy.slug ? trophyHref(u.trophy.game.slug, u.trophy.slug) : `/trophies/${u.trophy.id}`} className={rowLink}>
+                      {u.trophy.name}
+                    </Link>
+                  </SpoilerName>
                   <div className="truncate text-xs text-muted">
                     <Link href={`/u/${u.user.username}`} className="hover:text-text">
                       {u.user.psn?.onlineId ?? u.user.username}

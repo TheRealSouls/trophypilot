@@ -13,7 +13,8 @@ import { toPsnError } from "@/lib/psn/real";
 import { getProvider, SyncCooldownError, syncUntilDone, syncUser } from "@/lib/psn/sync";
 import { rateLimit } from "@/lib/rate-limit";
 import { isDemoAccount } from "@/lib/demo";
-import { PROFILE_ACCENTS, streamLink } from "@/lib/profile-themes";
+import { PROFILE_ACCENTS, PROFILE_CARDS, streamLink } from "@/lib/profile-themes";
+import { AVATAR_PRESETS } from "@/components/avatars";
 import { refreshEstimates } from "@/lib/estimates";
 import type { FormState } from "./auth";
 
@@ -36,11 +37,7 @@ export async function updateProfile(_: FormState, fd: FormData): Promise<FormSta
   if (given("twitchUrl") && !twitchUrl) return { error: "That doesn't look like a Twitch link." };
   if (given("streamUrl") && !streamUrl) return { error: "The other streaming link isn't a valid web address." };
 
-  const accent = given("profileAccent");
   const allow = given("allowMessages");
-  // The banner is art from one of the member's own games.
-  const bannerId = given("bannerGameId");
-  const banner = bannerId ? await prisma.userGame.findUnique({ where: { userId_gameId: { userId: user.id, gameId: bannerId } }, select: { gameId: true } }) : null;
 
   await prisma.user.update({
     where: { id: user.id },
@@ -50,13 +47,57 @@ export async function updateProfile(_: FormState, fd: FormData): Promise<FormSta
       youtubeUrl,
       twitchUrl,
       streamUrl,
-      profileAccent: accent in PROFILE_ACCENTS ? accent : "",
       allowMessages: ["EVERYONE", "FRIENDS", "NOBODY"].includes(allow) ? allow : "EVERYONE",
-      bannerGameId: banner?.gameId ?? null,
     },
   });
   revalidatePath(`/u/${user.username}`);
   return { ok: "Profile saved." };
+}
+
+/**
+ * Profile look: card theme, picture, banner and accent colour. Pictures and
+ * banners come from built-in art or the member's own games (no uploads).
+ */
+export async function updateLook(_: FormState, fd: FormData): Promise<FormState> {
+  const user = await requireUser();
+  const given = (k: string) => String(fd.get(k) ?? "").trim();
+
+  const card = given("profileCard");
+  const accent = given("profileAccent");
+
+  // The banner is art from one of the member's own games.
+  const bannerId = given("bannerGameId");
+  const banner = bannerId
+    ? await prisma.userGame.findUnique({ where: { userId_gameId: { userId: user.id, gameId: bannerId } }, select: { gameId: true } })
+    : null;
+
+  // Picture: default (PSN avatar or initial), the initial, a built-in one, or the icon of one of their games.
+  const pick = given("avatar");
+  let avatar: string | null = null;
+  if (pick === "letter") avatar = "letter";
+  else if (pick.startsWith("preset:") && pick.slice(7) in AVATAR_PRESETS) avatar = pick;
+  else if (pick.startsWith("game:")) {
+    const owned = await prisma.userGame.findUnique({
+      where: { userId_gameId: { userId: user.id, gameId: pick.slice(5) } },
+      select: { game: { select: { iconUrl: true } } },
+    });
+    const icon = owned?.game.iconUrl?.replace(/^http:/, "https:");
+    if (!icon?.startsWith("https://")) return { error: "That game has no artwork to use as a picture." };
+    avatar = icon;
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      profileCard: card in PROFILE_CARDS ? card : "",
+      profileAccent: accent in PROFILE_ACCENTS ? accent : "",
+      bannerGameId: banner?.gameId ?? null,
+      avatar,
+    },
+  });
+  revalidatePath(`/u/${user.username}`);
+  revalidatePath("/settings");
+  return { ok: "Profile look saved." };
 }
 
 /** The Trophy Vault: up to five of the member's earned trophies, shown at the top of their profile. */
@@ -80,11 +121,13 @@ const privacySchema = z.object({
   profileVisibility: z.enum(["PUBLIC", "FRIENDS", "PRIVATE"]),
 });
 
-export async function updateTheme(fd: FormData) {
+/**
+ * Saves light or dark to the account. The browser has already switched (see
+ * ThemeForm), so nothing re-renders here, which keeps the switch instant.
+ */
+export async function updateTheme(theme: string) {
   const user = await requireUser("/settings");
-  const theme = fd.get("theme") === "dark" ? "dark" : "light";
-  await prisma.user.update({ where: { id: user.id }, data: { theme } });
-  revalidatePath("/", "layout");
+  await prisma.user.update({ where: { id: user.id }, data: { theme: theme === "dark" ? "dark" : "light" } });
 }
 
 export async function updatePrivacy(_: FormState, fd: FormData): Promise<FormState> {

@@ -12,6 +12,7 @@ import { unlinkPsn } from "@/actions/account";
 import { Avatar, Notice, PageHeader, ProgressBar } from "@/components/ui";
 import { ConfirmButton } from "@/components/client";
 import { DeleteAccountForm, LinkPsnForm, PrivacyForm, ProfileForm, SyncButton, ThemeForm, VaultForm, VerifyPsnButton } from "./forms";
+import { LookForm } from "./LookForm";
 
 export const metadata: Metadata = { title: "Settings", robots: { index: false } };
 
@@ -24,8 +25,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     psn?.verified ? nextManualSyncAt(user.id, user.plan) : null,
     psn?.verified ? prisma.psnTitleSync.count({ where: { userId: user.id } }) : 0,
   ]);
-  const [myGames, vaultOptions, vault] = await Promise.all([
+  const [myGames, recentGames, vaultOptions, vault] = await Promise.all([
     prisma.userGame.findMany({ where: { userId: user.id }, orderBy: { game: { title: "asc" } }, select: { game: { select: { id: true, title: true } } } }),
+    // Pictures for the banner and profile picture pickers: their most recently played games.
+    prisma.userGame.findMany({
+      where: { userId: user.id },
+      orderBy: { lastEarned: { sort: "desc", nulls: "last" } },
+      take: 12,
+      select: { game: { select: { id: true, slug: true, title: true, coverHue: true, iconUrl: true, screenshots: true } } },
+    }),
     // Candidates for the Trophy Vault: the member's rarest earned trophies.
     prisma.userTrophy.findMany({
       where: { userId: user.id },
@@ -201,6 +209,22 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <ThemeForm theme={user.theme} />
         </Section>
 
+        <Section id="look" title="Profile look">
+          <LookForm
+            values={{
+              profileCard: user.profileCard,
+              profileAccent: user.profileAccent,
+              bannerGameId: user.bannerGameId ?? "",
+              avatar: user.avatar ?? "",
+            }}
+            games={recentGames.map((g) => g.game)}
+            allGames={myGames.map((g) => g.game)}
+            name={user.psn?.verified ? user.psn.onlineId : user.username}
+            avatarHue={user.avatarHue}
+            psnAvatarUrl={user.psn?.verified ? user.psn.avatarUrl : null}
+          />
+        </Section>
+
         <Section title="Profile">
           <ProfileForm
             values={{
@@ -209,11 +233,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               youtubeUrl: user.youtubeUrl ?? "",
               twitchUrl: user.twitchUrl ?? "",
               streamUrl: user.streamUrl ?? "",
-              profileAccent: user.profileAccent,
-              bannerGameId: user.bannerGameId ?? "",
               allowMessages: user.allowMessages,
             }}
-            games={myGames.map((g) => g.game)}
           />
         </Section>
 

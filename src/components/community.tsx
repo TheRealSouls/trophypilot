@@ -12,7 +12,7 @@ import { Avatar } from "./ui";
  */
 
 const postInclude = {
-  author: { select: { id: true, username: true, avatarHue: true, psn: { select: { onlineId: true, avatarUrl: true } } } },
+  author: { select: { id: true, username: true, avatarHue: true, avatar: true, psn: { select: { onlineId: true, avatarUrl: true } } } },
   club: { select: { name: true, slug: true } },
 } satisfies Prisma.PostInclude;
 
@@ -45,7 +45,7 @@ export function PostList({ posts, viewer, empty }: { posts: FeedPost[]; viewer: 
         const canDelete = viewer && (viewer.id === p.author.id || viewer.role === "ADMIN");
         return (
           <li key={p.id} className="card flex gap-3 p-4">
-            <Avatar name={name} hue={p.author.avatarHue} url={p.author.psn?.avatarUrl} size={40} />
+            <Avatar name={name} hue={p.author.avatarHue} url={p.author.psn?.avatarUrl} avatar={p.author.avatar} size={40} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <Link href={`/u/${p.author.username}`} className="font-semibold hover:underline hover:underline-offset-4">

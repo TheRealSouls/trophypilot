@@ -11,6 +11,7 @@ import { GameArt } from "@/components/art";
 import { TrophyIcon } from "@/components/TrophyIcon";
 import { Avatar, EmptyState, ProgressBar, RarityBadge, SectionTitle, TabLinks } from "@/components/ui";
 import { LocalTime } from "@/components/LocalTime";
+import { SpoilerName } from "@/components/client";
 import { accentClass } from "@/lib/profile-themes";
 import { ProfileHeader } from "./ProfileHeader";
 import { loadProfile } from "./profile-data";
@@ -71,7 +72,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
       </div>
       {tab === "platinums" && <PlatinumTracker userId={owner.id} username={owner.username} />}
       {tab === "log" && <TrophyLog userId={owner.id} isOwner={relation === "SELF"} />}
-      {tab === "milestones" && <Milestones userId={owner.id} stats={stats} />}
+      {tab === "milestones" && <Milestones userId={owner.id} stats={stats} isOwner={relation === "SELF"} />}
       {tab === "saved" && <SavedGuides userId={owner.id} isOwner={relation === "SELF"} />}
       {tab === "friends" && <FriendsTab userId={owner.id} />}
       {tab === "games" && <GamesTab userId={owner.id} username={owner.username} sort={sort} platform={platform} show={show} />}
@@ -101,10 +102,28 @@ async function TrophyVault({ userId, isOwner }: { userId: string; isOwner: boole
         <p className="text-sm text-muted">Show off your five best trophies here. Pick them in Settings.</p>
       ) : (
         <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {vault.map(({ trophy: t }) => (
+          {vault.map(({ trophy: t }) => {
+            const secret = t.hidden && !isOwner;
+            const href = t.slug ? trophyHref(t.game.slug, t.slug) : `/trophies/${t.id}`;
+            if (secret)
+              return (
+                <li key={t.id} className="flex h-full flex-col items-center gap-2 rounded-lg border border-line p-3 text-center">
+                  <TrophyIcon type={t.type} size={48} />
+                  <SpoilerName hidden className="justify-center">
+                    <Link href={href} className="line-clamp-2 text-sm font-semibold hover:underline hover:underline-offset-4">
+                      {t.name}
+                    </Link>
+                  </SpoilerName>
+                  <span className="line-clamp-1 text-xs text-muted">{t.game.title}</span>
+                  <span className="mt-auto">
+                    <RarityBadge rate={t.earnedRate} />
+                  </span>
+                </li>
+              );
+            return (
             <li key={t.id}>
               <Link
-                href={t.slug ? trophyHref(t.game.slug, t.slug) : `/trophies/${t.id}`}
+                href={href}
                 className="flex h-full flex-col items-center gap-2 rounded-lg border border-line p-3 text-center hover:border-muted"
               >
                 {t.iconUrl ? (
@@ -127,7 +146,8 @@ async function TrophyVault({ userId, isOwner }: { userId: string; isOwner: boole
                 </span>
               </Link>
             </li>
-          ))}
+            );
+          })}
         </ol>
       )}
     </section>
@@ -154,12 +174,14 @@ async function TrophyLog({ userId, isOwner }: { userId: string; isOwner: boolean
             <li key={id} className="flex items-center gap-3 px-4 py-3">
               <GameArt title={t.game.title} hue={t.game.coverHue} iconUrl={t.game.iconUrl} size="sm" className="w-10" />
               <div className="min-w-0 flex-1">
-                <Link
-                  href={t.slug ? trophyHref(t.game.slug, t.slug) : `/trophies/${t.id}`}
-                  className="block truncate font-semibold hover:underline hover:underline-offset-4"
-                >
-                  {secret ? "Hidden trophy" : t.name}
-                </Link>
+                <SpoilerName hidden={secret}>
+                  <Link
+                    href={t.slug ? trophyHref(t.game.slug, t.slug) : `/trophies/${t.id}`}
+                    className="block truncate font-semibold hover:underline hover:underline-offset-4"
+                  >
+                    {t.name}
+                  </Link>
+                </SpoilerName>
                 <div className="truncate text-xs text-muted">
                   {t.game.title} · <LocalTime date={earnedAt} seconds />
                 </div>
@@ -263,9 +285,9 @@ async function GamesTab({ userId, username, sort, platform, show }: { userId: st
       <div className="card mb-4 space-y-3 p-4 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className="w-20 text-xs font-semibold uppercase tracking-wider text-muted">Platform</span>
-          <Link href={href({ platform: "" })} scroll={false} className={clsx("chip", !PLATFORMS.includes(platform) && "chip-active")}>All</Link>
+          <Link href={href({ platform: "" })} scroll={false} className={clsx("chip min-h-6", !PLATFORMS.includes(platform) && "chip-active")}>All</Link>
           {PLATFORMS.map((p) => (
-            <Link key={p} href={href({ platform: p })} scroll={false} className={clsx("chip", platform === p && "chip-active")}>
+            <Link key={p} href={href({ platform: p })} scroll={false} className={clsx("chip min-h-6", platform === p && "chip-active")}>
               {p === "PSVITA" ? "PS Vita" : p}
             </Link>
           ))}
@@ -273,7 +295,7 @@ async function GamesTab({ userId, username, sort, platform, show }: { userId: st
         <div className="flex flex-wrap items-center gap-2">
           <span className="w-20 text-xs font-semibold uppercase tracking-wider text-muted">Show</span>
           {Object.entries(SHOW).map(([k, l]) => (
-            <Link key={k} href={href({ show: k })} scroll={false} className={clsx("chip", (show in SHOW ? show : "") === k && "chip-active")}>
+            <Link key={k} href={href({ show: k })} scroll={false} className={clsx("chip min-h-6", (show in SHOW ? show : "") === k && "chip-active")}>
               {l}
             </Link>
           ))}
@@ -281,7 +303,7 @@ async function GamesTab({ userId, username, sort, platform, show }: { userId: st
         <div className="flex flex-wrap items-center gap-2">
           <span className="w-20 text-xs font-semibold uppercase tracking-wider text-muted">Order by</span>
           {sorts.map(([k, l]) => (
-            <Link key={k} href={href({ sort: k })} scroll={false} className={clsx("chip", sort === k && "chip-active")}>
+            <Link key={k} href={href({ sort: k })} scroll={false} className={clsx("chip min-h-6", sort === k && "chip-active")}>
               {l}
             </Link>
           ))}
@@ -399,7 +421,7 @@ async function PlatinumTracker({ userId, username }: { userId: string; username:
   );
 }
 
-async function Milestones({ userId, stats }: { userId: string; stats: Awaited<ReturnType<typeof getUserStats>> }) {
+async function Milestones({ userId, stats, isOwner }: { userId: string; stats: Awaited<ReturnType<typeof getUserStats>>; isOwner: boolean }) {
   const [milestones, rarest] = await Promise.all([
     getMilestones(userId, stats),
     prisma.userTrophy.findMany({
@@ -458,7 +480,9 @@ async function Milestones({ userId, stats }: { userId: string; stats: Awaited<Re
               <li key={ut.id} className="flex items-center gap-3 px-4 py-3">
                 <TrophyIcon type={ut.trophy.type} size={22} />
                 <div className="min-w-0 flex-1">
-                  <Link href={ut.trophy.slug ? trophyHref(ut.trophy.game.slug, ut.trophy.slug) : `/trophies/${ut.trophy.id}`} className="block truncate font-semibold hover:text-accent-text">{ut.trophy.name}</Link>
+                  <SpoilerName hidden={ut.trophy.hidden && !isOwner}>
+                    <Link href={ut.trophy.slug ? trophyHref(ut.trophy.game.slug, ut.trophy.slug) : `/trophies/${ut.trophy.id}`} className="block truncate font-semibold hover:text-accent-text">{ut.trophy.name}</Link>
+                  </SpoilerName>
                   <div className="truncate text-xs text-muted">{ut.trophy.game.title}</div>
                 </div>
                 <RarityBadge rate={ut.trophy.earnedRate} />
@@ -484,7 +508,7 @@ async function FriendsTab({ userId }: { userId: string }) {
       {friends.map((f) => (
         <li key={f.id}>
           <Link href={`/u/${f.username}`} className="card flex items-center gap-3 p-3 hover:border-muted">
-            <Avatar name={f.psn?.onlineId ?? f.username} hue={f.avatarHue} url={f.psn?.avatarUrl} size={44} />
+            <Avatar name={f.psn?.onlineId ?? f.username} hue={f.avatarHue} url={f.psn?.avatarUrl} avatar={f.avatar} size={44} />
             <div className="min-w-0 flex-1">
               <div className="truncate font-semibold">
                 {f.psn?.onlineId ?? f.username} <span className="text-xs">{flag(f.country)}</span>

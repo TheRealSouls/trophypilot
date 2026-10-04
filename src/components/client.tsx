@@ -113,6 +113,37 @@ export function SpoilerSwap({ concealed, children, focusOnReveal = false }: { co
   );
 }
 
+/**
+ * A hidden trophy's name in a list (recent unlocks, trophy logs, search):
+ * "Hidden trophy" with a Reveal button until the viewer opts in. Children
+ * are the normal name or link, shown once revealed.
+ */
+export function SpoilerName({ hidden, children, className }: { hidden: boolean; children: ReactNode; className?: string }) {
+  const [shown, setShown] = useState(!hidden);
+  const ref = useRef<HTMLSpanElement>(null);
+  const revealed = useRef(false);
+  useEffect(() => {
+    if (shown && revealed.current) ref.current?.querySelector<HTMLElement>("a, button")?.focus();
+  }, [shown]);
+  if (shown) return <span ref={ref} className={clsx("block min-w-0", className)}>{children}</span>;
+  return (
+    <span className={clsx("flex min-w-0 items-center gap-2", className)}>
+      <span className="truncate text-sm font-semibold text-muted">Hidden trophy</span>
+      <button
+        type="button"
+        onClick={() => {
+          revealed.current = true;
+          setShown(true);
+        }}
+        aria-label="Reveal this hidden trophy (spoiler)"
+        className="shrink-0 rounded-md border border-line px-2 py-0.5 text-xs font-semibold text-accent-text hover:border-accent"
+      >
+        Reveal
+      </button>
+    </span>
+  );
+}
+
 /** `heading` makes "Hidden trophy" the page's h1, for the trophy page itself. */
 export function RevealButton({ className, heading = false }: { className?: string; heading?: boolean }) {
   const { reveal } = useContext(SpoilerContext);

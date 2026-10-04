@@ -24,7 +24,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     include: {
       conversation: {
         include: {
-          members: { include: { user: { select: { id: true, username: true, avatarHue: true, psn: { select: { onlineId: true, avatarUrl: true } } } } } },
+          members: { include: { user: { select: { id: true, username: true, avatarHue: true, avatar: true, psn: { select: { onlineId: true, avatarUrl: true } } } } } },
         },
       },
     },
@@ -38,7 +38,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
       where: { conversationId: id },
       orderBy: { createdAt: "desc" },
       take: SHOWN,
-      include: { author: { select: { id: true, username: true, avatarHue: true, psn: { select: { onlineId: true, avatarUrl: true } } } } },
+      include: { author: { select: { id: true, username: true, avatarHue: true, avatar: true, psn: { select: { onlineId: true, avatarUrl: true } } } } },
     })
   ).reverse();
   // Opening the conversation marks it read.
@@ -85,7 +85,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
           const name = m.author ? (m.author.psn?.onlineId ?? m.author.username) : "deleted user";
           return (
             <li key={m.id} className={clsx("flex gap-3", mine && "flex-row-reverse")}>
-              <Avatar name={name} hue={m.author?.avatarHue ?? 0} url={m.author?.psn?.avatarUrl} size={32} />
+              <Avatar name={name} hue={m.author?.avatarHue ?? 0} url={m.author?.psn?.avatarUrl} avatar={m.author?.avatar} size={32} />
               <div className={clsx("max-w-[80%] rounded-xl border px-3 py-2", mine ? "border-accent-text/40 bg-surface-2" : "border-line bg-surface")}>
                 <div className="mb-0.5 flex flex-wrap items-baseline gap-2 text-xs text-muted">
                   <span className="font-semibold text-text">{mine ? "You" : name}</span>

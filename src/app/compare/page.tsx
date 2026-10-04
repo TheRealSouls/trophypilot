@@ -123,10 +123,10 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       <SectionTitle
         action={
           <div className="flex gap-1.5">
-            <Link href={qs({ show: "shared" })} className={clsx("chip", show === "shared" && "chip-active")}>
+            <Link href={qs({ show: "shared" })} className={clsx("chip min-h-6", show === "shared" && "chip-active")}>
               Shared ({shared.length})
             </Link>
-            <Link href={qs({ show: "all" })} className={clsx("chip", show === "all" && "chip-active")}>
+            <Link href={qs({ show: "all" })} className={clsx("chip min-h-6", show === "all" && "chip-active")}>
               All games
             </Link>
           </div>
@@ -172,13 +172,13 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   );
 }
 
-type SideUser = { username: string; avatarHue: number; psn: { onlineId: string; avatarUrl: string | null } | null };
+type SideUser = { username: string; avatarHue: number; avatar: string | null; psn: { onlineId: string; avatarUrl: string | null } | null };
 
 function Side({ user, stats, className }: { user: SideUser; stats: UserStats; className?: string }) {
   const name = user.psn?.onlineId ?? user.username;
   return (
     <div className={clsx("flex items-center gap-4 p-5", className)}>
-      <Avatar name={name} hue={user.avatarHue} url={user.psn?.avatarUrl} size={64} className="border border-line" />
+      <Avatar name={name} hue={user.avatarHue} url={user.psn?.avatarUrl} avatar={user.avatar} size={64} className="border border-line" />
       <div className="min-w-0">
         <Link href={`/u/${user.username}`} className="block truncate text-lg font-bold hover:underline hover:underline-offset-4">
           {name}

@@ -15,7 +15,7 @@ export default async function ForumStaffPage() {
     prisma.user.findMany({
       where: { role: "ADMIN" },
       orderBy: { createdAt: "asc" },
-      select: { id: true, username: true, country: true, avatarHue: true, createdAt: true, psn: { select: { onlineId: true, avatarUrl: true } } },
+      select: { id: true, username: true, country: true, avatarHue: true, avatar: true, createdAt: true, psn: { select: { onlineId: true, avatarUrl: true } } },
     }),
     getSessionUserId(),
   ]);
@@ -37,7 +37,7 @@ export default async function ForumStaffPage() {
             const name = s.psn?.onlineId ?? s.username;
             return (
               <li key={s.id} className="card flex items-center gap-4 p-4">
-                <Avatar name={name} hue={s.avatarHue} url={s.psn?.avatarUrl} size={52} />
+                <Avatar name={name} hue={s.avatarHue} url={s.psn?.avatarUrl} avatar={s.avatar} size={52} />
                 <div className="min-w-0 flex-1">
                   <Link href={`/u/${s.username}`} className="block truncate font-semibold hover:underline hover:underline-offset-4">
                     {name} <span className="text-xs">{flag(s.country)}</span>

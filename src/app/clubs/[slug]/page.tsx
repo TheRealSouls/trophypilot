@@ -23,7 +23,7 @@ const load = cache((slug: string) =>
       members: {
         orderBy: { joinedAt: "asc" },
         take: 60,
-        include: { user: { select: { id: true, username: true, country: true, avatarHue: true, psn: { select: { onlineId: true, avatarUrl: true } } } } },
+        include: { user: { select: { id: true, username: true, country: true, avatarHue: true, avatar: true, psn: { select: { onlineId: true, avatarUrl: true } } } } },
       },
       _count: { select: { members: true } },
     },
@@ -92,7 +92,7 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
                 const name = u.psn?.onlineId ?? u.username;
                 return (
                   <li key={u.id} className="flex items-center gap-2.5 text-sm">
-                    <Avatar name={name} hue={u.avatarHue} url={u.psn?.avatarUrl} size={28} />
+                    <Avatar name={name} hue={u.avatarHue} url={u.psn?.avatarUrl} avatar={u.avatar} size={28} />
                     <Link href={`/u/${u.username}`} className="min-w-0 flex-1 truncate font-semibold hover:underline hover:underline-offset-4">
                       {name} <span className="text-xs">{flag(u.country)}</span>
                     </Link>

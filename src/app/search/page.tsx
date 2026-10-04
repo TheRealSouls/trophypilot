@@ -13,6 +13,7 @@ import { SITE } from "@/lib/site";
 import { formatDate } from "@/lib/utils";
 import { GameArt } from "@/components/art";
 import { TrophyIcon } from "@/components/TrophyIcon";
+import { SpoilerName } from "@/components/client";
 import { Avatar, EmptyState, Notice, PageHeader, RarityBadge, Skeleton, SkeletonRegion } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Search" };
@@ -115,7 +116,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       </form>
       <div className="mb-8 flex flex-wrap gap-2">
         {Object.entries(TYPES).map(([k, l]) => (
-          <Link key={k} href={tabHref(k)} className={clsx("chip", type === k && "chip-active")}>
+          <Link key={k} href={tabHref(k)} className={clsx("chip min-h-6", type === k && "chip-active")}>
             {l}
           </Link>
         ))}
@@ -185,7 +186,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               {users.map((u) => (
                 <li key={u.id}>
                   <Link href={`/u/${u.username}`} className="group flex items-center gap-3 py-2.5">
-                    <Avatar name={u.psn?.onlineId ?? u.username} hue={u.avatarHue} url={u.psn?.avatarUrl} size={36} />
+                    <Avatar name={u.psn?.onlineId ?? u.username} hue={u.avatarHue} url={u.psn?.avatarUrl} avatar={u.avatar} size={36} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold group-hover:underline group-hover:underline-offset-4">
                         {u.psn?.onlineId ?? u.username} {flag(u.country)}
@@ -211,19 +212,18 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           >
             <ul className="divide-y divide-line border-y border-line">
               {trophies.map((t) => (
-                <li key={t.id}>
-                  <Link href={t.slug ? trophyHref(t.game.slug, t.slug) : `/trophies/${t.id}`} className="group flex items-center gap-3 py-2.5">
-                    <TrophyIcon type={t.type} size={22} />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold group-hover:underline group-hover:underline-offset-4">
+                <li key={t.id} className="flex items-center gap-3 py-2.5">
+                  <TrophyIcon type={t.type} size={22} />
+                  <div className="min-w-0 flex-1">
+                    <SpoilerName hidden={t.hidden}>
+                      <Link href={t.slug ? trophyHref(t.game.slug, t.slug) : `/trophies/${t.id}`} className="block truncate text-sm font-semibold hover:underline hover:underline-offset-4">
                         {t.name}
-                      </div>
-                      <div className="truncate text-xs text-muted">
-                        {t.game.title} · {t.description}
-                      </div>
-                    </div>
-                    <RarityBadge rate={t.earnedRate} />
-                  </Link>
+                      </Link>
+                      <span className="block truncate text-xs text-muted">{t.description}</span>
+                    </SpoilerName>
+                    <div className="truncate text-xs text-muted">{t.game.title}</div>
+                  </div>
+                  <RarityBadge rate={t.earnedRate} />
                 </li>
               ))}
             </ul>

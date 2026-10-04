@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
+import { cached } from "./cache";
 import { getFriendIds } from "./social";
 import { startOfMonthUTC, startOfWeekUTC } from "./utils";
 import { levelFromPoints, ULTRA_RARE_MAX } from "./trophies";
@@ -30,12 +31,16 @@ export type LeaderboardRow = {
   country: string | null;
   avatarHue: number;
   avatarUrl: string | null;
+  /** The member's chosen picture (User.avatar), if any. */
+  avatar: string | null;
   level: number;
   points: number;
   platinums: number;
   trophies: number;
-  /** Only known for members, from their synced trophy history. */
+  /** Members: from their synced trophies. Tracked players: counted list by list (see countUltraRares). */
   rare: number | null;
+  /** True while some of a tracked player's lists are still to be counted, so `rare` is a running total. */
+  rarePartial: boolean;
   completion: number | null;
   games: number | null;
 };
@@ -57,6 +62,7 @@ type MemberRaw = {
   username: string;
   country: string | null;
   avatarHue: number;
+  avatar: string | null;
   onlineId: string | null;
   avatarUrl: string | null;
   accountId: string | null;
@@ -74,10 +80,24 @@ type MemberRaw = {
  * synced trophy history.
  */
 export function usesPsnTotals(opts: Pick<Opts, "metric" | "period" | "scope">) {
-  return opts.scope !== "friends" && (opts.metric === "points" || opts.metric === "platinums");
+  if (opts.scope === "friends") return false;
+  // Ultra rares and completion are only known all time for players who haven't joined.
+  return opts.metric === "points" || opts.metric === "platinums" || opts.period === "all";
 }
 
+/**
+ * Global and country boards are the same for everyone, so they are cached for
+ * two minutes (served instantly, refreshed in the background). Friends boards
+ * depend on the viewer and are always worked out fresh.
+ */
 export async function getLeaderboard(opts: Opts): Promise<LeaderboardRow[]> {
+  if (opts.scope === "friends") return buildLeaderboard(opts);
+  const country = opts.scope === "country" ? (opts.country ?? "") : "";
+  const key = `board:${opts.metric}:${opts.period}:${opts.scope}:${country}:${opts.limit ?? 100}`;
+  return cached(key, () => buildLeaderboard({ ...opts, viewerId: null }), { ttlMs: 2 * 60_000, tags: ["boards"] });
+}
+
+async function buildLeaderboard(opts: Opts): Promise<LeaderboardRow[]> {
   const { period, limit = 100 } = opts;
   // Completion is a lifetime stat with no meaningful weekly/monthly variant.
   const metric: Metric = opts.metric === "completion" && period !== "all" ? "points" : opts.metric;
@@ -99,11 +119,13 @@ function memberRow(m: MemberRaw, rank: number): LeaderboardRow {
     country: m.country,
     avatarHue: m.avatarHue,
     avatarUrl: m.avatarUrl,
+    avatar: m.avatar,
     level: levelFromPoints(m.points).level,
     points: m.points,
     platinums: m.platinums,
     trophies: m.trophies,
     rare: m.rare,
+    rarePartial: false,
     completion: m.completion,
     games: m.games,
   };
@@ -128,15 +150,25 @@ async function psnTotalsBoard(opts: Opts, members: MemberRaw[], limit: number): 
     select: { accountId: true },
   });
   const excludedIds = excluded.map((e) => e.accountId!);
-  const players =
+  const orderBy: Prisma.PsnPlayerOrderByWithRelationInput[] = {
+    points: [{ points: "desc" }, { platinum: "desc" }],
+    platinums: [{ platinum: "desc" }, { points: "desc" }],
+    rare: [{ ultraRare: { sort: "desc", nulls: "last" } }, { points: "desc" }],
+    completion: [{ avgCompletion: { sort: "desc", nulls: "last" } }, { gamesPlayed: "desc" }],
+  }[opts.metric] as Prisma.PsnPlayerOrderByWithRelationInput[];
+  const players: PlayerTotals[] =
     opts.period === "all"
       ? (
           await prisma.psnPlayer.findMany({
-            where: { hidden: false, trophiesPrivate: false, accountId: { notIn: excludedIds }, ...(country ? { country } : {}) },
-            orderBy:
-              opts.metric === "platinums"
-                ? [{ platinum: "desc" }, { points: "desc" }]
-                : [{ points: "desc" }, { platinum: "desc" }],
+            where: {
+              hidden: false,
+              trophiesPrivate: false,
+              accountId: { notIn: excludedIds },
+              ...(country ? { country } : {}),
+              ...(opts.metric === "rare" ? { ultraRare: { not: null } } : {}),
+              ...(opts.metric === "completion" ? { gamesPlayed: { gte: COMPLETION_MIN_GAMES } } : {}),
+            },
+            orderBy,
             take: limit,
           })
         ).map((p) => ({ ...p, trophies: p.platinum + p.gold + p.silver + p.bronze }))
@@ -149,10 +181,18 @@ async function psnTotalsBoard(opts: Opts, members: MemberRaw[], limit: number): 
       accountId: { in: players.map((p) => p.accountId) },
       user: { showOnLeaderboards: true, profileVisibility: "PUBLIC" },
     },
-    select: { accountId: true, user: { select: { id: true, username: true, avatarHue: true } } },
+    select: { accountId: true, user: { select: { id: true, username: true, avatarHue: true, avatar: true } } },
   });
   const memberByAccount = new Map(linked.map((l) => [l.accountId!, l.user]));
-  const memberStats = new Map(members.map((m) => [m.userId, m]));
+  // Synced stats for exactly the members on this board, wherever they rank on the members-only board.
+  const shownMembers = linked.map((l) => l.user.id);
+  const memberStats = new Map(
+    [...members, ...(shownMembers.length ? await memberBoard({ ...opts, scope: "global", ids: shownMembers }, shownMembers.length) : [])].map((m) => [
+      m.userId,
+      m,
+    ]),
+  );
+  const allTime = opts.period === "all";
 
   const rows: Omit<LeaderboardRow, "rank">[] = players.map((p) => {
     const m = memberByAccount.get(p.accountId);
@@ -167,13 +207,16 @@ async function psnTotalsBoard(opts: Opts, members: MemberRaw[], limit: number): 
       country: p.country,
       avatarHue: m?.avatarHue ?? 0,
       avatarUrl: p.avatarUrl,
+      avatar: m?.avatar ?? null,
       level: p.trophyLevel,
       points: p.points,
       platinums: p.platinum,
       trophies: p.trophies,
-      rare: stats?.rare ?? null,
-      completion: stats?.completion ?? null,
-      games: stats?.games ?? null,
+      // Weekly and monthly boards measure gains; a tracked player's ultra rares and completion are all-time only.
+      rare: stats?.rare ?? (allTime ? (p.ultraRare ?? null) : null),
+      rarePartial: !stats && allTime && (p.ultraRarePending ?? 0) > 0,
+      completion: stats?.completion ?? (allTime ? (p.avgCompletion ?? null) : null),
+      games: stats?.games ?? (allTime ? (p.gamesPlayed ?? null) : null),
     };
   });
 
@@ -186,12 +229,24 @@ async function psnTotalsBoard(opts: Opts, members: MemberRaw[], limit: number): 
       })
     ).map((p) => p.accountId),
   );
-  for (const m of members) if (!m.accountId || !known.has(m.accountId)) rows.push(memberRow(m, 0));
+  // Ultra rare and completion boards also take members whose lists aren't counted on their PSN summary yet.
+  const byStats = opts.metric === "rare" || opts.metric === "completion";
+  const present = new Set(rows.map((r) => r.userId));
+  for (const m of members) {
+    if (present.has(m.userId)) continue;
+    if (!m.accountId || !known.has(m.accountId) || byStats) rows.push(memberRow(m, 0));
+  }
 
-  const key =
-    opts.metric === "platinums"
-      ? (r: Omit<LeaderboardRow, "rank">) => [r.platinums, r.points]
-      : (r: Omit<LeaderboardRow, "rank">) => [r.points, r.platinums];
+  const key = {
+    points: (r: Omit<LeaderboardRow, "rank">) => [r.points, r.platinums],
+    platinums: (r: Omit<LeaderboardRow, "rank">) => [r.platinums, r.points],
+    rare: (r: Omit<LeaderboardRow, "rank">) => [r.rare ?? -1, r.points],
+    completion: (r: Omit<LeaderboardRow, "rank">) => [r.completion ?? -1, r.games ?? 0],
+  }[opts.metric];
+  if (opts.metric === "completion") {
+    // Same minimum as the members' board, for members ranked on their synced games.
+    for (let i = rows.length - 1; i >= 0; i--) if ((rows[i].games ?? 0) < COMPLETION_MIN_GAMES) rows.splice(i, 1);
+  }
   rows.sort((a, b) => {
     const [a1, a2] = key(a);
     const [b1, b2] = key(b);
@@ -209,6 +264,10 @@ type PlayerTotals = {
   points: number;
   platinum: number;
   trophies: number;
+  ultraRare?: number | null;
+  ultraRarePending?: number | null;
+  avgCompletion?: number | null;
+  gamesPlayed?: number | null;
 };
 
 /**
@@ -243,12 +302,15 @@ async function playerGains(opts: Opts, country: string | null, excluded: string[
   return rows.map((r) => ({ ...r, points: Number(r.points), platinum: Number(r.platinum), trophies: Number(r.trophies) }));
 }
 
-async function memberBoard(opts: Opts & { metric: Metric }, limit: number): Promise<MemberRaw[]> {
+async function memberBoard(opts: Opts & { metric: Metric; ids?: string[] }, limit: number): Promise<MemberRaw[]> {
   const { period, scope, metric } = opts;
 
   const filters: Prisma.Sql[] = [];
 
-  if (scope === "friends") {
+  if (opts.ids) {
+    // Stats for particular members already cleared to appear on a board.
+    filters.push(Prisma.sql`u."id" IN (${Prisma.join(opts.ids)})`);
+  } else if (scope === "friends") {
     if (!opts.viewerId) return [];
     const ids = [opts.viewerId, ...(await getFriendIds(opts.viewerId))];
     // Friends can see friends-only profiles; the viewer always sees themselves.
@@ -284,7 +346,7 @@ async function memberBoard(opts: Opts & { metric: Metric }, limit: number): Prom
 
   const rows = await prisma.$queryRaw<MemberRaw[]>`
     SELECT
-      u."id" AS "userId", u."username", u."country", u."avatarHue",
+      u."id" AS "userId", u."username", u."country", u."avatarHue", u."avatar",
       p."onlineId", p."avatarUrl", p."accountId",
       CAST(SUM(CASE t."type" WHEN 'PLATINUM' THEN 300 WHEN 'GOLD' THEN 90 WHEN 'SILVER' THEN 30 ELSE 15 END) AS INTEGER) AS points,
       CAST(SUM(CASE WHEN t."type" = 'PLATINUM' THEN 1 ELSE 0 END) AS INTEGER) AS platinums,
@@ -326,7 +388,11 @@ export type ViewerRanks = {
  * is tracked (everyone who has synced is), otherwise the members' board.
  * Null if they have no trophies to rank yet.
  */
-export async function viewerRanks(user: { id: string; country: string | null; psn: { accountId: string | null } | null }): Promise<ViewerRanks | null> {
+export function viewerRanks(user: { id: string; country: string | null; psn: { accountId: string | null } | null }): Promise<ViewerRanks | null> {
+  return cached(`ranks:${user.id}:${user.country ?? ""}`, () => workOutRanks(user), { ttlMs: 2 * 60_000, tags: ["boards"] });
+}
+
+async function workOutRanks(user: { id: string; country: string | null; psn: { accountId: string | null } | null }): Promise<ViewerRanks | null> {
   const visible = { hidden: false, trophiesPrivate: false } as const;
   const me = user.psn?.accountId ? await prisma.psnPlayer.findUnique({ where: { accountId: user.psn.accountId } }) : null;
   if (me && !me.hidden && !me.trophiesPrivate) {

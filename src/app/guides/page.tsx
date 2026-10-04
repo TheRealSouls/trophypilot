@@ -31,7 +31,7 @@ export default async function GuidesPage({ searchParams }: { searchParams: Promi
           ["popular", "Popular"],
           ["easy", "Easiest plats"],
         ].map(([k, l]) => (
-          <Link key={k} href={`/guides?sort=${k}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className={clsx("chip", sort === k && "chip-active")}>
+          <Link key={k} href={`/guides?sort=${k}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className={clsx("chip min-h-6", sort === k && "chip-active")}>
             {l}
           </Link>
         ))}

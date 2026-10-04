@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
 import { Nav } from "@/components/Nav";
-import { getCurrentUser } from "@/lib/auth";
+import { SessionProvider, THEME_BOOT } from "@/components/session";
 import { MobileNav } from "@/components/NavLinks";
 import { isDemoMode } from "@/lib/psn/sync";
 import { SITE } from "@/lib/site";
@@ -25,13 +25,17 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { themeColor: "#ffffff", colorScheme: "light" };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   const year = new Date().getFullYear();
-  // Light for everyone unless a signed-in member picked dark in Settings. Never follows the device.
-  const theme = (await getCurrentUser())?.theme === "dark" ? "dark" : "light";
+  // Light for everyone unless a member picked dark in Settings (never follows the device). The choice is
+  // remembered in the browser and applied by THEME_BOOT before the page paints, so the layout stays cacheable.
   return (
-    <html lang="en" className={inter.variable} data-theme={theme}>
+    <html lang="en" className={inter.variable} data-theme="light" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+      </head>
       <body className="min-h-screen overflow-x-clip font-sans text-[15px] antialiased">
+        <SessionProvider>
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 btn-primary">
           Skip to content
         </a>
@@ -75,6 +79,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </div>
         </footer>
         <MobileNav />
+        </SessionProvider>
       </body>
     </html>
   );

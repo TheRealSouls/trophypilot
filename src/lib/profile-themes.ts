@@ -16,6 +16,24 @@ export const PROFILE_ACCENTS = {
 export const accentClass = (key: string) => (key && key in PROFILE_ACCENTS ? `profile-accent-${key}` : "");
 
 /**
+ * Pre-built profile cards, like Discord's profile themes: each recolours the
+ * profile header (globals.css, .pcard-*) and brings its own animated banner
+ * art (src/components/ProfileCardArt.tsx), used when no game banner is picked.
+ */
+export const PROFILE_CARDS = {
+  "": { name: "Plain", blurb: "The standard card, in the site's colours." },
+  ember: { name: "Ember", blurb: "Flames along the bottom and sparks drifting up." },
+  circuit: { name: "Circuit", blurb: "Live traces running across a dark grid." },
+  ocean: { name: "Ocean", blurb: "Light through the water, kelp and rising bubbles." },
+  forest: { name: "Forest", blurb: "Pines under a full moon, with fireflies." },
+  frost: { name: "Frost", blurb: "Snowy peaks and falling snow. The light one." },
+  platinum: { name: "Platinum", blurb: "Polished platinum with a shine passing over." },
+  arcade: { name: "Arcade", blurb: "Pixel hills, bricks and a bouncing coin." },
+} as const;
+
+export const cardClass = (key: string) => (key && key in PROFILE_CARDS ? `pcard pcard-${key}` : "");
+
+/**
  * Returns a clean https link if the input is one for an allowed site, or
  * null. `hosts` limits it (YouTube, Twitch); without it any https site is
  * accepted, for Kick, Facebook Gaming and the rest.

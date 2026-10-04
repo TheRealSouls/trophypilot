@@ -31,6 +31,8 @@ export async function GET() {
       syncJobs: { select: { status: true, gamesSynced: true, trophiesSynced: true, startedAt: true, finishedAt: true } },
       theme: true,
       profileAccent: true,
+      profileCard: true,
+      avatar: true,
       youtubeUrl: true,
       twitchUrl: true,
       streamUrl: true,

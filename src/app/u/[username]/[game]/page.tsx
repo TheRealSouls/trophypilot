@@ -90,7 +90,7 @@ export default async function UserGamePage({
           ["earned", `Earned (${earned.size})`],
           ["unearned", `Unearned (${game.trophies.length - earned.size})`],
         ].map(([k, l]) => (
-          <Link key={k} href={q({ filter: k })} scroll={false} className={clsx("chip", filter === k && "chip-active")}>
+          <Link key={k} href={q({ filter: k })} scroll={false} className={clsx("chip min-h-6", filter === k && "chip-active")}>
             {l}
           </Link>
         ))}
@@ -100,7 +100,7 @@ export default async function UserGamePage({
           ["rarity", "Rarest"],
           ["type", "Grade"],
         ].map(([k, l]) => (
-          <Link key={k} href={q({ sort: k })} scroll={false} className={clsx("chip", sort === k && "chip-active")}>
+          <Link key={k} href={q({ sort: k })} scroll={false} className={clsx("chip min-h-6", sort === k && "chip-active")}>
             {l}
           </Link>
         ))}

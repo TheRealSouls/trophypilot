@@ -103,7 +103,7 @@ export default async function SessionsPage({ searchParams }: { searchParams: Pro
                       title={m.user.psn?.onlineId ?? m.user.username}
                       aria-label={m.user.psn?.onlineId ?? m.user.username}
                     >
-                      <Avatar name={m.user.psn?.onlineId ?? m.user.username} hue={m.user.avatarHue} url={m.user.psn?.avatarUrl} size={30} className="ring-surface" />
+                      <Avatar name={m.user.psn?.onlineId ?? m.user.username} hue={m.user.avatarHue} url={m.user.psn?.avatarUrl} avatar={m.user.avatar} size={30} className="ring-surface" />
                     </Link>
                   ))}
                 </div>

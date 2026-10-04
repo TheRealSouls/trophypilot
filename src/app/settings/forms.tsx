@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
+import { saveTheme, useMe } from "@/components/session";
 import { useRouter } from "next/navigation";
 import { durationText } from "@/lib/plans";
 import { deleteAccount, startPsnLink, syncNow, updatePrivacy, updateProfile, updateTheme, updateVault, verifyPsn } from "@/actions/account";
-import { PROFILE_ACCENTS } from "@/lib/profile-themes";
 import { SubmitButton } from "@/components/client";
 import { FormMessage } from "@/components/ui";
 import { COUNTRIES } from "@/lib/countries";
@@ -15,12 +15,10 @@ export type ProfileValues = {
   youtubeUrl: string;
   twitchUrl: string;
   streamUrl: string;
-  profileAccent: string;
-  bannerGameId: string;
   allowMessages: string;
 };
 
-export function ProfileForm({ values, games }: { values: ProfileValues; games: { id: string; title: string }[] }) {
+export function ProfileForm({ values }: { values: ProfileValues }) {
   const [state, action] = useActionState(updateProfile, null);
   const { bio, country } = values;
   return (
@@ -39,27 +37,13 @@ export function ProfileForm({ values, games }: { values: ProfileValues; games: {
         </select>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="bannerGameId" className="label">Profile banner</label>
-          <select id="bannerGameId" name="bannerGameId" defaultValue={values.bannerGameId} className="input">
-            <option value="">No banner</option>
-            {games.map((g) => (
-              <option key={g.id} value={g.id}>{g.title}</option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-muted">Artwork from one of your games, shown behind your profile.</p>
-        </div>
-        <div>
-          <label htmlFor="profileAccent" className="label">Profile colour</label>
-          <select id="profileAccent" name="profileAccent" defaultValue={values.profileAccent} className="input">
-            {Object.entries(PROFILE_ACCENTS).map(([k, l]) => (
-              <option key={k} value={k}>{l}</option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-muted">The accent colour on your profile page. Everyone who visits sees it.</p>
-        </div>
-      </div>
+      <p className="text-sm text-muted">
+        Your picture, banner, card theme and colour are in{" "}
+        <a href="#look" className="link">
+          Profile look
+        </a>{" "}
+        above.
+      </p>
 
       <fieldset className="space-y-3">
         <legend className="label">Where you stream</legend>
@@ -245,40 +229,50 @@ export function VaultForm({ options, picked: initial }: { options: VaultOption[]
 }
 
 /** Light or dark. Picking one applies it straight away; the button covers browsers without JavaScript. */
+/**
+ * Light or dark. Switches the page at once (applyTheme) and saves the choice
+ * to the account in the background, so other devices pick it up too.
+ */
 export function ThemeForm({ theme }: { theme: string }) {
+  const [current, setCurrent] = useState(theme);
+  const [, startTransition] = useTransition();
+  const { reload } = useMe();
+  const choose = (t: string) => {
+    setCurrent(t);
+    startTransition(async () => {
+      await saveTheme(t, () => updateTheme(t));
+      await reload();
+    });
+  };
   return (
-    <form action={updateTheme}>
-      <fieldset>
-        <legend className="label">Theme</legend>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {[
-            ["light", "Light", "White background. The default."],
-            ["dark", "Dark", "Dark background, easier on the eyes at night."],
-          ].map(([value, label, hint]) => (
-            <label
-              key={value}
-              className="flex cursor-pointer items-start gap-3 rounded-lg border border-line p-4 has-[:checked]:border-accent-text has-[:checked]:bg-surface-2"
-            >
-              <input
-                type="radio"
-                name="theme"
-                value={value}
-                defaultChecked={theme === value}
-                onChange={(e) => e.currentTarget.form?.requestSubmit()}
-                className="mt-1 accent-[var(--color-accent)]"
-              />
-              <span>
-                <span className="block font-semibold">{label}</span>
-                <span className="block text-sm text-muted">{hint}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <noscript>
-        <button className="btn-ghost mt-3">Save theme</button>
-      </noscript>
-    </form>
+    <fieldset>
+      <legend className="label">Theme</legend>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {[
+          ["light", "Light", "White background. The default."],
+          ["dark", "Dark", "Dark background, easier on the eyes at night."],
+        ].map(([value, label, hint]) => (
+          <label
+            key={value}
+            className="flex cursor-pointer items-start gap-3 rounded-lg border border-line p-4 has-[:checked]:border-accent-text has-[:checked]:bg-surface-2"
+          >
+            <input
+              type="radio"
+              name="theme"
+              value={value}
+              checked={current === value}
+              onChange={() => choose(value)}
+              className="mt-1 accent-[var(--color-accent)]"
+            />
+            <span>
+              <span className="block font-semibold">{label}</span>
+              <span className="block text-sm text-muted">{hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-muted">Switches straight away and is saved to your account.</p>
+    </fieldset>
   );
 }
 

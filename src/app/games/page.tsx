@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import clsx from "clsx";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { cached } from "@/lib/cache";
 import { familiesFor } from "@/lib/games";
 import { GameCard } from "@/components/GameCard";
 import { EmptyState, PageHeader } from "@/components/ui";
@@ -26,41 +27,19 @@ export default async function GamesPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const sort = sp.sort && sp.sort in SORTS ? sp.sort : "popular";
 
-  const where: Prisma.GameWhereInput = {
-    ...(sp.q ? { title: { contains: sp.q, mode: "insensitive" } } : {}),
-    ...(sp.platform ? { platforms: { contains: sp.platform } } : {}),
-    ...(sp.genre ? { genre: sp.genre } : {}),
-    ...(sp.online === "0" ? { hasOnlineTrophies: false } : {}),
-  };
-  const orderBy: Prisma.GameOrderByWithRelationInput[] = [
-    {
-      popular: { userGames: { _count: "desc" as const } },
-      release: { releaseDate: { sort: "desc" as const, nulls: "last" as const } },
-      easiest: { difficulty: { sort: "asc" as const, nulls: "last" as const } },
-      hardest: { difficulty: { sort: "desc" as const, nulls: "last" as const } },
-      shortest: { hoursToPlatinum: { sort: "asc" as const, nulls: "last" as const } },
-      title: { title: "asc" as const },
-    }[sort],
-    // When a game has several trophy lists, the PS5 one represents it.
-    { npServiceName: "desc" },
-    { title: "asc" },
-  ];
   const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
+  const filters = { q: sp.q?.trim().slice(0, 80) ?? "", platform: sp.platform ?? "", genre: sp.genre ?? "", online: sp.online === "0" };
 
-  // One card per game: trophy lists that share a titleKey collapse into one.
-  const [games, total, genres] = await Promise.all([
-    prisma.game.findMany({
-      where,
-      orderBy,
-      distinct: ["titleKey"],
-      skip: (page - 1) * PER_PAGE,
-      take: PER_PAGE,
-      include: { trophies: { where: { type: "PLATINUM" }, select: { earnedRate: true } }, _count: { select: { trophies: true } } },
-    }),
-    prisma.game.groupBy({ by: ["titleKey"], where }).then((g) => g.length),
-    prisma.game.findMany({ distinct: ["genre"], select: { genre: true }, where: { genre: { not: null } }, orderBy: { genre: "asc" } }),
+  // Shared by everyone browsing the same filters, so it's cached for a few minutes.
+  const [{ games, total }, genres] = await Promise.all([
+    cached(`games:${JSON.stringify([filters, sort, page])}`, () => gamesPage(filters, sort, page), { ttlMs: 5 * 60_000, tags: ["games"] }),
+    cached(
+      "games:genres",
+      () =>
+        prisma.$queryRaw<{ genre: string }[]>`SELECT DISTINCT "genre" FROM "Game" WHERE "genre" IS NOT NULL ORDER BY "genre"`,
+      { ttlMs: 60 * 60_000, tags: ["games"] },
+    ),
   ]);
-
   const families = await familiesFor(games.map((g) => g.titleKey));
   const pages = Math.max(1, Math.ceil(total / PER_PAGE));
 
@@ -100,7 +79,7 @@ export default async function GamesPage({ searchParams }: { searchParams: Promis
 
       <div className="mb-5 flex flex-wrap gap-2">
         {Object.entries(SORTS).map(([k, l]) => (
-          <Link key={k} href={qs({ sort: k as keyof typeof SORTS })} className={clsx("chip", sort === k && "chip-active")}>
+          <Link key={k} href={qs({ sort: k as keyof typeof SORTS })} className={clsx("chip min-h-6", sort === k && "chip-active")}>
             {l}
           </Link>
         ))}
@@ -129,4 +108,62 @@ export default async function GamesPage({ searchParams }: { searchParams: Promis
       )}
     </div>
   );
+}
+
+type GameFilters = { q: string; platform: string; genre: string; online: boolean };
+type SortKey = keyof typeof SORTS;
+
+/**
+ * One page of games, one card per game: the trophy lists that share a
+ * titleKey collapse into one, represented by the PS5 list when there is one.
+ * The database picks the 60 ids (DISTINCT ON), so only those rows load.
+ * "Most played" counts tracked players and members across all of a game's lists.
+ */
+async function gamesPage(f: GameFilters, sort: SortKey, page: number) {
+  const where: Prisma.Sql[] = [Prisma.sql`TRUE`];
+  if (f.q) where.push(Prisma.sql`g."title" ILIKE ${`%${f.q.replace(/[\%_]/g, (c) => `\${c}`)}%`}`);
+  if (f.platform) where.push(Prisma.sql`g."platforms" LIKE ${`%${f.platform}%`}`);
+  if (f.genre) where.push(Prisma.sql`g."genre" = ${f.genre}`);
+  if (f.online) where.push(Prisma.sql`g."hasOnlineTrophies" = FALSE`);
+  const filter = Prisma.join(where, " AND ");
+
+  const order = {
+    popular: Prisma.sql`COALESCE(p.n, 0) DESC`,
+    release: Prisma.sql`r."releaseDate" DESC NULLS LAST`,
+    easiest: Prisma.sql`r."difficulty" ASC NULLS LAST`,
+    hardest: Prisma.sql`r."difficulty" DESC NULLS LAST`,
+    shortest: Prisma.sql`r."hoursToPlatinum" ASC NULLS LAST`,
+    title: Prisma.sql`r."title" ASC`,
+  }[sort];
+  const popularity =
+    sort === "popular"
+      ? Prisma.sql`LEFT JOIN (
+          SELECT COALESCE(NULLIF(g2."titleKey", ''), g2."id") AS fam, COUNT(*) AS n
+          FROM (SELECT "gameId" FROM "PsnPlayerTitle" UNION ALL SELECT "gameId" FROM "UserGame") x
+          JOIN "Game" g2 ON g2."id" = x."gameId"
+          GROUP BY 1
+        ) p ON p.fam = r.fam`
+      : Prisma.sql`LEFT JOIN (SELECT NULL::text AS fam, 0 AS n) p ON FALSE`;
+
+  const [ids, count] = await Promise.all([
+    prisma.$queryRaw<{ id: string }[]>`
+      SELECT r."id" FROM (
+        SELECT DISTINCT ON (COALESCE(NULLIF(g."titleKey", ''), g."id"))
+          COALESCE(NULLIF(g."titleKey", ''), g."id") AS fam, g."id", g."title", g."releaseDate", g."difficulty", g."hoursToPlatinum"
+        FROM "Game" g
+        WHERE ${filter}
+        ORDER BY COALESCE(NULLIF(g."titleKey", ''), g."id"), g."npServiceName" DESC NULLS LAST, g."title"
+      ) r
+      ${popularity}
+      ORDER BY ${order}, r."title" ASC
+      LIMIT ${PER_PAGE} OFFSET ${(page - 1) * PER_PAGE}`,
+    prisma.$queryRaw<{ n: number }[]>`
+      SELECT CAST(COUNT(DISTINCT COALESCE(NULLIF(g."titleKey", ''), g."id")) AS INTEGER) AS n FROM "Game" g WHERE ${filter}`,
+  ]);
+  const rows = await prisma.game.findMany({
+    where: { id: { in: ids.map((r) => r.id) } },
+    include: { trophies: { where: { type: "PLATINUM" }, select: { earnedRate: true } }, _count: { select: { trophies: true } } },
+  });
+  const byId = new Map(rows.map((g) => [g.id, g]));
+  return { games: ids.flatMap((r) => byId.get(r.id) ?? []), total: Number(count[0]?.n ?? 0) };
 }

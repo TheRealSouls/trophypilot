@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { refreshEstimates } from "@/lib/estimates";
 import { isAdmin } from "@/lib/forum";
+import { bust } from "@/lib/cache";
 import type { FormState } from "./auth";
 
 const ratingSchema = z.object({
@@ -34,14 +35,18 @@ export async function rateGame(_: FormState, fd: FormData): Promise<FormState> {
     });
   }
   await refreshEstimates([gameId]);
-  revalidatePath("/games", "layout");
+  await refreshGamePage(gameId);
   return { ok: difficulty || rating ? "Thanks, your rating is saved." : "Rating removed." };
 }
 
 /** How long "Playing now" stays up before it clears itself. */
 const PLAYING_FOR_MS = 3 * 3600_000;
 
-/** Sets or clears the member's "Playing now" status. Pass no gameId to clear it. */
+/**
+ * Sets or clears the member's "Playing now" status. Pass no gameId to clear
+ * it; `from` is the game page it was pressed on. Only that page and the
+ * member's profile are refreshed, which keeps it quick.
+ */
 export async function setNowPlaying(fd: FormData) {
   const user = await requireUser();
   const gameId = (fd.get("gameId") as string) || null;
@@ -50,7 +55,17 @@ export async function setNowPlaying(fd: FormData) {
     where: { id: user.id },
     data: game ? { nowPlayingGameId: game.id, nowPlayingUntil: new Date(Date.now() + PLAYING_FOR_MS) } : { nowPlayingGameId: null, nowPlayingUntil: null },
   });
-  revalidatePath("/", "layout");
+  revalidatePath(`/u/${user.username}`);
+  const from = String(fd.get("from") ?? "") || user.nowPlayingGameId;
+  if (from) await refreshGamePage(from, false);
+}
+
+/** Drops a game's cached details and re-renders its page (and its other lists' pages). */
+async function refreshGamePage(gameId: string, details = true) {
+  const game = await prisma.game.findUnique({ where: { id: gameId }, select: { slug: true, titleKey: true } });
+  if (!game) return;
+  if (details) bust(`game:${game.slug}`);
+  revalidatePath(`/games/${game.slug}`);
 }
 
 const unobtainableSchema = z.object({
@@ -71,6 +86,6 @@ export async function setUnobtainable(_: FormState, fd: FormData): Promise<FormS
     where: { id: gameId },
     data: { unobtainable: unobtainable || null, unobtainableReason: unobtainable ? reason : null },
   });
-  revalidatePath("/games", "layout");
+  await refreshGamePage(gameId);
   return { ok: "Saved." };
 }

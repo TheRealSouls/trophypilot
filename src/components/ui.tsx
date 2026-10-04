@@ -1,22 +1,34 @@
 import clsx from "clsx";
+import { PresetAvatar } from "./avatars";
+import { CubeLoader } from "./CubeLoader";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { MAX_TROPHY_LEVEL, rarityOf } from "@/lib/trophies";
 import { artHue, secureUrl } from "@/lib/utils";
 
+/**
+ * A member's picture. `avatar` is their choice in Settings (User.avatar):
+ * a built-in picture, "letter", or a game icon; without one it's their PSN
+ * avatar (`url`) or else their initial.
+ */
 export function Avatar({
   name,
   hue,
   url,
+  avatar,
   size = 40,
   className,
 }: {
   name: string;
   hue: number;
   url?: string | null;
+  avatar?: string | null;
   size?: number;
   className?: string;
 }) {
+  if (avatar?.startsWith("preset:")) return <PresetAvatar id={avatar.slice(7)} size={size} className={className} />;
+  if (avatar?.startsWith("https://")) url = avatar;
+  else if (avatar === "letter") url = null;
   if (url)
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -252,11 +264,13 @@ export function Skeleton({ className, style }: { className?: string; style?: Rea
 }
 
 /** Wraps skeleton markup so screen readers hear one "Loading" instead of noise. */
+/** Loading state for a route: the cube trophy, with a faint outline of the page underneath. */
 export function SkeletonRegion({ label = "Loading", children, className }: { label?: string; children: ReactNode; className?: string }) {
   return (
-    <div role="status" aria-live="polite" aria-busy="true" className={className}>
+    <div role="status" aria-live="polite" aria-busy="true" className={clsx("relative", className)}>
       <span className="sr-only">{label}</span>
-      {children}
+      <CubeLoader label={label} />
+      <div className="opacity-60">{children}</div>
     </div>
   );
 }

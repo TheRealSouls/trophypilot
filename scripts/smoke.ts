@@ -58,6 +58,9 @@ async function main() {
     { path: "/leaderboards?scope=global&period=weekly&metric=points" },
     { path: "/leaderboards?scope=global&period=monthly&metric=rare" },
     { path: "/leaderboards?scope=global&period=all&metric=completion" },
+    { path: "/leaderboards?scope=global&period=all&metric=rare" },
+    { path: "/api/ping", contains: "ok" },
+    { path: "/api/me", contains: "\"user\":null" },
     { path: "/leaderboards?scope=friends", auth: true },
     { path: "/search?q=rainbow" },
     { path: "/search?q=call&type=games" },
@@ -86,6 +89,8 @@ async function main() {
     { path: "/api/account/export", status: 401 },
     // Signed in as the demo user
     { path: "/settings", auth: true, contains: "shared demo account" },
+    { path: "/settings", auth: true, contains: "Profile look" },
+    { path: "/api/me", auth: true, contains: `"username":"${demo.username}"` },
     { path: "/friends", auth: true },
     { path: "/guides/new", auth: true, contains: "Write a trophy guide" },
     { path: "/sessions", auth: true, contains: "Host a session" },

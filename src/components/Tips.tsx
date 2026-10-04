@@ -38,7 +38,7 @@ export async function Tips({ trophyId, guideId, path }: { trophyId?: string; gui
             <div className="min-w-0 flex-1">
               <p className="text-[15px] leading-relaxed">{t.body}</p>
               <div className="mt-2 flex items-center gap-2 text-xs text-muted">
-                <Avatar name={t.author.username} hue={t.author.avatarHue} url={t.author.psn?.avatarUrl} size={20} />
+                <Avatar name={t.author.username} hue={t.author.avatarHue} url={t.author.psn?.avatarUrl} avatar={t.author.avatar} size={20} />
                 <Link href={`/u/${t.author.username}`} className="font-semibold hover:text-text">
                   {t.author.psn?.onlineId ?? t.author.username}
                 </Link>

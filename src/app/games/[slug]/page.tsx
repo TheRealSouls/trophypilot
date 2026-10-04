@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import clsx from "clsx";
 import { prisma } from "@/lib/db";
+import { cached } from "@/lib/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { flag } from "@/lib/countries";
 import { after } from "next/server";
@@ -12,7 +13,6 @@ import { probeSiblings } from "@/lib/psn/siblings";
 import { enrichGame, igdbEnabled } from "@/lib/igdb";
 import { isDemoMode } from "@/lib/psn/sync";
 import { formatDate, parseJsonArray, timeAgo } from "@/lib/utils";
-import { setNowPlaying } from "@/actions/games";
 import { GameArt, SceneArt } from "@/components/art";
 import { RevealAllButton, SpoilerGroup } from "@/components/client";
 import { TrophyList } from "@/components/TrophyList";
@@ -20,7 +20,7 @@ import { TrophyIcon } from "@/components/TrophyIcon";
 import { YouTube } from "@/components/YouTube";
 import { Avatar, DifficultyMeter, Notice, ProgressBar, SectionTitle, Stat, StatGrid } from "@/components/ui";
 import { loadGame } from "./data";
-import { RateGameForm, UnobtainableForm } from "./forms";
+import { PlayingNowButton, RateGameForm, UnobtainableForm } from "./forms";
 
 type Params = { slug: string };
 
@@ -50,7 +50,8 @@ export default async function GamePage({ params, searchParams }: { params: Promi
   const game = await loadGame(slug);
   const viewer = await getCurrentUser();
   const viewerId = viewer?.id ?? null;
-  const lists = await siblingLists(game);
+  // The same for every visitor, so shared for a while (cleared with the game, see bust("game:<slug>")).
+  const lists = await cached(`game:${slug}:lists`, () => siblingLists(game), { ttlMs: 10 * 60_000 });
   const familyIds = lists.length ? lists.map((l) => l.id) : [game.id];
 
   const family = game.titleKey ? { game: { titleKey: game.titleKey } } : { gameId: game.id };
@@ -61,7 +62,7 @@ export default async function GamePage({ params, searchParams }: { params: Promi
     viewerId
       ? prisma.userTrophy.findMany({ where: { userId: viewerId, trophy: { gameId: game.id } }, select: { trophyId: true, earnedAt: true } })
       : [],
-    recentPlayers(game.id, 8),
+    cached(`game:${slug}:players`, () => recentPlayers(game.id, 8), { ttlMs: 2 * 60_000 }),
     prisma.session.findMany({
       where: { gameId: game.id, startsAt: { gte: new Date() } },
       orderBy: { startsAt: "asc" },
@@ -76,7 +77,7 @@ export default async function GamePage({ params, searchParams }: { params: Promi
       where: { nowPlayingGameId: { in: familyIds }, nowPlayingUntil: { gt: new Date() }, profileVisibility: "PUBLIC" },
       orderBy: { nowPlayingUntil: "desc" },
       take: 12,
-      select: { id: true, username: true, avatarHue: true, country: true, psn: { select: { onlineId: true, avatarUrl: true } } },
+      select: { id: true, username: true, avatarHue: true, avatar: true, country: true, psn: { select: { onlineId: true, avatarUrl: true } } },
     }),
     prisma.gameRating.count({ where: { gameId: { in: familyIds }, difficulty: { not: null } } }),
   ]);
@@ -154,12 +155,7 @@ export default async function GamePage({ params, searchParams }: { params: Promi
               </div>
             )}
             {viewerId && (
-              <form action={setNowPlaying} className="mt-5">
-                {!iAmPlaying && <input type="hidden" name="gameId" value={game.id} />}
-                <button className={iAmPlaying ? "btn-primary" : "btn-ghost"}>
-                  {iAmPlaying ? "Playing now · stop" : "I'm playing this now"}
-                </button>
-              </form>
+              <PlayingNowButton gameId={game.id} playing={iAmPlaying} />
             )}
           </div>
         </div>
@@ -231,7 +227,7 @@ export default async function GamePage({ params, searchParams }: { params: Promi
                       ["rarity", "Rarest"],
                       ["type", "Grade"],
                     ].map(([k, l]) => (
-                      <Link key={k} href={`/games/${game.slug}?sort=${k}`} scroll={false} className={clsx("chip", sort === k && "chip-active")}>
+                      <Link key={k} href={`/games/${game.slug}?sort=${k}`} scroll={false} className={clsx("chip min-h-6", sort === k && "chip-active")}>
                         {l}
                       </Link>
                     ))}
@@ -332,7 +328,7 @@ export default async function GamePage({ params, searchParams }: { params: Promi
               <ul className="space-y-2.5">
                 {playingNow.map((u) => (
                   <li key={u.id} className="flex items-center gap-2.5 text-sm">
-                    <Avatar name={u.psn?.onlineId ?? u.username} hue={u.avatarHue} url={u.psn?.avatarUrl} size={28} />
+                    <Avatar name={u.psn?.onlineId ?? u.username} hue={u.avatarHue} url={u.psn?.avatarUrl} avatar={u.avatar} size={28} />
                     <Link href={`/u/${u.username}`} className="flex-1 truncate font-semibold hover:underline hover:underline-offset-4">
                       {u.psn?.onlineId ?? u.username} <span className="text-xs">{flag(u.country)}</span>
                     </Link>
@@ -401,7 +397,7 @@ export default async function GamePage({ params, searchParams }: { params: Promi
             <ul className="space-y-2.5">
               {players.map((p) => (
                 <li key={p.key} className="flex items-center gap-2.5 text-sm">
-                  <Avatar name={p.name} hue={p.avatarHue} url={p.avatarUrl} size={28} />
+                  <Avatar name={p.name} hue={p.avatarHue} url={p.avatarUrl} avatar={p.avatar} size={28} />
                   <Link href={p.href} className="min-w-0 flex-1 truncate font-semibold hover:underline hover:underline-offset-4">
                     {p.name} <span className="text-xs">{flag(p.country)}</span>
                   </Link>

@@ -1,21 +1,11 @@
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/db";
-import { isAdmin } from "@/lib/forum";
-import { unreadConversations } from "@/lib/community";
 import { SITE } from "@/lib/site";
-import { Avatar } from "./ui";
 import { NavLinks } from "./NavLinks";
 import { SearchIcon } from "./icons";
-import { UserMenu } from "./UserMenu";
-import { SyncMyTrophies } from "./SyncMyTrophies";
+import { NavAccount } from "./session";
 
-export async function Nav() {
-  const user = await getCurrentUser();
-  const [pending, unread] = user
-    ? await Promise.all([prisma.friendship.count({ where: { addresseeId: user.id, status: "PENDING" } }), unreadConversations(user.id)])
-    : [0, 0];
-
+/** Static: the account end comes from /api/me (NavAccount), so pages can be cached. */
+export function Nav() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-bg/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6">
@@ -36,22 +26,7 @@ export async function Nav() {
           <Link href="/search" className="btn-ghost px-2.5 md:hidden" aria-label="Search">
             <SearchIcon size={18} />
           </Link>
-          {user?.psn?.verified && <SyncMyTrophies />}
-          {user ? (
-            <UserMenu
-              avatar={<Avatar name={user.username} hue={user.avatarHue} url={user.psn?.avatarUrl} size={30} className="rounded-md" />}
-              name={user.psn?.onlineId ?? user.username}
-              username={user.username}
-              pending={pending}
-              unread={unread}
-              admin={isAdmin(user)}
-            />
-          ) : (
-            <>
-              <Link href="/login" className="btn-ghost">Log in</Link>
-              <Link href="/register" className="btn-primary hidden sm:inline-flex">Sign up</Link>
-            </>
-          )}
+          <NavAccount />
         </div>
       </div>
     </header>

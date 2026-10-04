@@ -34,6 +34,11 @@ model User {
   bannerGameId       String?
   // Accent colour for the member's own profile page: "" (site red) or a preset key (see src/lib/profile-themes.ts).
   profileAccent      String   @default("")
+  // Pre-built profile card theme ("" for none), see PROFILE_CARDS in src/lib/profile-themes.ts.
+  profileCard        String   @default("")
+  // Profile picture: null for the default (PSN avatar, else an initial), "preset:<key>" for a built-in picture,
+  // "letter" for the initial, or the https icon of one of the member's games. No uploads.
+  avatar             String?
   youtubeUrl         String?
   twitchUrl          String?
   streamUrl          String?
@@ -163,11 +168,19 @@ model PsnPlayer {
   // When we last fetched their recent games, and when we last read their public friends list (discovery).
   titlesRefreshedAt DateTime?
   friendsCheckedAt  DateTime?
+  // From the player's full PSN games list (see refreshPlayer): games played and their average completion.
+  gamesPlayed       Int?
+  avgCompletion     Int?
+  // Ultra rare trophies earned, summed over the lists counted so far, and how many lists are still to count.
+  ultraRare         Int?
+  ultraRarePending  Int?
 
   titles    PsnPlayerTitle[]
   snapshots PsnPlayerSnapshot[]
 
   @@index([points])
+  @@index([ultraRare])
+  @@index([avgCompletion])
   @@index([country, points])
   @@index([onlineId])
   @@index([titlesRefreshedAt])
@@ -183,6 +196,9 @@ model PsnPlayerTitle {
   hasPlatinum       Boolean   @default(false)
   platinumAt        DateTime? // exact, from the trophy list, once we've looked it up
   lastUpdated       DateTime
+  // Ultra rare trophies the player has in this list, counted when rareCheckedAt is newer than lastUpdated.
+  ultraRare         Int?
+  rareCheckedAt     DateTime?
 
   player PsnPlayer @relation(fields: [accountId], references: [accountId], onDelete: Cascade)
   game   Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)

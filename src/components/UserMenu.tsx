@@ -21,6 +21,7 @@ export function UserMenu({
   pending,
   unread,
   admin,
+  onLogout,
 }: {
   avatar: React.ReactNode;
   name: string;
@@ -30,6 +31,8 @@ export function UserMenu({
   /** Conversations with unread messages. */
   unread: number;
   admin: boolean;
+  /** Called after signing out, so the navbar updates without a full reload. */
+  onLogout?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -103,7 +106,13 @@ export function UserMenu({
               {extra}
             </Link>
           ))}
-          <form action={logout} className="mt-1 border-t border-line pt-1">
+          <form
+            action={async () => {
+              await logout();
+              onLogout?.();
+            }}
+            className="mt-1 border-t border-line pt-1"
+          >
             <button className="w-full px-4 py-2.5 text-left text-sm text-muted hover:bg-surface-2 hover:text-text">
               Log out
             </button>

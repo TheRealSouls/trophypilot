@@ -138,7 +138,7 @@ export default async function TrophyPage({ params }: { params: Promise<Params> }
           <ul className="space-y-2.5">
             {recent.map((e) => (
               <li key={e.id} className="flex items-center gap-2.5 text-sm">
-                <Avatar name={e.user.psn?.onlineId ?? e.user.username} hue={e.user.avatarHue} url={e.user.psn?.avatarUrl} size={28} />
+                <Avatar name={e.user.psn?.onlineId ?? e.user.username} hue={e.user.avatarHue} url={e.user.psn?.avatarUrl} avatar={e.user.avatar} size={28} />
                 <Link href={`/u/${e.user.username}`} className="flex-1 truncate font-semibold hover:text-accent-text">
                   {e.user.psn?.onlineId ?? e.user.username} <span className="text-xs">{flag(e.user.country)}</span>
                 </Link>

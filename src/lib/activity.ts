@@ -117,8 +117,8 @@ export async function siteTotals() {
       _sum: { platinum: true, gold: true, silver: true, bronze: true },
     }),
     prisma.user.findMany({ select: { id: true, psn: { select: { accountId: true } } } }),
-    // One game per title: its PS4, PS5 and regional lists count once.
-    prisma.game.findMany({ distinct: ["titleKey"], select: { id: true } }).then((g) => g.length),
+    // One game per title: its PS4, PS5 and regional lists count once. Counted in the database, not by loading every game.
+    prisma.$queryRaw<{ n: number }[]>`SELECT CAST(COUNT(DISTINCT "titleKey") AS INTEGER) AS n FROM "Game"`.then((r) => Number(r[0]?.n ?? 0)),
   ]);
   // Members without a PSN summary (not linked, not synced yet, or demo mode) count from their synced trophies.
   const summarised = new Set(
@@ -159,6 +159,17 @@ export async function gamesNeedingGuides(limit = 5) {
 
 const gameCard = { id: true, slug: true, title: true, titleKey: true, platforms: true, iconUrl: true, coverHue: true } as const;
 
+/** Keeps the first list of each game (its PS4, PS5 and regional lists share a titleKey). */
+function onePerGame<T extends { id: string; titleKey: string }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  return rows.filter((g) => {
+    const k = g.titleKey || g.id;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 /**
  * The newest trophy lists we know of. PSN hands out list ids (NPWR12345_00)
  * in order, so the highest ids are the lists most recently created, often
@@ -166,15 +177,12 @@ const gameCard = { id: true, slug: true, title: true, titleKey: true, platforms:
  * list itself has been loaded.
  */
 export async function newTrophyLists(take: number) {
-  let games = await prisma.game.findMany({
-    where: { npCommunicationId: { startsWith: "NPWR" } },
-    orderBy: { npCommunicationId: "desc" },
-    distinct: ["titleKey"],
-    take,
-    select: gameCard,
-  });
+  // A few extra rows, then one per game here. (Prisma's distinct loads every matching list to do it.)
+  let games = onePerGame(
+    await prisma.game.findMany({ where: { npCommunicationId: { startsWith: "NPWR" } }, orderBy: { npCommunicationId: "desc" }, take: take * 4, select: gameCard }),
+  ).slice(0, take);
   // The demo catalogue has no PSN ids: newest rows instead.
-  if (!games.length) games = await prisma.game.findMany({ orderBy: { createdAt: "desc" }, distinct: ["titleKey"], take, select: gameCard });
+  if (!games.length) games = onePerGame(await prisma.game.findMany({ orderBy: { createdAt: "desc" }, take: take * 4, select: gameCard })).slice(0, take);
 
   const rows = await prisma.trophy.groupBy({ by: ["gameId", "type"], where: { gameId: { in: games.map((g) => g.id) } }, _count: { _all: true } });
   return games.map((g) => {
@@ -254,7 +262,7 @@ export async function recentPlayers(gameId: string, take: number) {
         progress: true,
         hasPlatinum: true,
         lastEarned: true,
-        user: { select: { username: true, country: true, avatarHue: true, psn: { select: { onlineId: true, avatarUrl: true, accountId: true } } } },
+        user: { select: { username: true, country: true, avatarHue: true, avatar: true, psn: { select: { onlineId: true, avatarUrl: true, accountId: true } } } },
       },
     }),
     prisma.psnPlayerTitle.findMany({
@@ -272,6 +280,7 @@ export async function recentPlayers(gameId: string, take: number) {
       href: `/u/${m.user.username}`,
       avatarUrl: m.user.psn?.avatarUrl ?? null,
       avatarHue: m.user.avatarHue,
+      avatar: m.user.avatar as string | null,
       country: m.user.country,
       progress: m.progress,
       hasPlatinum: m.hasPlatinum,
@@ -285,6 +294,7 @@ export async function recentPlayers(gameId: string, take: number) {
         href: `/psn/${encodeURIComponent(t.player.onlineId)}`,
         avatarUrl: t.player.avatarUrl,
         avatarHue: 0,
+        avatar: null as string | null,
         country: t.player.country,
         progress: t.progress,
         hasPlatinum: t.hasPlatinum,

@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { bust, cached } from "@/lib/cache";
 import { ensureGameTrophies } from "@/lib/psn/catalogue";
 import { getProvider, isDemoMode } from "@/lib/psn/sync";
 
@@ -19,12 +20,16 @@ const query = (slug: string) =>
  * fetches the list from PSN; `trophyError` is set if that fails.
  */
 export const loadGame = cache(async (slug: string) => {
-  let game = await query(slug);
+  // Shared by everyone viewing the game for a minute (bust("game:<slug>") after changing it).
+  let game = await cached(`game:${slug}`, () => query(slug), { ttlMs: 60_000, tags: ["games"] });
   if (!game) notFound();
   let trophyError: string | null = null;
   if (game.trophies.length === 0 && game.npCommunicationId && !isDemoMode()) {
     try {
-      if (await ensureGameTrophies(getProvider(), game)) game = (await query(slug))!;
+      if (await ensureGameTrophies(getProvider(), game)) {
+        bust(`game:${slug}`);
+        game = (await query(slug))!;
+      }
     } catch (err) {
       console.error(`[catalogue] trophy list for ${slug} failed`, err);
       trophyError = "We couldn't load this trophy list from PlayStation Network. Refresh to try again.";

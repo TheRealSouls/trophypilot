@@ -51,7 +51,7 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
             id: true,
             username: true,
             country: true,
-            avatarHue: true,
+            avatarHue: true, avatar: true,
             role: true,
             psn: { select: { onlineId: true, avatarUrl: true, trophyLevel: true } },
           },
@@ -135,7 +135,7 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
           return (
             <li key={p.id} id={`post-${p.id}`} className="card scroll-mt-24 target:border-accent-text sm:grid sm:grid-cols-[160px_1fr]">
               <aside className="flex items-center gap-3 border-b border-line bg-surface-2 p-3 sm:flex-col sm:items-start sm:border-b-0 sm:border-r">
-                <Avatar name={name} hue={p.author?.avatarHue ?? 0} url={p.author?.psn?.avatarUrl} size={40} />
+                <Avatar name={name} hue={p.author?.avatarHue ?? 0} url={p.author?.psn?.avatarUrl} avatar={p.author?.avatar} size={40} />
                 <div className="min-w-0 text-sm">
                   {p.author ? (
                     <Link href={`/forums/user/${p.author.username}`} className="block truncate font-semibold hover:underline hover:underline-offset-4">

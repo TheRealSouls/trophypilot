@@ -98,7 +98,7 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{guide.title}</h1>
           <p className="mt-3 max-w-2xl text-text/90">{guide.summary}</p>
           <div className="mt-4 flex items-center gap-2 text-sm text-muted">
-            <Avatar name={guide.author.username} hue={guide.author.avatarHue} url={guide.author.psn?.avatarUrl} size={24} />
+            <Avatar name={guide.author.username} hue={guide.author.avatarHue} url={guide.author.psn?.avatarUrl} avatar={guide.author.avatar} size={24} />
             <Link href={`/u/${guide.author.username}`} className="font-semibold text-text hover:text-accent-text">
               {guide.author.psn?.onlineId ?? guide.author.username}
             </Link>

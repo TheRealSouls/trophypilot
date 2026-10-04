@@ -84,7 +84,7 @@ export default async function FriendsPage() {
                       <td className="px-4 py-3 font-bold text-muted">{i + 1}</td>
                       <td className="px-4 py-3">
                         <Link href={`/u/${r.u.username}`} className="flex items-center gap-2.5 font-semibold hover:text-accent-text">
-                          <Avatar name={r.u.psn?.onlineId ?? r.u.username} hue={r.u.avatarHue} url={r.u.psn?.avatarUrl} size={30} />
+                          <Avatar name={r.u.psn?.onlineId ?? r.u.username} hue={r.u.avatarHue} url={r.u.psn?.avatarUrl} avatar={r.u.avatar} size={30} />
                           {r.u.psn?.onlineId ?? r.u.username} <span className="text-xs">{flag(r.u.country)}</span>
                           {r.u.id === me.id && <span className="chip">You</span>}
                         </Link>
@@ -132,7 +132,7 @@ export default async function FriendsPage() {
             <ul className="space-y-3">
               {incoming.map((r) => (
                 <li key={r.id} className="flex items-center gap-3">
-                  <Avatar name={r.requester.username} hue={r.requester.avatarHue} size={34} />
+                  <Avatar name={r.requester.username} hue={r.requester.avatarHue} avatar={r.requester.avatar} size={34} />
                   <Link href={`/u/${r.requester.username}`} className="min-w-0 flex-1 truncate text-sm font-semibold hover:text-accent-text">
                     {r.requester.psn?.onlineId ?? r.requester.username}
                   </Link>

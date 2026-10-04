@@ -3,6 +3,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { cached } from "@/lib/cache";
 import {
   COMPLETION_MIN_GAMES,
   getLeaderboard,
@@ -38,11 +39,11 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
   if (metric === "completion" && period !== "all") metric = "points";
 
   // Every country we have players in, plus the standard list.
-  const tracked = await prisma.psnPlayer.groupBy({
-    by: ["country"],
-    where: { hidden: false, trophiesPrivate: false, country: { not: null } },
-    _count: true,
-  });
+  const tracked = await cached(
+    "boards:countries",
+    () => prisma.psnPlayer.groupBy({ by: ["country"], where: { hidden: false, trophiesPrivate: false, country: { not: null } }, _count: true }),
+    { ttlMs: 10 * 60_000, tags: ["boards"] },
+  );
   const playersIn = new Map(tracked.map((t) => [t.country!, t._count]));
   const countryCodes = [...new Set([...Object.keys(COUNTRIES), ...playersIn.keys()])].sort((a, b) =>
     countryName(a).localeCompare(countryName(b)),
@@ -52,7 +53,11 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
 
   const [rows, trackedCount, myRanks] = await Promise.all([
     getLeaderboard({ metric, period, scope, country, viewerId: user?.id }),
-    prisma.psnPlayer.count({ where: { hidden: false, trophiesPrivate: false, ...(scope === "country" ? { country } : {}) } }),
+    cached(
+      `boards:tracked:${scope === "country" ? country : ""}`,
+      () => prisma.psnPlayer.count({ where: { hidden: false, trophiesPrivate: false, ...(scope === "country" ? { country } : {}) } }),
+      { ttlMs: 10 * 60_000, tags: ["boards"] },
+    ),
     user ? viewerRanks(user) : null,
   ]);
   const psnTotals = usesPsnTotals({ metric, period, scope });
@@ -68,8 +73,12 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
       : metric === "platinums"
         ? formatNumber(r.platinums)
         : metric === "rare"
-          ? (r.rare ?? "n/a")
-          : `${r.completion}%`;
+          ? r.rare != null
+            ? `${formatNumber(r.rare)}${r.rarePartial ? "+" : ""}`
+            : "–"
+          : r.completion != null
+            ? `${r.completion}%`
+            : "–";
 
   return (
     <div>
@@ -205,7 +214,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
                   <span className={clsx("absolute left-3 top-2 text-lg font-bold", r.rank === 1 ? "text-gold" : "text-muted")}>
                     {r.rank}
                   </span>
-                  <Avatar name={r.name} hue={r.avatarHue} url={r.avatarUrl} size={r.rank === 1 ? 72 : 60} />
+                  <Avatar name={r.name} hue={r.avatarHue} url={r.avatarUrl} avatar={r.avatar} size={r.rank === 1 ? 72 : 60} />
                   <Link href={r.href} className="mt-3 break-all font-bold hover:underline hover:underline-offset-4">
                     {r.name} <span className="text-sm">{flag(r.country)}</span>
                   </Link>
@@ -239,7 +248,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
                         href={r.href}
                         className="flex items-center gap-2.5 font-semibold hover:underline hover:underline-offset-4"
                       >
-                        <Avatar name={r.name} hue={r.avatarHue} url={r.avatarUrl} size={28} />
+                        <Avatar name={r.name} hue={r.avatarHue} url={r.avatarUrl} avatar={r.avatar} size={28} />
                         {r.name}
                         <span title={countryName(r.country)}>{flag(r.country)}</span>
                         {r.userId && r.userId === user?.id && <span className="chip">You</span>}
@@ -258,11 +267,19 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
                         {formatNumber(r.platinums)}
                       </span>
                     </Td>
-                    <Td active={metric === "rare"}>{r.rare ?? <span className="text-faint">n/a</span>}</Td>
+                    <Td active={metric === "rare"}>
+                      <RareCount rare={r.rare} partial={r.rarePartial} allTime={period === "all"} />
+                    </Td>
                     <Td>{formatNumber(r.trophies)}</Td>
                     {period === "all" && (
                       <Td active={metric === "completion"}>
-                        {r.completion != null ? `${r.completion}%` : <span className="text-faint">n/a</span>}
+                        {r.completion != null ? (
+                          `${r.completion}%`
+                        ) : (
+                          <span className="text-faint" title="Not counted yet">
+                            –<span className="sr-only">not counted yet</span>
+                          </span>
+                        )}
                       </Td>
                     )}
                   </tr>
@@ -273,13 +290,19 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
           {metric === "completion" && (
             <p className="mt-3 text-xs text-faint">Completion rankings require at least {COMPLETION_MIN_GAMES} games.</p>
           )}
+          {rows.some((r) => r.rarePartial) && (
+            <p className="mt-3 text-xs text-faint">
+              A + after the ultra rares means we&apos;re still counting that player&apos;s lists. Each refresh counts more, until
+              every list is done.
+            </p>
+          )}
         </>
       )}
       <div className="mt-4 space-y-1 text-xs text-faint">
         {psnTotals ? (
           <p>
             {period === "all"
-              ? "Points and platinum boards use each player's real lifetime totals from PlayStation Network, including players who haven't joined."
+              ? "All-time boards use each player's real lifetime totals from PlayStation Network, including players who haven't joined. Average completion comes from their full PSN games list, and ultra rares are counted list by list as we refresh them."
               : `This board ranks what each player gained since the ${period === "weekly" ? "week" : "month"} started, measured between our regular refreshes of their PSN totals, so it includes players who haven't joined.`}{" "}
             The site ranks {formatNumber(trackedCount)} players it has seen so far: anyone whose profile was looked up, linked or
             tracked. Countries come from the player&apos;s PSN account region.
@@ -297,6 +320,23 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
         </p>
       </div>
     </div>
+  );
+}
+
+/** Ultra rare count; "+" while a tracked player's lists are still being counted. */
+function RareCount({ rare, partial, allTime }: { rare: number | null; partial: boolean; allTime: boolean }) {
+  if (rare == null)
+    return (
+      <span className="text-faint" title={allTime ? "Not counted yet" : "Counted all time only for players who haven't joined"}>
+        –<span className="sr-only">{allTime ? "not counted yet" : "not counted for this period"}</span>
+      </span>
+    );
+  return partial ? (
+    <span title="Still counting this player's lists">
+      {formatNumber(rare)}+<span className="sr-only"> so far, still counting</span>
+    </span>
+  ) : (
+    <>{formatNumber(rare)}</>
   );
 }
 

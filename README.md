@@ -138,7 +138,11 @@ npm run psn:discover -- --max 200               # add players from the public fr
 ```
 
 Then keep them fresh with the players cron: `GET /api/cron/players` with `Authorization: Bearer $CRON_SECRET`, for
-example every 10 minutes. Each call refreshes the `PSN_REFRESH_PER_RUN` stalest players (default 10) and, if
+example every 10 minutes. Each refresh reads the player's full games list (games played and average completion for the
+leaderboards) and counts ultra rares in up to 40 more of their lists: lists they haven't started and finished lists we
+already hold are counted for free, the rest cost one PSN request each, so a big library fills in over a few days (the board
+shows "123+" until it's done). `npm run psn:player-stats -- 50 300` catches the top 50 players up in one go. Each call
+refreshes the `PSN_REFRESH_PER_RUN` stalest players (default 10) and, if
 `PSN_DISCOVERY=on`, discovers up to `PSN_DISCOVER_PER_RUN` new ones (default 20). Discovery is off by default: it collects
 public profiles of people who never visited the site, so decide whether you want that and keep the privacy policy in step.
 
@@ -172,7 +176,9 @@ same contrast rules as the light ones.
   them in Settings (anyone, friends and people they follow, or nobody). Only a conversation's members can open it.
 - **Reputation**: counted live from what a member contributes (threads, replies, guides, tips and their upvotes, updates,
   sessions hosted), with ranks from Newcomer to Legend and badges. Shown next to forum posts and on `/forums/user/<name>`.
-- **Profiles**: Trophy Vault (five chosen trophies), a banner from one of the member's games, an accent colour
+- **Profiles**: Trophy Vault (five chosen trophies), a profile card theme (Ember, Circuit, Ocean, Forest, Frost,
+  Platinum, Arcade: `PROFILE_CARDS` and `src/components/ProfileCardArt.tsx`), a picture (PSN avatar, ten built-in ones in
+  `src/components/avatars.tsx`, or a game icon), a banner from one of the member's games, an accent colour
   (`src/lib/profile-themes.ts`), YouTube/Twitch/other stream links, "Playing now" (set on a game page, clears after 3
   hours), a trophy log of the last 50 trophies with exact times, saved guides, and filters for platform, completion and
   order on the games list.
@@ -294,14 +300,24 @@ Render hosts the website, Neon holds the data. Both have free plans that don't n
 4. When Render asks for values: `DATABASE_URL` is the Neon string, `PSN_NPSSO` is your token, and
    `NEXT_PUBLIC_SITE_URL` is `https://huntresser.onrender.com` (or the address Render shows), or `https://trophypilot.com` once your domain points at Render.
 5. Click **Apply** and wait for **Live**. `/api/health` should show `"mode":"live"`.
-6. **Keep data fresh (optional).** At cron-job.org, add two jobs every 10 minutes, each with the header
+6. **Keep it awake.** At cron-job.org (free), add a job for `https://<your-site>/api/ping` every 10 minutes. Render's
+   free plan puts the site to sleep after 15 minutes without visitors and waking it takes about 40 seconds; the ping stops
+   that. It doesn't touch the database, so Neon still sleeps when nobody's around. One always-on free service fits inside
+   Render's 750 free hours a month.
+7. **Keep data fresh (optional).** Add two more jobs every 10 minutes, each with the header
    `Authorization: Bearer <CRON_SECRET>` (copy it from Render, **Environment**):
-   `https://<your-site>/api/cron/sync` and `https://<your-site>/api/cron/players`. They also wake the site so it
-   isn't asleep when people visit. With IGDB keys set, add `https://<your-site>/api/cron/games` every 30 minutes too.
-7. In Formspree, add the Render address to the form's allowed domains.
+   `https://<your-site>/api/cron/sync` and `https://<your-site>/api/cron/players`. With IGDB keys set, add
+   `https://<your-site>/api/cron/games` every 30 minutes too.
+8. In Formspree, add the Render address to the form's allowed domains.
 
-Free Render sites sleep after 15 minutes without visitors; the first request afterwards takes up to a minute. The data is
-in Neon, so nothing is lost while it sleeps.
+Without the ping, free Render sites sleep after 15 minutes without visitors and the first request afterwards takes up to
+a minute. The data is in Neon, so nothing is lost while it sleeps.
+
+**Speed.** The free plan has a tenth of a CPU, so the site avoids repeating work: the home page is built once a minute and
+served to everyone; shared data (leaderboards, the games list, a game's details) is cached in memory for a minute or two
+and refreshed in the background (`src/lib/cache.ts`); and pages don't read the login cookie, so the navbar fills in from
+`/api/me` after the page arrives (`src/components/session.tsx`). Light or dark is applied in the browser before the
+page paints.
 
 **Local development** can use the same Neon database, but then everything you do locally happens on the live site, and
 `npm run db:reset` would wipe it. Safer: in Neon, **Branches**, **Create branch** (call it `dev`), and put the `dev`

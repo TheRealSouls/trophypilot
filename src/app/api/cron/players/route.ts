@@ -11,8 +11,11 @@ import { keepListsFresh } from "@/lib/psn/catalogue";
  * home page. With PSN_DISCOVERY=on it also adds new players found through the
  * public friends lists of the best-ranked ones.
  *
- * Call with `Authorization: Bearer $CRON_SECRET`, e.g. every 10 minutes.
- * Each run costs roughly 3 PSN requests per refreshed player and 2 per
+ * Call with `Authorization: Bearer $CRON_SECRET`, e.g. every 10 minutes. Each refresh
+ * also reads the full games list (games played, average completion) and counts
+ * ultra rares in up to 40 more lists (see countUltraRares).
+ * Each run costs up to about 50 PSN requests per refreshed player (2 to 3
+ * for the profile and games list, up to 5 platinum dates, up to 40 lists) and 2 per
  * discovered one. It also loads the trophy lists of the newest games and
  * lists that gained DLC (PSN_NEW_LISTS_PER_RUN, PSN_GROWN_LISTS_PER_RUN).
  */

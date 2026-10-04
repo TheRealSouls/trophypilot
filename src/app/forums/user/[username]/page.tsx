@@ -17,7 +17,7 @@ export default async function ForumUserPage({ params }: { params: Promise<Params
   const { username } = await params;
   const user = await prisma.user.findUnique({
     where: { username: username.toLowerCase() },
-    select: { id: true, username: true, avatarHue: true, role: true, psn: { select: { onlineId: true, avatarUrl: true } } },
+    select: { id: true, username: true, avatarHue: true, avatar: true, role: true, psn: { select: { onlineId: true, avatarUrl: true } } },
   });
   if (!user) notFound();
   const name = user.psn?.onlineId ?? user.username;
@@ -45,7 +45,7 @@ export default async function ForumUserPage({ params }: { params: Promise<Params
         <span className="mx-1">/</span> Members
       </nav>
       <div className="mb-6 flex flex-wrap items-center gap-4">
-        <Avatar name={name} hue={user.avatarHue} url={user.psn?.avatarUrl} size={64} />
+        <Avatar name={name} hue={user.avatarHue} url={user.psn?.avatarUrl} avatar={user.avatar} size={64} />
         <div className="min-w-0 flex-1">
           <PageHeader title={name}>
             {rep.rank}

@@ -152,7 +152,7 @@ export default async function SessionPage({ params }: { params: Promise<Params> 
                   const canDelete = viewer && (c.authorId === viewer.id || isHost || viewer.role === "ADMIN");
                   return (
                     <li key={c.id} className="card flex gap-3 p-4">
-                      <Avatar name={name} hue={c.author.avatarHue} url={c.author.psn?.avatarUrl} size={36} />
+                      <Avatar name={name} hue={c.author.avatarHue} url={c.author.psn?.avatarUrl} avatar={c.author.avatar} size={36} />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2 text-sm">
                           <Link href={`/u/${c.author.username}`} className="font-semibold hover:underline hover:underline-offset-4">{name}</Link>
@@ -190,7 +190,7 @@ export default async function SessionPage({ params }: { params: Promise<Params> 
                 const name = m.user.psn?.onlineId ?? m.user.username;
                 return (
                   <li key={m.userId} className="flex items-center gap-3 text-sm">
-                    <Avatar name={name} hue={m.user.avatarHue} url={m.user.psn?.avatarUrl} size={36} />
+                    <Avatar name={name} hue={m.user.avatarHue} url={m.user.psn?.avatarUrl} avatar={m.user.avatar} size={36} />
                     <div className="min-w-0 flex-1">
                       <Link href={`/u/${m.user.username}`} className="block truncate font-semibold hover:underline hover:underline-offset-4">
                         {name} <span className="text-xs">{flag(m.user.country)}</span>

@@ -4,7 +4,9 @@ import { toggleFollow } from "@/actions/social";
 import { prisma } from "@/lib/db";
 import { reputationOf } from "@/lib/community";
 import { COUNTRIES, flag } from "@/lib/countries";
-import { bannerImage } from "@/lib/profile-themes";
+import clsx from "clsx";
+import { PROFILE_CARDS, bannerImage, cardClass } from "@/lib/profile-themes";
+import { ProfileCardArt } from "@/components/ProfileCardArt";
 import type { FriendState } from "@/lib/social";
 import type { UserStats } from "@/lib/stats";
 import { formatDate, formatNumber, timeAgo } from "@/lib/utils";
@@ -44,7 +46,10 @@ export async function ProfileHeader({
   ]);
 
   const banner = bannerImage(owner.bannerGame);
-  const hasBanner = !!owner.bannerGame;
+  const card = owner.profileCard && owner.profileCard in PROFILE_CARDS ? owner.profileCard : "";
+  // A game banner wins; otherwise a card brings its own art.
+  const hasBanner = !!owner.bannerGame || !!card;
+  const isOwner = relation === "SELF";
   const playing = owner.nowPlayingGame && owner.nowPlayingUntil && owner.nowPlayingUntil > new Date() ? owner.nowPlayingGame : null;
   const links = [
     ["YouTube", owner.youtubeUrl],
@@ -53,27 +58,61 @@ export async function ProfileHeader({
   ].filter((l): l is [string, string] => !!l[1]);
 
   return (
-    <section className="card mb-8 overflow-hidden">
+    <section className={clsx("card relative mb-8 overflow-hidden", cardClass(card))}>
       {hasBanner && (
         <div className="relative h-32 overflow-hidden bg-surface-3 sm:h-44">
-          {banner ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={banner} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+          {owner.bannerGame ? (
+            banner ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={banner} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+            ) : (
+              // Demo games have generated art instead of real screenshots.
+              <SceneArt seed={`${owner.bannerGame.slug}-banner`} hue={owner.bannerGame.coverHue} className="h-full w-full rounded-none border-0" />
+            )
           ) : (
-            // Demo games have generated art instead of real screenshots.
-            <SceneArt seed={`${owner.bannerGame!.slug}-banner`} hue={owner.bannerGame!.coverHue} className="h-full w-full rounded-none border-0" />
+            <ProfileCardArt card={card} part="banner" />
           )}
-          <span className="absolute bottom-2 right-3 rounded-md bg-black/60 px-2 py-0.5 text-[11px] text-white">{owner.bannerGame?.title}</span>
+          {owner.bannerGame && (
+            <span className="absolute bottom-2 right-3 rounded-md bg-black/60 px-2 py-0.5 text-[11px] text-white">{owner.bannerGame.title}</span>
+          )}
+          {isOwner && (
+            <Link href="/settings#look" className="absolute right-3 top-3 rounded-md bg-black/65 px-2.5 py-1 text-xs font-semibold text-white hover:bg-black/80">
+              Change banner and card
+            </Link>
+          )}
         </div>
       )}
-      <div className="flex flex-wrap items-start gap-5 p-5 sm:p-6">
-        <Avatar
-          name={display}
-          hue={owner.avatarHue}
-          url={owner.psn?.avatarUrl}
-          size={96}
-          className={hasBanner ? "relative -mt-14 border-4 border-surface sm:-mt-16" : "border border-line"}
-        />
+      {isOwner && !hasBanner && (
+        <Link
+          href="/settings#look"
+          className="flex h-14 items-center justify-center gap-2 border-b border-dashed border-line-strong bg-surface-2 text-sm font-semibold text-muted hover:text-text"
+        >
+          Add a banner or a profile card theme
+        </Link>
+      )}
+      <ProfileCardArt card={card} part="body" />
+      <div className="relative flex flex-wrap items-start gap-5 p-5 sm:p-6">
+        <div className={clsx("relative shrink-0", hasBanner && "-mt-14 sm:-mt-16")}>
+          <Avatar
+            name={display}
+            hue={owner.avatarHue}
+            url={owner.psn?.avatarUrl}
+            avatar={owner.avatar}
+            size={96}
+            className={hasBanner ? "border-4 border-surface" : "border border-line"}
+          />
+          {isOwner && (
+            <Link
+              href="/settings#look"
+              aria-label="Change profile picture"
+              className="absolute -bottom-1.5 -right-1.5 flex h-8 w-8 items-center justify-center rounded-full border-2 border-surface bg-accent text-white hover:bg-accent-hi"
+            >
+              <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden>
+                <path d="M13.5 3.5l3 3L7 16H4v-3z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+              </svg>
+            </Link>
+          )}
+        </div>
         <div className="min-w-0 flex-1">
           <h1 className="flex flex-wrap items-center gap-2 break-all text-2xl font-bold tracking-tight sm:text-3xl">
             {display}
@@ -114,8 +153,11 @@ export async function ProfileHeader({
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          {relation === "SELF" && (
-            <Link href="/settings" className="btn-ghost">Edit profile</Link>
+          {isOwner && (
+            <>
+              <Link href="/settings#look" className="btn-ghost">Customise look</Link>
+              <Link href="/settings" className="btn-ghost">Edit profile</Link>
+            </>
           )}
           {relation !== "SELF" && viewerId && (
             <form action={toggleFollow}>
@@ -159,7 +201,7 @@ export async function ProfileHeader({
 
       {stats && (
         <>
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-line px-5 py-3 sm:px-6">
+          <div className="relative flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-line px-5 py-3 sm:px-6">
             <div className="flex items-center gap-3">
               <span className="text-[11px] uppercase tracking-wider text-muted">Level</span>
               <span className="text-2xl font-bold tabular-nums">{level}</span>
@@ -167,7 +209,7 @@ export async function ProfileHeader({
             </div>
             <TrophyCounts {...stats} size={18} className="flex-wrap" />
           </div>
-          <StatGrid className="-mx-px -mb-px grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatGrid className="relative -mx-px -mb-px grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
             <Stat label="Trophies" value={formatNumber(stats.total)} />
             <Stat label="Games" value={stats.games} />
             <Stat label="Platinums" value={stats.platinum} />
