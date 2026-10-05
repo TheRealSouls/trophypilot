@@ -54,19 +54,6 @@ export default async function ContactPage({ searchParams }: { searchParams: Prom
             </li>
           </ul>
         </section>
-        {/* Only once a real address is configured; the default is a placeholder. */}
-        {process.env.SITE_CONTACT_EMAIL && (
-          <section>
-            <h2 className="mb-2 text-xs font-bold uppercase tracking-wider">Email</h2>
-            <p className="text-muted">
-              Prefer email? Write to{" "}
-              <a href={`mailto:${SITE.contactEmail}`} className="link">
-                {SITE.contactEmail}
-              </a>
-              .
-            </p>
-          </section>
-        )}
       </aside>
     </div>
   );

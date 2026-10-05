@@ -45,8 +45,7 @@ export default function AccessibilityPage() {
         <h2>Tell us about a problem</h2>
         <p>
           If something on {SITE.name} is hard or impossible for you to use, please{" "}
-          <Link href="/contact?topic=accessibility">let us know through the contact form</Link> or email{" "}
-          <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>. Tell us the page and what happened, and we&apos;ll fix it or
+          <Link href="/contact?topic=accessibility">let us know through the contact form</Link>. Tell us the page and what happened, and we&apos;ll fix it or
           find another way to get you what you need.
         </p>
       </article>

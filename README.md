@@ -274,7 +274,7 @@ list count, and every game page has a switcher between its lists. After changing
 | Search (games, PSN players, members, trophies, guides, sessions) | `/search` |
 | Co-op and boosting sessions | `/sessions` |
 | Forums with sections, sub-sections and game threads | `/forums`, `/forums/manage` (admins) |
-| Terms and privacy policy | `/terms`, `/privacy` (operator details come from `SITE_*` env vars) |
+| Terms and privacy policy | `/terms`, `/privacy` (the operator name comes from `SITE_OPERATOR_NAME`) |
 | Contact form (Formspree) | `/contact`, `?topic=removal` or `?topic=privacy` preselects a topic |
 
 ## Database
@@ -349,7 +349,7 @@ UI changes: load the page, inject axe from cdnjs in the browser console, and cal
 
 ## Production checklist
 
-- Set `SESSION_SECRET`, `CRON_SECRET`, `NEXT_PUBLIC_SITE_URL` and the `SITE_*` operator/contact variables.
+- Set `SESSION_SECRET`, `CRON_SECRET`, `NEXT_PUBLIC_SITE_URL` and `SITE_OPERATOR_NAME`. No email address is shown on the site; people reach you through the contact form.
 - Contact messages go to Formspree form `NEXT_PUBLIC_FORMSPREE_FORM_ID` (default `xljdozjl`). In the Formspree dashboard,
   restrict the form to your production domain and turn on its spam filtering. The form also sends a `_gotcha` honeypot.
 - The contact form shows a Google reCAPTCHA v2 checkbox when `CAPTCHA_SITE_KEY` is set, and sends its token as

@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       <article className="prose-legal">
         <p>
           This policy explains what personal data {SITE.name} collects, why, and what you can do about it. The data controller is{" "}
-          {SITE.operator}. For anything privacy related, email <a href={`mailto:${SITE.privacyEmail}`}>{SITE.privacyEmail}</a>.
+          {SITE.operator}. For anything privacy related, use the <Link href="/contact?topic=privacy">contact form</Link>.
         </p>
         <p>
           We handle personal data under the EU General Data Protection Regulation (GDPR) and {SITE.jurisdiction}&apos;s Data
@@ -79,8 +79,7 @@ export default function PrivacyPage() {
         </p>
         <p>
           If a player&apos;s trophies are private on PSN, we don&apos;t rank them. Anyone can ask us to remove their PSN profile from
-          the site entirely through the <Link href="/contact?topic=removal">contact form</Link> or by emailing{" "}
-          <a href={`mailto:${SITE.privacyEmail}`}>{SITE.privacyEmail}</a>; we then hide it from
+          the site entirely through the <Link href="/contact?topic=removal">contact form</Link>; we then hide it from
           lookups, search and leaderboards. We keep this summary because it lets the leaderboards show the real top players
           (our legitimate interest), and it only contains information PSN already shows publicly.
         </p>
@@ -130,7 +129,7 @@ export default function PrivacyPage() {
           You can access, correct, export or delete your data. Most of this is self-service: edit your profile in{" "}
           <Link href="/settings">Settings</Link>, download everything with &quot;Download my data&quot;, or delete your account there.
           You can also object to processing or ask us to restrict it. Use the <Link href="/contact?topic=privacy">contact form</Link>{" "}
-          or email <a href={`mailto:${SITE.privacyEmail}`}>{SITE.privacyEmail}</a> and we&apos;ll reply within one month.
+          and we&apos;ll reply within one month.
         </p>
         <p>
           If you&apos;re unhappy with how we handle your data, you can complain to the Data Protection Commission in{" "}

@@ -106,8 +106,7 @@ export default function TermsPage() {
 
         <h2>12. Contact</h2>
         <p>
-          Questions about these terms: use the <Link href="/contact">contact form</Link> or email{" "}
-          <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>. How we handle your data is
+          Questions about these terms: use the <Link href="/contact">contact form</Link>. How we handle your data is
           covered in the <Link href="/privacy">privacy policy</Link>.
         </p>
       </article>
