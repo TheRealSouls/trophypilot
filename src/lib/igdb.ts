@@ -360,3 +360,21 @@ export async function enrichPending(limit: number) {
   const remaining = await prisma.game.count({ where: { igdbCheckedAt: null } });
   return { checked: matched + missed, matched, missed, remaining, error, stopped };
 }
+
+/**
+ * The best-known PlayStation games by how many people rated them on IGDB,
+ * with their other names, for preloading popular trophy lists
+ * (scripts/preload-popular.ts). PS4 and PS5 by default.
+ */
+export async function popularPlayStationGames(limit = 500, platforms = [PLATFORM_IDS.PS4, PLATFORM_IDS.PS5]) {
+  const out: { name: string; alternatives: string[]; ratings: number }[] = [];
+  for (let offset = 0; offset < limit; offset += 500) {
+    const rows = await query<IgdbGame>(
+      "games",
+      `fields name,total_rating_count,alternative_names.name; where platforms = (${platforms.join(",")}) & total_rating_count > 0 & version_parent = null; sort total_rating_count desc; limit ${Math.min(500, limit - offset)}; offset ${offset};`,
+    );
+    out.push(...rows.map((g) => ({ name: g.name, alternatives: (g.alternative_names ?? []).map((a) => a.name), ratings: g.total_rating_count ?? 0 })));
+    if (rows.length < 500) break;
+  }
+  return out;
+}

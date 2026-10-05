@@ -9,6 +9,12 @@ import { getTitleTrophyGroups } from "psn-api";
 import { prisma } from "../src/lib/db";
 import { psnAuth, toPsnError, withTimeout } from "../src/lib/psn/real";
 
+try {
+  process.loadEnvFile(".env");
+} catch {
+  // No .env file; rely on the real environment.
+}
+
 async function main() {
   const max = Number(process.argv[2]) || 300;
   if (!process.env.PSN_NPSSO?.trim()) throw new Error("PSN_NPSSO is empty. Run npm run psn:check first.");

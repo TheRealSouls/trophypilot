@@ -88,12 +88,55 @@ export async function importTitles(titles: PsnTitle[], sampleAccountId: string |
     });
   }
 
-  for (const t of titles) {
+  const missing = titles.filter((t, i) => !slugs.has(t.npCommunicationId) && titles.findIndex((x) => x.npCommunicationId === t.npCommunicationId) === i);
+  // A big library brings hundreds of new games at once: work out their addresses in memory and insert them together.
+  if (missing.length > 20) {
+    await createGamesInBulk(missing, sampleAccountId);
+    const made = await prisma.game.findMany({
+      where: { npCommunicationId: { in: missing.map((t) => t.npCommunicationId) } },
+      select: { slug: true, npCommunicationId: true },
+    });
+    for (const g of made) slugs.set(g.npCommunicationId!, g.slug);
+  }
+  // One by one: small batches, and anything the bulk insert skipped.
+  for (const t of missing) {
     if (slugs.has(t.npCommunicationId)) continue;
-    const g = await createGame(t, sampleAccountId);
-    slugs.set(t.npCommunicationId, g.slug);
+    slugs.set(t.npCommunicationId, (await createGame(t, sampleAccountId)).slug);
   }
   return slugs;
+}
+
+/** Same addresses as uniqueGameSlug, checked against every slug in one read instead of a query each. */
+async function createGamesInBulk(titles: PsnTitle[], sampleAccountId: string | null) {
+  const taken = new Set((await prisma.game.findMany({ select: { slug: true } })).map((g) => g.slug));
+  const pick = (t: PsnTitle) => {
+    const base = slugify(cleanTitle(t.title)) || slugify(t.npCommunicationId);
+    if (!taken.has(base)) return base;
+    const withPlatform = `${base}-${slugify(t.platforms[0] ?? "")}`.replace(/-$/, "");
+    if (!taken.has(withPlatform)) return withPlatform;
+    let i = 2;
+    while (taken.has(`${withPlatform}-${i}`)) i++;
+    return `${withPlatform}-${i}`;
+  };
+  const rows = titles.map((t) => {
+    const slug = pick(t);
+    taken.add(slug);
+    return {
+      slug,
+      npCommunicationId: t.npCommunicationId,
+      npServiceName: t.npServiceName,
+      title: cleanTitle(t.title),
+      titleKey: titleKey(t.title),
+      platforms: t.platforms.join(","),
+      iconUrl: t.iconUrl,
+      definedTrophies: t.definedTrophies ?? null,
+      coverHue: hashString(t.title) % 360,
+      psnSampleAccountId: sampleAccountId,
+    };
+  });
+  for (let i = 0; i < rows.length; i += 500) {
+    await prisma.game.createMany({ data: rows.slice(i, i + 500), skipDuplicates: true });
+  }
 }
 
 type CatalogueGame = {

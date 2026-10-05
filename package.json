@@ -28,6 +28,7 @@
     "psn:lists": "tsx scripts/psn-lists.ts",
     "psn:player-stats": "tsx scripts/psn-player-stats.ts",
     "psn:dlc-icons": "tsx scripts/backfill-dlc-icons.ts",
+    "psn:popular": "tsx scripts/preload-popular.ts",
     "db:trophy-slugs": "tsx scripts/backfill-trophy-slugs.ts",
     "forums:seed": "tsx scripts/forums-seed.ts"
   },

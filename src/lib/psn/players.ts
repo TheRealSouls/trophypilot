@@ -102,7 +102,7 @@ const TITLES_PAGE = 800;
 async function allTitles(accountId: string) {
   const out: RawTitle[] = [];
   let offset = 0;
-  for (let page = 0; page < 10; page++) {
+  for (let page = 0; page < 25; page++) {
     const res = await withTimeout(getUserTitles(await psnAuth(), accountId, { limit: TITLES_PAGE, offset }));
     out.push(...(res.trophyTitles as unknown as RawTitle[]));
     if (!res.trophyTitles.length || out.length >= res.totalItemCount || !res.nextOffset) break;

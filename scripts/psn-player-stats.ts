@@ -10,6 +10,12 @@ import { prisma } from "../src/lib/db";
 import { refreshPlayer } from "../src/lib/psn/players";
 import { toPsnError } from "../src/lib/psn/real";
 
+try {
+  process.loadEnvFile(".env");
+} catch {
+  // No .env file; rely on the real environment.
+}
+
 async function main() {
   const [take, lookups] = process.argv.slice(2).map(Number);
   if (!process.env.PSN_NPSSO?.trim()) throw new Error("PSN_NPSSO is empty. Run npm run psn:check first.");
@@ -27,6 +33,11 @@ async function main() {
     } catch (err) {
       const e = toPsnError(err);
       console.warn(`skip ${p.onlineId}: ${e.message}`);
+      // A dropped connection: wait a little and carry on with the next player.
+      if (/fetch failed|ECONNRESET|ETIMEDOUT|reach/i.test(e.message)) {
+        await new Promise((r) => setTimeout(r, 30_000));
+        continue;
+      }
       if (e.kind === "auth" || e.kind === "rate_limited") break;
     }
   }
