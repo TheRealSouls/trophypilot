@@ -36,7 +36,7 @@ async function main() {
   for (const [i, p] of popular.entries()) {
     const keys = [...new Set([p.name, ...p.alternatives].map(titleKey).filter(Boolean))];
     // Every list of the game: PS4, PS5 and regional ones share a titleKey.
-    const lists = await prisma.game.findMany({
+    const lists = await retry(() => prisma.game.findMany({
       where: { titleKey: { in: keys } },
       select: {
         id: true,
@@ -50,7 +50,7 @@ async function main() {
         igdbCheckedAt: true,
         _count: { select: { trophies: true } },
       },
-    });
+    }));
     if (!lists.length) {
       missing.push(p.name);
       continue;
@@ -65,6 +65,7 @@ async function main() {
       } catch (err) {
         const e = toPsnError(err);
         console.warn(`skip ${g.title}: ${e.message}`);
+        if (/fetch failed|reach|P1001|P1017|ECONNRESET/i.test(e.message)) await new Promise((r) => setTimeout(r, 30_000));
         if (e.kind === "rate_limited" || e.kind === "auth") {
           console.warn("Stopping: PSN is limiting us. Run it again later; loaded lists are kept.");
           return report();
@@ -83,6 +84,18 @@ async function main() {
     console.log(`Done: ${loaded} trophy lists loaded, ${already} already loaded, ${enriched} games given IGDB details.`);
     console.log(`${missing.length} popular games aren't in the catalogue yet (no tracked player has played them).`);
     if (missing.length) console.log(`Most popular of those: ${missing.slice(0, 40).join(" | ")}`);
+  }
+}
+
+/** Waits out a dropped connection (up to five tries) instead of stopping the whole run. */
+async function retry<T>(fn: () => Promise<T>): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i >= 4 || !/P1001|P1017|fetch failed|ECONNRESET|ETIMEDOUT/i.test(String(err))) throw err;
+      await new Promise((r) => setTimeout(r, 30_000));
+    }
   }
 }
 

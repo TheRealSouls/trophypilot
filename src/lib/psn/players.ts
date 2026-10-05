@@ -6,7 +6,6 @@ import {
   getUserTrophiesEarnedForTitle,
   type ProfileFromUserNameResponse,
 } from "psn-api";
-import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { pointsFor, ULTRA_RARE_MAX } from "../trophies";
 import { importTitles } from "./catalogue";
@@ -97,6 +96,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** PSN's largest page of trophy lists. */
 const TITLES_PAGE = 800;
+/**
+ * Lists kept as rows per tracked player (newest first). The feeds only need
+ * recent ones, and storing every list of every big library would outgrow the
+ * free database. The full list is still read for games played, completion
+ * and ultra rares, and every game in it joins the catalogue.
+ */
+export const KEEP_TITLES = 300;
 
 /** Every trophy list a player has, newest first: one PSN request per 800 lists. */
 async function allTitles(accountId: string) {
@@ -145,7 +151,7 @@ export async function refreshPlayer(onlineId: string, { platinumLookups = 5, rar
 
   const titles = await storePlayerTitles(snap.accountId, raw);
   const platinumsDated = await datePlatinums(snap.accountId, platinumLookups);
-  const rares = await countUltraRares(snap.accountId, rareLookups);
+  const rares = await countUltraRares(snap.accountId, raw, rareLookups);
   await prisma.psnPlayer.update({
     where: { accountId: snap.accountId },
     data: {
@@ -189,19 +195,20 @@ export async function storePlayerTitles(accountId: string, raw: RawTitle[]) {
       })
     ).map((s) => [s.npCommunicationId, s]),
   );
-  const changed = raw.filter((t) => {
+  // Every game joins the catalogue; only the newest lists are kept as rows (see KEEP_TITLES).
+  const keep = [...raw].sort((a, b) => Date.parse(b.lastUpdatedDateTime) - Date.parse(a.lastUpdatedDateTime)).slice(0, KEEP_TITLES);
+  const keepIds = new Set(keep.map((t) => t.npCommunicationId));
+  const changed = keep.filter((t) => {
     const s = stored.get(t.npCommunicationId);
     return !s || s.lastUpdated.getTime() !== new Date(t.lastUpdatedDateTime).getTime() || s.progress !== (t.progress ?? 0);
   });
+  await importTitles(titles, accountId);
+  if (raw.length > KEEP_TITLES) await pruneTitles(accountId, keepIds);
   if (!changed.length) return titles.length;
-  await importTitles(
-    titles.filter((t) => changed.some((c) => c.npCommunicationId === t.npCommunicationId)),
-    accountId,
-  );
   const games = new Map(
     (
       await prisma.game.findMany({
-        where: { npCommunicationId: { in: titles.map((t) => t.npCommunicationId) } },
+        where: { npCommunicationId: { in: changed.map((t) => t.npCommunicationId) } },
         select: { id: true, npCommunicationId: true },
       })
     ).map((g) => [g.npCommunicationId!, g.id]),
@@ -231,6 +238,15 @@ export async function storePlayerTitles(accountId: string, raw: RawTitle[]) {
   return titles.length;
 }
 
+/** Deletes a player's stored lists that are no longer among their newest KEEP_TITLES. */
+async function pruneTitles(accountId: string, keepIds: Set<string>) {
+  const stored = await prisma.psnPlayerTitle.findMany({ where: { accountId }, select: { npCommunicationId: true } });
+  const drop = stored.map((s) => s.npCommunicationId).filter((id) => !keepIds.has(id));
+  for (let i = 0; i < drop.length; i += 1000) {
+    await prisma.psnPlayerTitle.deleteMany({ where: { accountId, npCommunicationId: { in: drop.slice(i, i + 1000) } } });
+  }
+}
+
 /**
  * Counts the ultra rare trophies (earned by ULTRA_RARE_MAX% of players or
  * fewer) a tracked player has, list by list, and stores the running total on
@@ -239,55 +255,62 @@ export async function storePlayerTitles(accountId: string, raw: RawTitle[]) {
  * rest cost one PSN request each, at most `maxLookups` per call. A list is
  * counted again when it changes. `ultraRarePending` is how many are left.
  */
-export async function countUltraRares(accountId: string, maxLookups = 40) {
-  const titles = await prisma.psnPlayerTitle.findMany({
-    where: { accountId },
-    select: {
-      npCommunicationId: true,
-      gameId: true,
-      progress: true,
-      lastUpdated: true,
-      rareCheckedAt: true,
-      game: { select: { npServiceName: true, definedTrophies: true } },
-    },
-    orderBy: { lastUpdated: "desc" },
-  });
-  const due = titles.filter((t) => !t.rareCheckedAt || t.rareCheckedAt < t.lastUpdated);
+export async function countUltraRares(accountId: string, raw: RawTitle[], maxLookups = 40) {
+  const player = await prisma.psnPlayer.findUnique({ where: { accountId }, select: { rareLists: true } });
+  // [count, lastUpdated seconds] per list; lists the player no longer has drop out.
+  const old = (player?.rareLists ?? {}) as Record<string, [number, number]>;
+  const tally: Record<string, [number, number]> = {};
+  const due: { id: string; progress: number; at: number; service: string }[] = [];
+  for (const t of raw) {
+    const at = Math.floor(Date.parse(t.lastUpdatedDateTime) / 1000);
+    const prev = old[t.npCommunicationId];
+    if (prev && prev[1] >= at) tally[t.npCommunicationId] = prev;
+    else due.push({ id: t.npCommunicationId, progress: t.progress ?? 0, at, service: t.npServiceName });
+  }
 
-  // What the catalogue knows about the finished lists: how many trophies, how many with a rarity, how many ultra rare.
-  const finished = [...new Set(due.filter((t) => t.progress === 100).map((t) => t.gameId))];
-  const [held, ultra] = finished.length
+  // Free first: unstarted lists are 0, finished lists we hold in full (with rarity) count from the catalogue.
+  const finishedIds = due.filter((t) => t.progress === 100).map((t) => t.id);
+  const games = finishedIds.length
+    ? await prisma.game.findMany({ where: { npCommunicationId: { in: finishedIds } }, select: { id: true, npCommunicationId: true, definedTrophies: true } })
+    : [];
+  const gameOf = new Map(games.map((g) => [g.npCommunicationId!, g]));
+  const gameIds = games.map((g) => g.id);
+  const [held, ultra] = gameIds.length
     ? await Promise.all([
-        prisma.trophy.groupBy({ by: ["gameId"], where: { gameId: { in: finished } }, _count: { _all: true, earnedRate: true } }),
-        prisma.trophy.groupBy({ by: ["gameId"], where: { gameId: { in: finished }, earnedRate: { lte: ULTRA_RARE_MAX } }, _count: { _all: true } }),
+        prisma.trophy.groupBy({ by: ["gameId"], where: { gameId: { in: gameIds } }, _count: { _all: true, earnedRate: true } }),
+        prisma.trophy.groupBy({ by: ["gameId"], where: { gameId: { in: gameIds }, earnedRate: { lte: ULTRA_RARE_MAX } }, _count: { _all: true } }),
       ])
     : [[], []];
   const heldBy = new Map(held.map((h) => [h.gameId, h._count]));
   const ultraBy = new Map(ultra.map((u) => [u.gameId, u._count._all]));
 
-  const counted: { id: string; n: number }[] = [];
+  let counted = 0;
   const toFetch: typeof due = [];
   for (const t of due) {
-    const h = heldBy.get(t.gameId);
-    if (t.progress === 0) counted.push({ id: t.npCommunicationId, n: 0 });
-    else if (t.progress === 100 && h && t.game.definedTrophies && h._all >= t.game.definedTrophies && h.earnedRate === h._all)
-      counted.push({ id: t.npCommunicationId, n: ultraBy.get(t.gameId) ?? 0 });
-    else toFetch.push(t);
+    const g = gameOf.get(t.id);
+    const h = g ? heldBy.get(g.id) : undefined;
+    if (t.progress === 0) {
+      tally[t.id] = [0, t.at];
+      counted++;
+    } else if (t.progress === 100 && g && h && g.definedTrophies && h._all >= g.definedTrophies && h.earnedRate === h._all) {
+      tally[t.id] = [ultraBy.get(g.id) ?? 0, t.at];
+      counted++;
+    } else toFetch.push(t);
   }
 
+  // The rest cost one PSN request each, a few at a time, newest lists first.
   let lookups = 0;
   let stopped = false;
-  // A few at a time: quicker than one by one, still gentle on PSN.
   for (let i = 0; i < toFetch.length && lookups < maxLookups && !stopped; i += 4) {
     const batch = toFetch.slice(i, Math.min(i + 4, i + maxLookups - lookups));
     lookups += batch.length;
     await Promise.all(
       batch.map(async (t) => {
         try {
-          const opts = t.game.npServiceName === "trophy" ? { npServiceName: "trophy" as const } : {};
-          const res = await withTimeout(getUserTrophiesEarnedForTitle(await psnAuth(), accountId, t.npCommunicationId, "all", opts));
-          const n = res.trophies.filter((x) => x.earned && Number(x.trophyEarnedRate) <= ULTRA_RARE_MAX).length;
-          counted.push({ id: t.npCommunicationId, n });
+          const opts = t.service === "trophy" ? { npServiceName: "trophy" as const } : {};
+          const res = await withTimeout(getUserTrophiesEarnedForTitle(await psnAuth(), accountId, t.id, "all", opts));
+          tally[t.id] = [res.trophies.filter((x) => x.earned && Number(x.trophyEarnedRate) <= ULTRA_RARE_MAX).length, t.at];
+          counted++;
         } catch (err) {
           // Rate limited: stop for now. Anything else: try this list again next time.
           if (toPsnError(err).kind === "rate_limited") stopped = true;
@@ -297,24 +320,17 @@ export async function countUltraRares(accountId: string, maxLookups = 40) {
     await sleep(150);
   }
 
-  // Write the counts in a few statements rather than one per list.
-  const now = new Date();
-  for (let i = 0; i < counted.length; i += 500) {
-    const chunk = counted.slice(i, i + 500);
-    await prisma.$executeRaw`
-      UPDATE "PsnPlayerTitle" AS t SET "ultraRare" = v.n, "rareCheckedAt" = ${now}
-      FROM (VALUES ${Prisma.join(chunk.map((c) => Prisma.sql`(${c.id}, ${c.n}::int)`))}) AS v(id, n)
-      WHERE t."accountId" = ${accountId} AND t."npCommunicationId" = v.id`;
-  }
-
-  const total = await prisma.psnPlayerTitle.aggregate({ where: { accountId, rareCheckedAt: { not: null } }, _sum: { ultraRare: true } });
-  const pending = due.length - counted.length;
-  const anyCounted = titles.length - due.length + counted.length > 0;
+  const lists = Object.values(tally);
+  const pending = raw.length - lists.length;
   await prisma.psnPlayer.update({
     where: { accountId },
-    data: { ultraRare: anyCounted ? (total._sum.ultraRare ?? 0) : null, ultraRarePending: pending },
+    data: {
+      rareLists: tally,
+      ultraRare: lists.length ? lists.reduce((sum, [n]) => sum + n, 0) : null,
+      ultraRarePending: pending,
+    },
   });
-  return { counted: counted.length, lookups, pending };
+  return { counted, lookups, pending };
 }
 
 /** Looks up the exact date of the newest platinums we only know exist (one PSN request each). */
