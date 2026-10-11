@@ -171,9 +171,18 @@ same contrast rules as the light ones.
 - **Community activity** (`/community`): short updates from members, with tabs for everyone, friends and people you
   follow, and your clubs. Members can follow anyone (no approval) as well as add friends.
 - **Clubs** (`/clubs`): groups around an interest. Members join to see and post updates; the owner or an admin can delete
-  a club. A club is deleted with its owner's account.
-- **Messages** (`/messages`): private conversations and group chats (up to 20 people). Members choose who can message
-  them in Settings (anyone, friends and people they follow, or nobody). Only a conversation's members can open it.
+  a club, and pick a card theme for its header (the same themes as profile cards). A club is deleted with its owner's
+  account. Community updates show in their author's profile card theme.
+- **Messages** (`/messages`): direct messages and group chats (up to 20 people), laid out like a chat app: conversations
+  on the left, the open one on the right, an envelope with the unread count in the navbar, name suggestions in the To box
+  (`/api/members`), and Enter to send. Members choose who can message them in Settings (anyone, friends and people they
+  follow, or nobody). Only a conversation's members can open it.
+- **Formatting**: everything members write (forum posts, guides, tips, comments, updates, messages) takes a small
+  Discord-style markdown with a toolbar (`src/components/RichTextArea.tsx`): bold, italic, underline, strikethrough,
+  spoilers, text sizes (`#`, `##`, `###`, `-#`), quotes, lists, links, emojis, and YouTube links on their own line,
+  which become embedded videos. `src/lib/rich-text.ts` parses it and `RichText` shows it; raw HTML is never used.
+- **Reports**: a Report button on forum posts, updates, session comments, tips, guides, messages, profiles and clubs.
+  Admins see open reports at `/reports` (with a count in their account menu) and can remove the content or dismiss.
 - **Reputation**: counted live from what a member contributes (threads, replies, guides, tips and their upvotes, updates,
   sessions hosted), with ranks from Newcomer to Legend and badges. Shown next to forum posts and on `/forums/user/<name>`.
 - **Profiles**: Trophy Vault (five chosen trophies), a profile card theme (Ember, Circuit, Ocean, Forest, Frost,
@@ -187,7 +196,8 @@ same contrast rules as the light ones.
 - **Guides**: a trophy-by-trophy section under the roadmap, favourites, and "Send to a friend" (copy, email, share sheet or
   a private message).
 - **Sessions**: each session has its own page with the trophies it's for, who has joined, and comments; times show in the
-  viewer's own time zone.
+  viewer's own time zone. Signed-in members see sessions for games they own first, with a switch to all sessions.
+- **Leaderboards**: 50 players a page; ultra rares and average completion show on their own boards only.
 
 ## Forums
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { plainText } from "@/lib/rich-text";
 import { Suspense } from "react";
 import { DeletedNotice, HomeCta } from "@/components/HomeAccount";
 import { prisma } from "@/lib/db";
@@ -68,7 +69,7 @@ export default async function Home() {
     heroCovers(24),
   ]);
   const listFamilies = await familiesFor(newLists.map((g) => g.titleKey));
-  const { members, games: gameCount, trophies: trophyCount, platinums: platCount } = totals;
+  const { games: gameCount, trophies: trophyCount, platinums: platCount } = totals;
 
   const trendingGames = await prisma.game.findMany({
     where: { id: { in: trending } },
@@ -120,10 +121,6 @@ export default async function Home() {
             </Link>
           </div>
           <p className="mt-8 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted">
-            <span>
-              <strong className="font-semibold text-text">{formatNumber(members)}</strong> members
-            </span>
-            <span aria-hidden>·</span>
             <span>
               <strong className="font-semibold text-text">{formatNumber(gameCount)}</strong> games tracked
             </span>
@@ -325,7 +322,7 @@ export default async function Home() {
                     <GameArt title={g.game.title} hue={g.game.coverHue} iconUrl={g.game.iconUrl} size="sm" className="w-12 rounded-md" />
                     <div className="min-w-0">
                       <div className="text-sm font-semibold group-hover:underline group-hover:underline-offset-4">{g.title}</div>
-                      <div className="line-clamp-2 text-xs text-muted">{g.summary}</div>
+                      <div className="line-clamp-2 text-xs text-muted">{plainText(g.summary)}</div>
                       <div className="mt-1 text-xs text-faint">
                         by {g.author.username} · {timeAgo(g.createdAt)}
                       </div>

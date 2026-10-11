@@ -3,6 +3,7 @@ import { SITE } from "@/lib/site";
 import { NavLinks } from "./NavLinks";
 import { SearchIcon } from "./icons";
 import { NavAccount } from "./session";
+import { NavSearch } from "./NavSearch";
 
 /** Static: the account end comes from /api/me (NavAccount), so pages can be cached. */
 export function Nav() {
@@ -16,16 +17,20 @@ export function Nav() {
 
         <NavLinks />
 
-        <form action="/search" className="relative ml-auto hidden flex-1 md:block md:max-w-sm" role="search">
+        {/* A full search box where there is room (tablets); on wide screens the menu needs the space, so it opens from a button. */}
+        <form action="/search" className="relative ml-auto hidden min-w-56 flex-1 md:block md:max-w-sm lg:hidden" role="search">
           <label htmlFor="nav-q" className="sr-only">Search</label>
           <SearchIcon size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
           <input id="nav-q" name="q" placeholder="Search games, PSN IDs, guides…" className="input bg-surface-2 py-2 pl-9" />
         </form>
 
-        <div className="ml-auto flex items-center gap-2 md:ml-0">
+        <div className="ml-auto flex items-center gap-2 md:ml-0 lg:ml-auto">
           <Link href="/search" className="btn-ghost px-2.5 md:hidden" aria-label="Search">
             <SearchIcon size={18} />
           </Link>
+          <span className="hidden lg:contents">
+            <NavSearch />
+          </span>
           <NavAccount />
         </div>
       </div>

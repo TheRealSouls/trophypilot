@@ -132,3 +132,6 @@ export function secureUrl<T extends string | null | undefined>(url: T): T {
 export function platformName(code: string) {
   return code === "PSVITA" ? "PS Vita" : code;
 }
+
+/** The platforms the games list filters by. */
+export const GAME_PLATFORMS = ["PS5", "PS4", "PS3", "PSVITA"];

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { plainText } from "@/lib/rich-text";
 import { prisma } from "@/lib/db";
 import { getSessionUserId } from "@/lib/auth";
 import { flag } from "@/lib/countries";
@@ -13,12 +14,29 @@ import { SessionForm } from "./SessionForm";
 
 export const metadata: Metadata = { title: "Sessions", description: "Boosting and co-op sessions for online trophies." };
 
-export default async function SessionsPage({ searchParams }: { searchParams: Promise<{ new?: string }> }) {
+export default async function SessionsPage({ searchParams }: { searchParams: Promise<{ new?: string; show?: string }> }) {
   const sp = await searchParams;
   const viewerId = await getSessionUserId();
-  const [sessions, initialGame] = await Promise.all([
+  // Signed in: sessions for games in your library (any of their lists), plus ones you host or joined. "All" shows everything.
+  const showAll = !viewerId || sp.show === "all";
+  const myKeys = showAll
+    ? []
+    : (
+        await prisma.userGame.findMany({ where: { userId: viewerId! }, select: { game: { select: { titleKey: true, id: true } } } })
+      ).map((g) => g.game.titleKey || g.game.id);
+  const mine = showAll
+    ? {}
+    : {
+        OR: [
+          { game: { titleKey: { in: myKeys.filter(Boolean) } } },
+          { gameId: { in: myKeys } },
+          { hostId: viewerId! },
+          { members: { some: { userId: viewerId! } } },
+        ],
+      };
+  const [sessions, initialGame, allCount] = await Promise.all([
     prisma.session.findMany({
-      where: { startsAt: { gte: new Date(Date.now() - 2 * 3600_000) } },
+      where: { startsAt: { gte: new Date(Date.now() - 2 * 3600_000) }, ...mine },
       orderBy: { startsAt: "asc" },
       include: {
         game: true,
@@ -28,6 +46,7 @@ export default async function SessionsPage({ searchParams }: { searchParams: Pro
       },
     }),
     viewerId && sp.new ? prisma.game.findUnique({ where: { id: sp.new }, select: { id: true, title: true, platforms: true } }) : null,
+    showAll ? 0 : prisma.session.count({ where: { startsAt: { gte: new Date(Date.now() - 2 * 3600_000) } } }),
   ]);
 
   return (
@@ -36,9 +55,35 @@ export default async function SessionsPage({ searchParams }: { searchParams: Pro
         Team up for online, co-op and multiplayer trophies. Join a session or host your own.
       </PageHeader>
       <TimeZoneNote className="mb-4 text-sm text-muted" />
+      {viewerId && (
+        <nav aria-label="Which sessions" className="mb-5 flex flex-wrap gap-2">
+          <Link href="/sessions" aria-current={!showAll ? "page" : undefined} className={`chip min-h-7 px-3 ${!showAll ? "chip-active" : ""}`}>
+            Games I own
+          </Link>
+          <Link href="/sessions?show=all" aria-current={showAll ? "page" : undefined} className={`chip min-h-7 px-3 ${showAll ? "chip-active" : ""}`}>
+            All sessions
+          </Link>
+        </nav>
+      )}
       <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
         <div className="space-y-3">
-          {sessions.length === 0 && <EmptyState title="No upcoming sessions">Be the first to host one.</EmptyState>}
+          {sessions.length === 0 &&
+            (showAll ? (
+              <EmptyState title="No upcoming sessions">Be the first to host one.</EmptyState>
+            ) : (
+              <EmptyState
+                title="No sessions for your games"
+                action={
+                  allCount > 0 ? (
+                    <Link href="/sessions?show=all" className="btn-ghost">
+                      See all {allCount} sessions
+                    </Link>
+                  ) : undefined
+                }
+              >
+                Nobody is hosting one for a game in your library right now. Host your own, or look through every session.
+              </EmptyState>
+            ))}
           {sessions.map((s) => {
             const joined = s.members.some((m) => m.userId === viewerId);
             const full = s.members.length >= s.slots;
@@ -57,7 +102,7 @@ export default async function SessionsPage({ searchParams }: { searchParams: Pro
                         {s.title}
                       </Link>
                     </h2>
-                    {s.description && <p className="text-sm text-muted">{s.description}</p>}
+                    {s.description && <p className="line-clamp-2 text-sm text-muted">{plainText(s.description)}</p>}
                     <div className="mt-2 text-sm">
                       <LocalTime date={s.startsAt} weekday className="font-semibold" />{" "}
                       <span className="text-muted">
@@ -95,7 +140,7 @@ export default async function SessionsPage({ searchParams }: { searchParams: Pro
                     {s._count.comments} comment{s._count.comments === 1 ? "" : "s"} · open
                   </Link>
                 </div>
-                <div className="mt-3 flex -space-x-2">
+                <div className="mt-3 flex flex-wrap gap-1">
                   {s.members.map((m) => (
                     <Link
                       key={m.userId}

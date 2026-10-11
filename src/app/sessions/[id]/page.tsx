@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ReportButton } from "@/components/ReportButton";
+import { RichText } from "@/components/RichText";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { prisma } from "@/lib/db";
@@ -72,7 +74,7 @@ export default async function SessionPage({ params }: { params: Promise<Params> 
             {session.game.title} · {session.platform}
           </div>
           <h1 className="break-words text-2xl font-bold tracking-tight sm:text-3xl">{session.title}</h1>
-          {session.description && <p className="mt-2 text-muted">{session.description}</p>}
+          {session.description && <RichText text={session.description} className="mt-2" />}
           <p className="mt-3 text-sm">
             <span className="font-semibold">{past ? "Started" : "Starts"} </span>
             <LocalTime date={session.startsAt} weekday className="font-semibold" />
@@ -158,14 +160,16 @@ export default async function SessionPage({ params }: { params: Promise<Params> 
                           <Link href={`/u/${c.author.username}`} className="font-semibold hover:underline hover:underline-offset-4">{name}</Link>
                           {c.authorId === session.hostId && <span className="chip border-accent-text/50 text-accent-text">Host</span>}
                           <span className="text-xs text-muted">{timeAgo(c.createdAt)}</span>
+                          <span className="ml-auto" />
+                          <ReportButton type="SESSION_COMMENT" id={c.id} authorId={c.authorId} what={`comment by ${name}`} />
                           {canDelete && (
-                            <form action={deleteSessionComment} className="ml-auto">
+                            <form action={deleteSessionComment}>
                               <input type="hidden" name="commentId" value={c.id} />
                               <ConfirmButton message="Delete this comment?" className="text-xs text-muted hover:text-bad">Delete</ConfirmButton>
                             </form>
                           )}
                         </div>
-                        <p className="prose-guide mt-1 break-words">{c.body}</p>
+                        <RichText text={c.body} className="mt-1" />
                       </div>
                     </li>
                   );

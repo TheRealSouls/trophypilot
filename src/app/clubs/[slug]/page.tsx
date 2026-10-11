@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import clsx from "clsx";
+import { cardClass } from "@/lib/profile-themes";
+import { ProfileCardArt } from "@/components/ProfileCardArt";
+import { CardThemePicker } from "@/components/CardThemePicker";
+import { ReportButton } from "@/components/ReportButton";
+import { RichText } from "@/components/RichText";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { prisma } from "@/lib/db";
@@ -7,11 +13,11 @@ import { getCurrentUser } from "@/lib/auth";
 import { flag } from "@/lib/countries";
 import { isAdmin } from "@/lib/forum";
 import { formatDate } from "@/lib/utils";
-import { deleteClub, toggleClubMembership } from "@/actions/social";
+import { deleteClub, setClubTheme, toggleClubMembership } from "@/actions/social";
 import { ConfirmButton, SubmitButton } from "@/components/client";
 import { loadFeed, PostList } from "@/components/community";
 import { PostComposer } from "@/components/community-forms";
-import { Avatar, PageHeader } from "@/components/ui";
+import { Avatar } from "@/components/ui";
 
 type Params = { slug: string };
 
@@ -50,14 +56,22 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
         <span className="mx-1">/</span>
         <Link href="/clubs" className="hover:text-text">Clubs</Link>
       </nav>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageHeader title={club.name}>
-          {club.description || "A club on TrophyPilot."}
-          <span className="mt-1 block text-xs">
+      <section className={clsx("card relative mb-8 overflow-hidden", cardClass(club.theme))}>
+        {club.theme && (
+          <div className="relative h-24 overflow-hidden sm:h-32">
+            <ProfileCardArt card={club.theme} part="banner" />
+          </div>
+        )}
+        <ProfileCardArt card={club.theme} part="body" />
+        <div className="relative flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{club.name}</h1>
+          <div className="mt-2 text-muted">{club.description ? <RichText text={club.description} /> : "A club on TrophyPilot."}</div>
+          <span className="mt-2 block text-xs text-muted">
             {club._count.members} member{club._count.members === 1 ? "" : "s"} · started {formatDate(club.createdAt, { month: "short", year: "numeric" })} by{" "}
             <Link href={`/u/${club.owner.username}`} className="underline underline-offset-2">{club.owner.psn?.onlineId ?? club.owner.username}</Link>
           </span>
-        </PageHeader>
+        </div>
         <div className="flex gap-2">
           {viewer && !isOwner && (
             <form action={toggleClubMembership}>
@@ -66,6 +80,7 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
             </form>
           )}
           {!viewer && <Link href={`/login?next=/clubs/${club.slug}`} className="btn-primary">Log in to join</Link>}
+          {!isOwner && <ReportButton type="CLUB" id={club.id} authorId={club.ownerId} what="this club" className="self-center px-1" />}
           {(isOwner || isAdmin(viewer)) && (
             <form action={deleteClub}>
               <input type="hidden" name="clubId" value={club.id} />
@@ -73,7 +88,18 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
             </form>
           )}
         </div>
-      </div>
+        </div>
+      </section>
+      {(isOwner || isAdmin(viewer)) && (
+        <details className="card mb-8 p-4">
+          <summary className="cursor-pointer text-sm font-semibold">Club theme</summary>
+          <form action={setClubTheme} className="mt-4 space-y-3">
+            <input type="hidden" name="clubId" value={club.id} />
+            <CardThemePicker value={club.theme} legend="Pick a theme for the club's header" />
+            <SubmitButton className="btn-ghost">Save theme</SubmitButton>
+          </form>
+        </details>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
         <div className="min-w-0 space-y-5">

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { plainText } from "@/lib/rich-text";
 import { Suspense } from "react";
 import clsx from "clsx";
 import { prisma } from "@/lib/db";
@@ -240,7 +241,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                   <Link href={`/guides/${g.slug}`} className="group block py-3">
                     <div className="text-xs uppercase tracking-wider text-accent-text">{g.game.title}</div>
                     <div className="text-sm font-semibold group-hover:underline group-hover:underline-offset-4">{g.title}</div>
-                    <div className="line-clamp-1 text-xs text-muted">{g.summary}</div>
+                    <div className="line-clamp-1 text-xs text-muted">{plainText(g.summary)}</div>
                   </Link>
                 </li>
               ))}

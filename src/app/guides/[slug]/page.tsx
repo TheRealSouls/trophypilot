@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ReportButton } from "@/components/ReportButton";
+import { RichText } from "@/components/RichText";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { prisma } from "@/lib/db";
@@ -96,7 +98,7 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
       <header className="card mb-8 grid gap-6 p-6 sm:p-8 md:grid-cols-[1fr_auto]">
         <div>
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{guide.title}</h1>
-          <p className="mt-3 max-w-2xl text-text/90">{guide.summary}</p>
+          <RichText text={guide.summary} className="mt-3 max-w-2xl" />
           <div className="mt-4 flex items-center gap-2 text-sm text-muted">
             <Avatar name={guide.author.username} hue={guide.author.avatarHue} url={guide.author.psn?.avatarUrl} avatar={guide.author.avatar} size={24} />
             <Link href={`/u/${guide.author.username}`} className="font-semibold text-text hover:text-accent-text">
@@ -129,6 +131,7 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
                 Saved by {favouriteCount} member{favouriteCount === 1 ? "" : "s"}
               </span>
             )}
+            <ReportButton type="GUIDE" id={guide.id} authorId={guide.authorId} what="this guide" />
           </div>
         </div>
         <GameArt title={guide.game.title} hue={guide.game.coverHue} iconUrl={guide.game.iconUrl} className="hidden w-28 md:block" />
@@ -199,7 +202,7 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
                       )}
                       <div className="min-w-0 flex-1">
                         <h3 className="text-lg font-semibold">{s.title}</h3>
-                        <p className="prose-guide mt-1">{s.body}</p>
+                        <RichText text={s.body} className="mt-1" />
                         {s.trophy && (
                           <Link
                             href={s.trophy.slug ? trophyHref(s.trophy.game.slug, s.trophy.slug) : `/trophies/${s.trophy.id}`}
@@ -256,7 +259,7 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
                               {got && <span className="text-xs font-semibold text-good">Earned</span>}
                             </div>
                             <p className="text-sm text-muted">{t.description}</p>
-                            <p className="prose-guide mt-2">{s.body}</p>
+                            <RichText text={s.body} className="mt-2" />
                           </SpoilerSwap>
                         </div>
                       </li>

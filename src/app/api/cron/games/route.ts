@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { enrichPending, igdbEnabled } from "@/lib/igdb";
+import { bust } from "@/lib/cache";
+import { refreshGamePopularity, warmGamesList } from "@/lib/games-list";
 
 /**
  * Fills in release dates, descriptions, genres, screenshots and trailers from
@@ -7,7 +9,8 @@ import { enrichPending, igdbEnabled } from "@/lib/igdb";
  * pages also do this on their first visit; this catches the rest.
  *
  * Call with `Authorization: Bearer $CRON_SECRET`, e.g. every 30 minutes.
- * Each game costs one IGDB request (4 a second allowed).
+ * Each game costs one IGDB request (4 a second allowed). It also refreshes
+ * the "Most played" counts and pre-loads the first games list pages.
  */
 export const maxDuration = 300;
 
@@ -18,6 +21,10 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!igdbEnabled()) return NextResponse.json({ skipped: "IGDB_CLIENT_ID and IGDB_CLIENT_SECRET are not set" });
-  return NextResponse.json(await enrichPending(PER_RUN));
+  // "Most played" counts, then the common games list pages, so they're ready before anyone asks.
+  const popularity = await refreshGamePopularity().catch((err) => ({ error: String(err) }));
+  const igdb = igdbEnabled() ? await enrichPending(PER_RUN) : { skipped: "IGDB_CLIENT_ID and IGDB_CLIENT_SECRET are not set" };
+  bust("games");
+  await warmGamesList().catch((err) => console.error("[games] warm failed", err));
+  return NextResponse.json({ igdb, popularityUpdated: popularity });
 }

@@ -4,7 +4,18 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import { saveTheme, useMe } from "@/components/session";
 import { useRouter } from "next/navigation";
 import { durationText } from "@/lib/plans";
-import { deleteAccount, startPsnLink, syncNow, updatePrivacy, updateProfile, updateTheme, updateVault, verifyPsn } from "@/actions/account";
+import {
+  deleteAccount,
+  searchMyTrophies,
+  startPsnLink,
+  syncNow,
+  updatePrivacy,
+  updateProfile,
+  updateTheme,
+  updateVault,
+  verifyPsn,
+  type VaultTrophy,
+} from "@/actions/account";
 import { SubmitButton } from "@/components/client";
 import { FormMessage } from "@/components/ui";
 import { COUNTRIES } from "@/lib/countries";
@@ -185,32 +196,100 @@ export function SyncButton({ nextAt, busy }: { nextAt: string | null; busy: bool
   );
 }
 
-export type VaultOption = { id: string; name: string; game: string; type: string; rate: number | null };
-
-/** Tick up to five earned trophies to show in the Trophy Vault on the profile. */
-export function VaultForm({ options, picked: initial }: { options: VaultOption[]; picked: string[] }) {
+/**
+ * The Trophy Vault picker: the five picks at the top (in order, with Remove),
+ * and a search over every trophy the member has earned, by trophy or game
+ * name and grade, rarest first. Results load as they type.
+ */
+export function VaultForm({ picked: initial, hasTrophies }: { picked: VaultTrophy[]; hasTrophies: boolean }) {
   const [state, action] = useActionState(updateVault, null);
-  const [picked, setPicked] = useState<string[]>(initial);
-  if (options.length === 0) return <p className="text-sm text-muted">Sync your trophies first, then pick your five best here.</p>;
+  const [picked, setPicked] = useState<VaultTrophy[]>(initial);
+  const [q, setQ] = useState("");
+  const [type, setType] = useState("");
+  const [results, setResults] = useState<VaultTrophy[] | null>(null);
+  const [searching, startSearch] = useTransition();
+
+  useEffect(() => {
+    if (!hasTrophies) return;
+    const t = setTimeout(() => startSearch(async () => setResults(await searchMyTrophies(q, type))), q ? 250 : 0);
+    return () => clearTimeout(t);
+  }, [q, type, hasTrophies]);
+
+  if (!hasTrophies) return <p className="text-sm text-muted">Sync your trophies first, then pick your five best here.</p>;
+  const pickedIds = new Set(picked.map((p) => p.id));
+  const full = picked.length >= 5;
+
   return (
-    <form action={action} className="space-y-3">
-      <p className="text-sm text-muted">
-        Pick up to five trophies to show off at the top of your profile. Your rarest ones are listed first. {picked.length} of 5 picked.
-      </p>
-      <div className="max-h-80 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
-        {options.map((t) => {
-          const on = picked.includes(t.id);
+    <form action={action} className="space-y-4">
+      {picked.map((t) => (
+        <input key={t.id} type="hidden" name="trophyIds" value={t.id} />
+      ))}
+      <div>
+        <h3 className="label">Your vault ({picked.length} of 5)</h3>
+        {picked.length === 0 ? (
+          <p className="text-sm text-muted">Nothing picked yet. Search below and add up to five.</p>
+        ) : (
+          <ol className="space-y-1.5">
+            {picked.map((t, i) => (
+              <li key={t.id} className="flex items-center gap-3 rounded-lg border border-line px-3 py-2 text-sm">
+                <span className="w-4 text-right text-xs font-semibold tabular-nums text-muted">{i + 1}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold">{t.name}</span>
+                  <span className="block truncate text-xs text-muted">
+                    {t.game} · <span className="capitalize">{t.type.toLowerCase()}</span>
+                    {t.rate != null && ` · ${t.rate.toFixed(1)}%`}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPicked((p) => p.filter((x) => x.id !== t.id))}
+                  className="btn-ghost px-2.5 py-1 text-xs"
+                  aria-label={`Remove ${t.name} from the vault`}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+        <div>
+          <label htmlFor="vault-q" className="label">
+            Find a trophy
+          </label>
+          <input
+            id="vault-q"
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Trophy or game name"
+            autoComplete="off"
+            className="input"
+          />
+        </div>
+        <div>
+          <label htmlFor="vault-type" className="label">
+            Grade
+          </label>
+          <select id="vault-type" value={type} onChange={(e) => setType(e.target.value)} className="input">
+            <option value="">Any</option>
+            <option value="PLATINUM">Platinum</option>
+            <option value="GOLD">Gold</option>
+            <option value="SILVER">Silver</option>
+            <option value="BRONZE">Bronze</option>
+          </select>
+        </div>
+      </div>
+
+      <div aria-live="polite" aria-busy={searching} className="max-h-80 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
+        <p className="sr-only">{results ? `${results.length} trophies found` : "Loading"}</p>
+        {results?.length === 0 && <p className="px-2 py-3 text-sm text-muted">No earned trophies match that.</p>}
+        {(results ?? []).map((t) => {
+          const on = pickedIds.has(t.id);
           return (
-            <label key={t.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-surface-2">
-              <input
-                type="checkbox"
-                name="trophyIds"
-                value={t.id}
-                checked={on}
-                disabled={!on && picked.length >= 5}
-                onChange={(e) => setPicked((p) => (e.target.checked ? [...p, t.id] : p.filter((x) => x !== t.id)))}
-                className="accent-[var(--color-accent)]"
-              />
+            <div key={t.id} className="flex items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-surface-2">
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-semibold">{t.name}</span>
                 <span className="block truncate text-xs text-muted">
@@ -218,17 +297,26 @@ export function VaultForm({ options, picked: initial }: { options: VaultOption[]
                 </span>
               </span>
               <span className="shrink-0 text-xs tabular-nums text-muted">{t.rate != null ? `${t.rate.toFixed(1)}%` : ""}</span>
-            </label>
+              <button
+                type="button"
+                disabled={on || full}
+                onClick={() => setPicked((p) => (p.length < 5 && !p.some((x) => x.id === t.id) ? [...p, t] : p))}
+                className="btn-ghost shrink-0 px-2.5 py-1 text-xs"
+                aria-label={on ? `${t.name} is in your vault` : `Add ${t.name} to the vault`}
+              >
+                {on ? "Added" : "Add"}
+              </button>
+            </div>
           );
         })}
       </div>
+      {full && <p className="text-xs text-muted">The vault holds five. Remove one to add another.</p>}
       <FormMessage state={state} />
       <SubmitButton>Save vault</SubmitButton>
     </form>
   );
 }
 
-/** Light or dark. Picking one applies it straight away; the button covers browsers without JavaScript. */
 /**
  * Light or dark. Switches the page at once (applyTheme) and saves the choice
  * to the account in the background, so other devices pick it up too.

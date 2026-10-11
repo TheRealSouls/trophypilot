@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { plainText } from "@/lib/rich-text";
 import clsx from "clsx";
 import { prisma } from "@/lib/db";
 import { formatNumber, timeAgo } from "@/lib/utils";
@@ -48,7 +49,7 @@ export default async function GuidesPage({ searchParams }: { searchParams: Promi
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-semibold uppercase tracking-wider text-accent-text">{g.game.title}</div>
                 <h2 className="text-lg font-semibold leading-snug">{g.title}</h2>
-                <p className="mt-1 line-clamp-2 text-sm text-muted">{g.summary}</p>
+                <p className="mt-1 line-clamp-2 text-sm text-muted">{plainText(g.summary)}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
                   <DifficultyMeter value={g.difficulty} />
                   <span>{g.hoursEstimate}h</span>

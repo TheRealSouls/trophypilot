@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef } from "react";
 import { addSessionComment } from "@/actions/community";
 import { SubmitButton } from "@/components/client";
 import { FormMessage } from "@/components/ui";
+import { RichTextArea } from "@/components/RichTextArea";
 
 export function CommentForm({ sessionId }: { sessionId: string }) {
   const [state, action] = useActionState(addSessionComment, null);
@@ -18,7 +19,7 @@ export function CommentForm({ sessionId }: { sessionId: string }) {
       <label htmlFor="session-comment" className="label">
         Add a comment
       </label>
-      <textarea id="session-comment" name="body" required minLength={2} maxLength={1000} rows={3} className="input" />
+      <RichTextArea id="session-comment" name="body" required minLength={2} maxLength={1000} rows={3} className="input" />
       <FormMessage state={state} />
       <SubmitButton pendingText="Posting…">Post comment</SubmitButton>
     </form>

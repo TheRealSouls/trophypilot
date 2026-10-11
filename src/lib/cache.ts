@@ -14,7 +14,8 @@ type Entry = { value: unknown; at: number; tags: string[]; loading?: Promise<unk
 
 const g = globalThis as unknown as { __tpCache?: Map<string, Entry> };
 const store = (g.__tpCache ??= new Map<string, Entry>());
-const MAX_ENTRIES = 600;
+// Small on purpose: the free server has 512 MB, and a game page entry can be large.
+const MAX_ENTRIES = 150;
 
 export async function cached<T>(
   key: string,

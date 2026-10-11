@@ -14,6 +14,7 @@ import { SceneArt } from "@/components/art";
 import { TrophyCounts } from "@/components/TrophyIcon";
 import { Avatar, LevelMeter, Stat, StatGrid } from "@/components/ui";
 import { ConfirmButton, SubmitButton } from "@/components/client";
+import { ReportButton } from "@/components/ReportButton";
 import type { ProfileOwner } from "./profile-data";
 
 export async function ProfileHeader({
@@ -170,6 +171,9 @@ export async function ProfileHeader({
           )}
           {relation !== "SELF" && (
             <Link href={`/compare?b=${owner.username}`} className="btn-ghost">Compare</Link>
+          )}
+          {relation !== "SELF" && (
+            <ReportButton type="USER" id={owner.id} what={`${display}'s profile`} className="self-center px-1" />
           )}
           {relation === "NONE" && viewerId && (
             <form action={addFriend}>

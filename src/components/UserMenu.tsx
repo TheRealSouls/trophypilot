@@ -21,6 +21,7 @@ export function UserMenu({
   pending,
   unread,
   admin,
+  reports = 0,
   onLogout,
 }: {
   avatar: React.ReactNode;
@@ -31,6 +32,8 @@ export function UserMenu({
   /** Conversations with unread messages. */
   unread: number;
   admin: boolean;
+  /** Open reports waiting for staff. */
+  reports?: number;
   /** Called after signing out, so the navbar updates without a full reload. */
   onLogout?: () => void;
 }) {
@@ -58,7 +61,8 @@ export function UserMenu({
   }, [open]);
 
   const count = (n: number) => (n > 0 ? <span className="ml-auto rounded-md bg-accent px-1.5 text-xs font-bold text-white">{n}</span> : null);
-  const alerts = pending + unread;
+  // Unread messages have their own badge on the envelope next to this menu.
+  const alerts = pending + (admin ? reports : 0);
   const items: [string, string, React.ReactNode?][] = [
     [`/u/${username}`, "My profile"],
     ["/messages", "Messages", count(unread)],
@@ -67,7 +71,12 @@ export function UserMenu({
     ["/compare", "Compare hunters"],
     ["/guides/new", "Write a guide"],
     ["/settings", "Settings and PSN"],
-    ...(admin ? ([["/forums/manage", "Manage forums"]] as [string, string][]) : []),
+    ...(admin
+      ? ([
+          ["/reports", "Reports", count(reports)],
+          ["/forums/manage", "Manage forums"],
+        ] as [string, string, React.ReactNode?][])
+      : []),
   ];
 
   return (

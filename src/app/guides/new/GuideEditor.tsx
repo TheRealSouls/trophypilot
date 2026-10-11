@@ -5,6 +5,7 @@ import { createGuide } from "@/actions/community";
 import { SubmitButton, useKeepValuesAction } from "@/components/client";
 import { FormMessage } from "@/components/ui";
 import { GamePicker, type PickedGame } from "@/components/GamePicker";
+import { RichTextArea } from "@/components/RichTextArea";
 
 type TrophyOption = { id: string; name: string; description: string; type: string; hidden: boolean };
 type Step = { key: number; kind: string; title: string; body: string; trophyId: string; video: string };
@@ -80,7 +81,7 @@ export function GuideEditor({ initialGame }: { initialGame?: PickedGame | null }
           <label htmlFor="summary" className="label">
             Summary
           </label>
-          <textarea
+          <RichTextArea
             id="summary"
             name="summary"
             required
@@ -174,7 +175,7 @@ export function GuideEditor({ initialGame }: { initialGame?: PickedGame | null }
               className="input"
               aria-label="Step title"
             />
-            <textarea
+            <RichTextArea
               value={s.body}
               onChange={(e) => update(s.key, { body: e.target.value })}
               rows={4}
@@ -241,7 +242,7 @@ export function GuideEditor({ initialGame }: { initialGame?: PickedGame | null }
                     <div className="text-xs capitalize text-muted">{t.type.toLowerCase()}</div>
                     <div className="mt-1 text-xs text-muted">{t.description}</div>
                   </div>
-                  <textarea
+                  <RichTextArea
                     value={notes[t.id] ?? ""}
                     onChange={(e) => setNotes((n) => ({ ...n, [t.id]: e.target.value }))}
                     rows={3}

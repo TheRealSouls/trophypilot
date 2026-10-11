@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { prisma } from "./db";
 import { TROPHY_POINTS, type TrophyType } from "./trophies";
 
 /**
@@ -8,7 +8,7 @@ import { TROPHY_POINTS, type TrophyType } from "./trophies";
  * 19/12/4 plus a platinum). Games with nothing earned yet stay, at 0%, the
  * same way PSN lists them. Shared by the PSN sync service and the seed script.
  */
-export async function recomputeUserGame(db: PrismaClient, userId: string, gameId: string) {
+export async function recomputeUserGame(db: typeof prisma, userId: string, gameId: string) {
   const [trophies, earned] = await Promise.all([
     db.trophy.findMany({ where: { gameId }, select: { type: true } }),
     db.userTrophy.findMany({

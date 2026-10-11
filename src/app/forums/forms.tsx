@@ -5,6 +5,8 @@ import { createThread, editPost, replyToThread, saveSection } from "@/actions/fo
 import { SubmitButton, useKeepValuesAction } from "@/components/client";
 import { GamePicker, type PickedGame } from "@/components/GamePicker";
 import { FormMessage } from "@/components/ui";
+import { RichTextArea } from "@/components/RichTextArea";
+import { RichText } from "@/components/RichText";
 
 export function ThreadForm({
   sections,
@@ -34,7 +36,7 @@ export function ThreadForm({
       <GamePicker name="gameId" label="Game (optional)" initial={initialGame} />
       <div>
         <label htmlFor="t-body" className="label">Post</label>
-        <textarea id="t-body" name="body" required minLength={2} maxLength={10_000} rows={10} className="input" />
+        <RichTextArea id="t-body" name="body" required minLength={2} maxLength={10_000} rows={10} className="input" />
       </div>
       <FormMessage state={state} />
       <SubmitButton pendingText="Posting…">Post thread</SubmitButton>
@@ -48,7 +50,7 @@ export function ReplyForm({ threadId }: { threadId: string }) {
     <form {...form} className="space-y-3">
       <input type="hidden" name="threadId" value={threadId} />
       <label htmlFor="reply" className="label">Reply</label>
-      <textarea id="reply" name="body" required minLength={2} maxLength={10_000} rows={6} className="input" />
+      <RichTextArea id="reply" name="body" required minLength={2} maxLength={10_000} rows={6} className="input" />
       <FormMessage state={state} />
       <SubmitButton pendingText="Posting…">Post reply</SubmitButton>
     </form>
@@ -62,7 +64,7 @@ export function EditablePost({ postId, body, canEdit }: { postId: string; body: 
   if (!editing) {
     return (
       <div>
-        <div className="prose-guide break-words">{body}</div>
+        <RichText text={body} />
         {canEdit && (
           <button type="button" onClick={() => setEditing(true)} className="mt-3 text-xs text-muted hover:text-text">
             Edit
@@ -74,7 +76,7 @@ export function EditablePost({ postId, body, canEdit }: { postId: string; body: 
   return (
     <form {...form} className="space-y-2">
       <input type="hidden" name="postId" value={postId} />
-      <textarea name="body" defaultValue={body} required maxLength={10_000} rows={8} className="input" aria-label="Edit post" />
+      <RichTextArea name="body" defaultValue={body} required maxLength={10_000} rows={8} className="input" aria-label="Edit post" />
       <FormMessage state={state} />
       <div className="flex gap-2">
         <SubmitButton pendingText="Saving…">Save</SubmitButton>

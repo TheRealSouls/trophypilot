@@ -32,6 +32,7 @@ export async function GET() {
       theme: true,
       profileAccent: true,
       profileCard: true,
+      reportsFiled: { select: { targetType: true, reason: true, details: true, status: true, createdAt: true } },
       avatar: true,
       youtubeUrl: true,
       twitchUrl: true,

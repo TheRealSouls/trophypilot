@@ -25,7 +25,11 @@ import { Avatar, EmptyState, PageHeader } from "@/components/ui";
 export const metadata: Metadata = { title: "Leaderboards", description: "Global, country and friends trophy leaderboards." };
 export const dynamic = "force-dynamic";
 
-type Search = { scope?: string; period?: string; metric?: string; country?: string };
+type Search = { scope?: string; period?: string; metric?: string; country?: string; page?: string };
+
+/** Players per page. Pages beyond the first build on the cached top of the board. */
+const PER_PAGE = 50;
+const MAX_PAGES = 20;
 
 const pickKey = <T extends Record<string, string>>(obj: T, v: string | undefined, fallback: keyof T) =>
   (v && v in obj ? v : fallback) as keyof T;
@@ -51,8 +55,10 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
   const requested = sp.country?.toUpperCase();
   const country = requested && /^[A-Z]{2}$/.test(requested) ? requested : (user?.country ?? "GB");
 
-  const [rows, trackedCount, myRanks] = await Promise.all([
-    getLeaderboard({ metric, period, scope, country, viewerId: user?.id }),
+  const page = Math.min(MAX_PAGES, Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1));
+  const [board, trackedCount, myRanks] = await Promise.all([
+    // The top page × 50, cached; this page is the last 50 of it.
+    getLeaderboard({ metric, period, scope, country, viewerId: user?.id, limit: page * PER_PAGE }),
     cached(
       `boards:tracked:${scope === "country" ? country : ""}`,
       () => prisma.psnPlayer.count({ where: { hidden: false, trophiesPrivate: false, ...(scope === "country" ? { country } : {}) } }),
@@ -61,9 +67,17 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
     user ? viewerRanks(user) : null,
   ]);
   const psnTotals = usesPsnTotals({ metric, period, scope });
+  const rows = board.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  // A full board means there may be more; the tracked count says how many pages to expect.
+  const hasNext = board.length === page * PER_PAGE && page < MAX_PAGES;
+  const lastPage = psnTotals && period === "all" ? Math.min(MAX_PAGES, Math.max(page, Math.ceil(trackedCount / PER_PAGE))) : null;
+  // Ultra rares and average completion only show on their own boards.
+  const showRare = metric === "rare";
+  const showCompletion = metric === "completion";
 
   const href = (o: Partial<Record<keyof Search, string>>) => {
     const p = new URLSearchParams({ scope, period, metric, ...(scope === "country" ? { country } : {}), ...o });
+    if (p.get("page") === "1" || (!o.page && p.has("page"))) p.delete("page");
     return `/leaderboards?${p}`;
   };
 
@@ -95,6 +109,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
       {user && (
         <section className="card mb-6 p-4" aria-label="Your rank">
           {myRanks ? (
+            <>
             <dl className="grid gap-4 sm:grid-cols-3">
               <div>
                 <dt className="label">Your global rank</dt>
@@ -124,8 +139,9 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
                 <dt className="label">Your trophy points</dt>
                 <dd className="text-2xl font-bold tabular-nums">{formatNumber(myRanks.points)}</dd>
               </div>
-              <p className="text-xs text-muted sm:col-span-3">Ranked on all-time trophy points among the players TrophyPilot tracks.</p>
             </dl>
+            <p className="mt-3 text-xs text-muted">Ranked on all-time trophy points among the players TrophyPilot tracks.</p>
+            </>
           ) : (
             <p className="text-sm text-muted">
               You&apos;re not ranked yet.{" "}
@@ -189,6 +205,17 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
             </Link>
           }
         />
+      ) : rows.length === 0 && page > 1 ? (
+        <EmptyState
+          title="That's the end of this board"
+          action={
+            <Link href={href({ page: "1" })} className="btn-ghost">
+              Back to the top
+            </Link>
+          }
+        >
+          There are fewer than {formatNumber((page - 1) * PER_PAGE + 1)} players ranked here.
+        </EmptyState>
       ) : rows.length === 0 ? (
         <EmptyState title="Nobody here yet">
           {psnTotals
@@ -199,7 +226,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
         </EmptyState>
       ) : (
         <>
-          {rows.length >= 3 && (
+          {page === 1 && rows.length >= 3 && (
             <ol className="mb-6 grid gap-3 sm:grid-cols-3">
               {rows.slice(0, 3).map((r) => (
                 <li
@@ -234,9 +261,9 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
                   <Th>Level</Th>
                   <Th active={metric === "points"}>Points</Th>
                   <Th active={metric === "platinums"}>Plats</Th>
-                  <Th active={metric === "rare"}>Ultra rares</Th>
+                  {showRare && <Th active>Ultra rares</Th>}
                   <Th>Trophies</Th>
-                  {period === "all" && <Th active={metric === "completion"}>Avg %</Th>}
+                  {showCompletion && <Th active>Avg %</Th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -267,12 +294,14 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
                         {formatNumber(r.platinums)}
                       </span>
                     </Td>
-                    <Td active={metric === "rare"}>
-                      <RareCount rare={r.rare} partial={r.rarePartial} allTime={period === "all"} />
-                    </Td>
+                    {showRare && (
+                      <Td active>
+                        <RareCount rare={r.rare} partial={r.rarePartial} allTime={period === "all"} />
+                      </Td>
+                    )}
                     <Td>{formatNumber(r.trophies)}</Td>
-                    {period === "all" && (
-                      <Td active={metric === "completion"}>
+                    {showCompletion && (
+                      <Td active>
                         {r.completion != null ? (
                           `${r.completion}%`
                         ) : (
@@ -287,6 +316,28 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
               </tbody>
             </table>
           </div>
+          {(page > 1 || hasNext) && (
+            <nav className="mt-4 flex items-center justify-between gap-3 text-sm" aria-label="Leaderboard pages">
+              {page > 1 ? (
+                <Link href={href({ page: String(page - 1) })} className="btn-ghost">
+                  Previous 50
+                </Link>
+              ) : (
+                <span />
+              )}
+              <span className="text-muted">
+                Ranks {formatNumber((page - 1) * PER_PAGE + 1)} to {formatNumber((page - 1) * PER_PAGE + rows.length)}
+                {lastPage ? ` · page ${page} of ${lastPage}` : ` · page ${page}`}
+              </span>
+              {hasNext ? (
+                <Link href={href({ page: String(page + 1) })} className="btn-ghost">
+                  Next 50
+                </Link>
+              ) : (
+                <span />
+              )}
+            </nav>
+          )}
           {metric === "completion" && (
             <p className="mt-3 text-xs text-faint">Completion rankings require at least {COMPLETION_MIN_GAMES} games.</p>
           )}

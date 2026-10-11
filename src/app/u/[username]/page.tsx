@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { plainText } from "@/lib/rich-text";
+import { Suspense } from "react";
 import clsx from "clsx";
 import { prisma } from "@/lib/db";
 import { trophyHref } from "@/lib/trophy-slug";
@@ -9,7 +11,7 @@ import { flag } from "@/lib/countries";
 import { formatDate, timeAgo } from "@/lib/utils";
 import { GameArt } from "@/components/art";
 import { TrophyIcon } from "@/components/TrophyIcon";
-import { Avatar, EmptyState, ProgressBar, RarityBadge, SectionTitle, TabLinks } from "@/components/ui";
+import { Avatar, EmptyState, ProgressBar, RarityBadge, SectionTitle, Skeleton, SkeletonRows, TabLinks } from "@/components/ui";
 import { LocalTime } from "@/components/LocalTime";
 import { SpoilerName } from "@/components/client";
 import { accentClass } from "@/lib/profile-themes";
@@ -17,7 +19,10 @@ import { ProfileHeader } from "./ProfileHeader";
 import { loadProfile } from "./profile-data";
 
 type Params = { username: string };
-type Search = { tab?: string; sort?: string; platform?: string; show?: string };
+type Search = { tab?: string; sort?: string; platform?: string; show?: string; page?: string };
+
+/** Games per page on the Games tab: big libraries run to thousands. */
+const GAMES_PER_PAGE = 50;
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { username } = await params;
@@ -28,7 +33,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 
 export default async function ProfilePage({ params, searchParams }: { params: Promise<Params>; searchParams: Promise<Search> }) {
   const { username } = await params;
-  const { tab = "games", sort = "recent", platform = "", show = "" } = await searchParams;
+  const { tab = "games", sort = "recent", platform = "", show = "", page = "1" } = await searchParams;
   const { owner, viewerId, canView, relation } = await loadProfile(username);
   // The member's chosen accent colour applies to their whole profile page.
   const accent = accentClass(owner.profileAccent);
@@ -60,7 +65,10 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
   return (
     <div className={accent}>
       <ProfileHeader owner={owner} stats={stats} relation={relation} viewerId={viewerId} />
-      <TrophyVault userId={owner.id} isOwner={relation === "SELF"} />
+      {/* The header shows first; the vault and the tab stream in after it. */}
+      <Suspense fallback={<Skeleton className="mb-8 h-40 w-full" />}>
+        <TrophyVault userId={owner.id} isOwner={relation === "SELF"} />
+      </Suspense>
       {!owner.psn?.verified && relation === "SELF" && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-accent/50 bg-accent/10 px-4 py-3">
           <span className="text-sm">Link your PSN account to import your trophies.</span>
@@ -70,12 +78,23 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
       <div className="mb-6">
         <TabLinks tabs={tabs} active={tab} />
       </div>
-      {tab === "platinums" && <PlatinumTracker userId={owner.id} username={owner.username} />}
-      {tab === "log" && <TrophyLog userId={owner.id} isOwner={relation === "SELF"} />}
-      {tab === "milestones" && <Milestones userId={owner.id} stats={stats} isOwner={relation === "SELF"} />}
-      {tab === "saved" && <SavedGuides userId={owner.id} isOwner={relation === "SELF"} />}
-      {tab === "friends" && <FriendsTab userId={owner.id} />}
-      {tab === "games" && <GamesTab userId={owner.id} username={owner.username} sort={sort} platform={platform} show={show} />}
+      <Suspense key={[tab, sort, platform, show, page].join(":")} fallback={<SkeletonRows rows={6} />}>
+        {tab === "platinums" && <PlatinumTracker userId={owner.id} username={owner.username} />}
+        {tab === "log" && <TrophyLog userId={owner.id} isOwner={relation === "SELF"} />}
+        {tab === "milestones" && <Milestones userId={owner.id} stats={stats} isOwner={relation === "SELF"} />}
+        {tab === "saved" && <SavedGuides userId={owner.id} isOwner={relation === "SELF"} />}
+        {tab === "friends" && <FriendsTab userId={owner.id} />}
+        {tab === "games" && (
+          <GamesTab
+            userId={owner.id}
+            username={owner.username}
+            sort={sort}
+            platform={platform}
+            show={show}
+            page={Math.max(1, Number.parseInt(page, 10) || 1)}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }
@@ -218,7 +237,7 @@ async function SavedGuides({ userId, isOwner }: { userId: string; isOwner: boole
             <GameArt title={g.game.title} hue={g.game.coverHue} iconUrl={g.game.iconUrl} size="sm" className="w-14 self-start" />
             <div className="min-w-0">
               <div className="font-semibold">{g.title}</div>
-              <div className="line-clamp-2 text-sm text-muted">{g.summary}</div>
+              <div className="line-clamp-2 text-sm text-muted">{plainText(g.summary)}</div>
               <div className="mt-1 text-xs text-faint">
                 {g.game.title} · by {g.author.username}
               </div>
@@ -239,7 +258,21 @@ const SHOW = {
 } as const;
 const PLATFORMS = ["PS5", "PS4", "PS3", "PSVITA"];
 
-async function GamesTab({ userId, username, sort, platform, show }: { userId: string; username: string; sort: string; platform: string; show: string }) {
+async function GamesTab({
+  userId,
+  username,
+  sort,
+  platform,
+  show,
+  page,
+}: {
+  userId: string;
+  username: string;
+  sort: string;
+  platform: string;
+  show: string;
+  page: number;
+}) {
   const where = {
     userId,
     ...(PLATFORMS.includes(platform) ? { game: { platforms: { contains: platform } } } : {}),
@@ -253,17 +286,32 @@ async function GamesTab({ userId, username, sort, platform, show }: { userId: st
             ? { hasPlatinum: true, completedAt: null }
             : {}),
   };
-  const total = await prisma.userGame.count({ where: { userId } });
+  const [total, matching] = await Promise.all([prisma.userGame.count({ where: { userId } }), prisma.userGame.count({ where })]);
+  const pages = Math.max(1, Math.ceil(matching / GAMES_PER_PAGE));
   const orderBy =
     sort === "progress"
       ? [{ progress: "desc" as const }, { lastEarned: { sort: "desc" as const, nulls: "last" as const } }]
       : sort === "title"
         ? { game: { title: "asc" as const } }
         : { lastEarned: { sort: "desc" as const, nulls: "last" as const } };
+  // One page, and only what the rows show (no descriptions or screenshot lists).
   const games = await prisma.userGame.findMany({
     where,
     orderBy,
-    include: { game: { include: { _count: { select: { trophies: true } } } } },
+    skip: (Math.min(page, pages) - 1) * GAMES_PER_PAGE,
+    take: GAMES_PER_PAGE,
+    select: {
+      id: true,
+      progress: true,
+      hasPlatinum: true,
+      completedAt: true,
+      earnedCount: true,
+      earnedGold: true,
+      earnedSilver: true,
+      earnedBronze: true,
+      lastEarned: true,
+      game: { select: { slug: true, title: true, coverHue: true, iconUrl: true, platforms: true, _count: { select: { trophies: true } } } },
+    },
   });
   if (!total) return <EmptyState title="No games synced yet">Once the PSN account is synced, games show up here.</EmptyState>;
 
@@ -273,9 +321,9 @@ async function GamesTab({ userId, username, sort, platform, show }: { userId: st
     ["progress", "Percent complete"],
   ];
   // Every filter link keeps the other two choices.
-  const href = (o: { sort?: string; platform?: string; show?: string }) => {
+  const href = (o: { sort?: string; platform?: string; show?: string; page?: string }) => {
     const p = new URLSearchParams(
-      Object.entries({ sort, platform, show, ...o }).filter(([k, v]) => v && !(k === "sort" && v === "recent")) as [string, string][],
+      Object.entries({ sort, platform, show, page: undefined, ...o }).filter(([k, v]) => v && !(k === "sort" && v === "recent")) as [string, string][],
     );
     const q = p.toString();
     return `/u/${username}${q ? `?${q}` : ""}`;
@@ -308,7 +356,7 @@ async function GamesTab({ userId, username, sort, platform, show }: { userId: st
             </Link>
           ))}
           <span className="ml-auto text-xs text-muted">
-            {games.length} of {total} games
+            {matching === total ? `${total} games` : `${matching} of ${total} games`}
           </span>
         </div>
       </div>
@@ -348,6 +396,27 @@ async function GamesTab({ userId, username, sort, platform, show }: { userId: st
           </li>
         ))}
       </ul>
+      {pages > 1 && (
+        <nav className="mt-6 flex items-center justify-between border-t border-line pt-4 text-sm" aria-label="Games pages">
+          {page > 1 ? (
+            <Link href={href({ page: String(page - 1) })} scroll={false} className="btn-ghost">
+              Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-muted">
+            Page {Math.min(page, pages)} of {pages}
+          </span>
+          {page < pages ? (
+            <Link href={href({ page: String(page + 1) })} scroll={false} className="btn-ghost">
+              Next
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
+      )}
     </div>
   );
 }

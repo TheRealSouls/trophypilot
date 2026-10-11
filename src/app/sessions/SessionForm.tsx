@@ -5,6 +5,7 @@ import { createSession } from "@/actions/community";
 import { SubmitButton, useKeepValuesAction } from "@/components/client";
 import { FormMessage } from "@/components/ui";
 import { GamePicker, type PickedGame } from "@/components/GamePicker";
+import { RichTextArea } from "@/components/RichTextArea";
 
 export function SessionForm({ initialGame }: { initialGame?: PickedGame | null }) {
   const [state, form, pending] = useKeepValuesAction(createSession, null);
@@ -49,7 +50,7 @@ export function SessionForm({ initialGame }: { initialGame?: PickedGame | null }
         <label htmlFor="s-desc" className="label">
           Details
         </label>
-        <textarea id="s-desc" name="description" maxLength={500} rows={2} className="input" placeholder="Mic? Region? Plan?" />
+        <RichTextArea id="s-desc" name="description" maxLength={500} rows={2} className="input" placeholder="Mic? Region? Plan?" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>

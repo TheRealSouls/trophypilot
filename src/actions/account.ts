@@ -100,6 +100,33 @@ export async function updateLook(_: FormState, fd: FormData): Promise<FormState>
   return { ok: "Profile look saved." };
 }
 
+export type VaultTrophy = { id: string; name: string; game: string; type: string; rate: number | null };
+
+/**
+ * Searches the member's own earned trophies for the vault picker, by trophy
+ * or game name, rarest first. Empty search: their 40 rarest.
+ */
+export async function searchMyTrophies(q: string, type: string): Promise<VaultTrophy[]> {
+  const user = await requireUser();
+  const text = String(q ?? "").trim().slice(0, 80);
+  const grade = ["PLATINUM", "GOLD", "SILVER", "BRONZE"].includes(type) ? type : null;
+  const rows = await prisma.userTrophy.findMany({
+    where: {
+      userId: user.id,
+      trophy: {
+        ...(grade ? { type: grade } : {}),
+        ...(text
+          ? { OR: [{ name: { contains: text, mode: "insensitive" } }, { game: { title: { contains: text, mode: "insensitive" } } }] }
+          : {}),
+      },
+    },
+    orderBy: { trophy: { earnedRate: { sort: "asc", nulls: "last" } } },
+    take: 40,
+    select: { trophy: { select: { id: true, name: true, type: true, earnedRate: true, game: { select: { title: true } } } } },
+  });
+  return rows.map(({ trophy: t }) => ({ id: t.id, name: t.name, game: t.game.title, type: t.type, rate: t.earnedRate }));
+}
+
 /** The Trophy Vault: up to five of the member's earned trophies, shown at the top of their profile. */
 export async function updateVault(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();

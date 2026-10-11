@@ -8,6 +8,7 @@ import { SyncMyTrophies } from "./SyncMyTrophies";
 import { UserMenu } from "./UserMenu";
 
 export type Me = {
+  id: string;
   username: string;
   name: string;
   avatar: string | null;
@@ -17,6 +18,8 @@ export type Me = {
   admin: boolean;
   pending: number;
   unread: number;
+  /** Open reports, for staff. */
+  reports: number;
   theme: "light" | "dark";
 };
 
@@ -112,6 +115,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (last.current.marker !== marker() || Date.now() - last.current.at > FRESH_MS) void reload();
   }, [path, reload]);
 
+  // New messages and friend requests show up while the tab is open, without navigating.
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible" && last.current.at && Date.now() - last.current.at > 55_000) void reload();
+    }, 60_000);
+    return () => clearInterval(t);
+  }, [reload]);
+
   return <Ctx.Provider value={{ me, reload }}>{children}</Ctx.Provider>;
 }
 
@@ -133,12 +144,29 @@ export function NavAccount() {
   return (
     <>
       {me.psnVerified && <SyncMyTrophies />}
+      <Link
+        href="/messages"
+        className="btn-ghost relative px-2.5"
+        aria-label={me.unread ? `Messages, ${me.unread} unread conversation${me.unread === 1 ? "" : "s"}` : "Messages"}
+        title="Messages"
+      >
+        <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden>
+          <rect x="2.5" y="4.5" width="15" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+          <path d="m3 5.5 7 5.5 7-5.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+        </svg>
+        {me.unread > 0 && (
+          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white" aria-hidden>
+            {me.unread}
+          </span>
+        )}
+      </Link>
       <UserMenu
         avatar={<Avatar name={me.name} hue={me.avatarHue} url={me.avatarUrl} avatar={me.avatar} size={30} className="rounded-md" />}
         name={me.name}
         username={me.username}
         pending={me.pending}
         unread={me.unread}
+        reports={me.reports ?? 0}
         admin={me.admin}
         onLogout={reload}
       />

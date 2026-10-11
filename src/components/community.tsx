@@ -1,4 +1,9 @@
 import Link from "next/link";
+import { RichText } from "./RichText";
+import { ReportButton } from "./ReportButton";
+import clsx from "clsx";
+import { cardClass } from "@/lib/profile-themes";
+import { ProfileCardArt } from "./ProfileCardArt";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getFriendIds } from "@/lib/social";
@@ -12,7 +17,7 @@ import { Avatar } from "./ui";
  */
 
 const postInclude = {
-  author: { select: { id: true, username: true, avatarHue: true, avatar: true, psn: { select: { onlineId: true, avatarUrl: true } } } },
+  author: { select: { id: true, username: true, avatarHue: true, avatar: true, profileCard: true, psn: { select: { onlineId: true, avatarUrl: true } } } },
   club: { select: { name: true, slug: true } },
 } satisfies Prisma.PostInclude;
 
@@ -44,9 +49,11 @@ export function PostList({ posts, viewer, empty }: { posts: FeedPost[]; viewer: 
         const name = p.author.psn?.onlineId ?? p.author.username;
         const canDelete = viewer && (viewer.id === p.author.id || viewer.role === "ADMIN");
         return (
-          <li key={p.id} className="card flex gap-3 p-4">
-            <Avatar name={name} hue={p.author.avatarHue} url={p.author.psn?.avatarUrl} avatar={p.author.avatar} size={40} />
-            <div className="min-w-0 flex-1">
+          // Each update wears its author's profile card theme.
+          <li key={p.id} className={clsx("card relative flex gap-3 overflow-hidden p-4", cardClass(p.author.profileCard))}>
+            <ProfileCardArt card={p.author.profileCard} part="body" />
+            <Avatar name={name} hue={p.author.avatarHue} url={p.author.psn?.avatarUrl} avatar={p.author.avatar} size={40} className="relative" />
+            <div className="relative min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <Link href={`/u/${p.author.username}`} className="font-semibold hover:underline hover:underline-offset-4">
                   {name}
@@ -57,8 +64,10 @@ export function PostList({ posts, viewer, empty }: { posts: FeedPost[]; viewer: 
                   </Link>
                 )}
                 <span className="text-xs text-muted">{timeAgo(p.createdAt)}</span>
+                <span className="ml-auto" />
+                <ReportButton type="POST" id={p.id} authorId={p.author.id} what={`update by ${name}`} />
                 {canDelete && (
-                  <form action={deletePost} className="ml-auto">
+                  <form action={deletePost}>
                     <input type="hidden" name="postId" value={p.id} />
                     <ConfirmButton message="Delete this update?" className="text-xs text-muted hover:text-bad">
                       Delete
@@ -66,7 +75,7 @@ export function PostList({ posts, viewer, empty }: { posts: FeedPost[]; viewer: 
                   </form>
                 )}
               </div>
-              <p className="prose-guide mt-1 break-words">{p.body}</p>
+              <RichText text={p.body} className="mt-1" />
             </div>
           </li>
         );

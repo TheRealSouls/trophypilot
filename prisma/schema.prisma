@@ -76,6 +76,8 @@ model User {
   clubMemberships  ClubMember[]
   conversations    ConversationMember[]
   messages         Message[]
+  reportsFiled     Report[]             @relation("reportsFiled")
+  reportsResolved  Report[]             @relation("reportsResolved")
 }
 
 model PsnAccount {
@@ -266,6 +268,8 @@ model Game {
   // Trophies in the list according to PSN's game listings. When it grows past
   // what's stored (a DLC pack was added), the list is fetched again.
   definedTrophies    Int?
+  // Tracked players and members who have any list of this game, for "Most played" (refreshGamePopularity).
+  players            Int       @default(0)
   // When we last looked for sibling trophy lists (other regions/platforms) next to this one.
   siblingsProbedAt DateTime?
   // IGDB match for release date, description, genre, screenshots and trailer.
@@ -656,6 +660,8 @@ model Club {
   slug        String   @unique
   name        String
   description String   @default("")
+  // Card theme for the club's header and listing, same choices as profile cards ("" for plain).
+  theme       String   @default("")
   ownerId     String
   createdAt   DateTime @default(now())
 
@@ -725,4 +731,31 @@ model ContactSend {
 
   @@index([key, createdAt])
   @@index([createdAt])
+}
+
+// A member flagging something for staff (forum post, update, comment, tip, guide, message, profile).
+model Report {
+  id           String    @id @default(cuid())
+  reporterId   String?
+  // FORUM_POST | POST | SESSION_COMMENT | TIP | GUIDE | MESSAGE | USER | CLUB
+  targetType   String
+  targetId     String
+  // Where it is, for staff to open (a site path).
+  url          String
+  // SPAM | ABUSE | SPOILERS | INAPPROPRIATE | OTHER
+  reason       String
+  details      String?
+  // A copy of the reported text as it was, in case it's edited or deleted.
+  excerpt      String?
+  // OPEN | REMOVED (content taken down) | DISMISSED
+  status       String    @default("OPEN")
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+  resolvedById String?
+
+  reporter   User? @relation("reportsFiled", fields: [reporterId], references: [id], onDelete: SetNull)
+  resolvedBy User? @relation("reportsResolved", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
 }

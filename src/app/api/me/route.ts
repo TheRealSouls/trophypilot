@@ -14,22 +14,27 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ user: null }, { headers: { "Cache-Control": "private, no-store" } });
-  const [pending, unread] = await Promise.all([
+  const admin = isAdmin(user);
+  const [pending, unread, reports] = await Promise.all([
     prisma.friendship.count({ where: { addresseeId: user.id, status: "PENDING" } }),
     unreadConversations(user.id),
+    // Staff see how many reports are waiting.
+    admin ? prisma.report.count({ where: { status: "OPEN" } }) : 0,
   ]);
   return NextResponse.json(
     {
       user: {
+        id: user.id,
         username: user.username,
         name: user.psn?.verified ? user.psn.onlineId : user.username,
         avatar: user.avatar,
         avatarUrl: user.psn?.avatarUrl ?? null,
         avatarHue: user.avatarHue,
         psnVerified: !!user.psn?.verified,
-        admin: isAdmin(user),
+        admin,
         pending,
         unread,
+        reports,
         theme: user.theme === "dark" ? "dark" : "light",
       },
     },

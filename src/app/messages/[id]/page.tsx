@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ReportButton } from "@/components/ReportButton";
+import { RichText } from "@/components/RichText";
 import { notFound } from "next/navigation";
 import clsx from "clsx";
 import { prisma } from "@/lib/db";
@@ -9,7 +11,7 @@ import { leaveConversation } from "@/actions/messages";
 import { ConfirmButton } from "@/components/client";
 import { LocalTime } from "@/components/LocalTime";
 import { Avatar } from "@/components/ui";
-import { LiveRefresh, ReplyBox } from "../forms";
+import { LiveRefresh, ReplyBox, ScrollToEnd } from "../forms";
 
 export const metadata: Metadata = { title: "Conversation", robots: { index: false } };
 
@@ -48,14 +50,16 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
   });
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <section className="card flex flex-col" aria-label="Conversation">
       <LiveRefresh />
-      <nav className="mb-4 text-sm text-muted">
-        <Link href="/messages" className="hover:text-text">Messages</Link>
+      <nav className="border-b border-line px-4 py-2 text-sm lg:hidden">
+        <Link href="/messages" className="text-muted hover:text-text">
+          ← All conversations
+        </Link>
       </nav>
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
         <div className="min-w-0">
-          <h1 className="break-words text-2xl font-bold tracking-tight">{conversationName(c, user.id)}</h1>
+          <h2 className="break-words text-lg font-bold tracking-tight">{conversationName(c, user.id)}</h2>
           <p className="mt-1 text-sm text-muted">
             {c.isGroup ? "Group chat with " : "Private conversation with "}
             {c.members
@@ -79,7 +83,8 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
         </form>
       </header>
 
-      <ol className="mb-6 space-y-3" aria-label="Messages">
+      <ScrollToEnd count={messages.length} className="max-h-[60vh] min-h-64 overflow-y-auto px-4 py-4 sm:px-5">
+      <ol className="space-y-3" aria-label="Messages">
         {messages.map((m) => {
           const mine = m.author?.id === user.id;
           const name = m.author ? (m.author.psn?.onlineId ?? m.author.username) : "deleted user";
@@ -90,16 +95,20 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
                 <div className="mb-0.5 flex flex-wrap items-baseline gap-2 text-xs text-muted">
                   <span className="font-semibold text-text">{mine ? "You" : name}</span>
                   <LocalTime date={m.createdAt} />
+                  {!mine && m.author && <ReportButton type="MESSAGE" id={m.id} authorId={m.author.id} what={`message from ${name}`} />}
                 </div>
-                <p className="prose-guide break-words">{m.body}</p>
+                <RichText text={m.body} />
               </div>
             </li>
           );
         })}
-        {messages.length === 0 && <li className="text-sm text-muted">No messages yet.</li>}
+        {messages.length === 0 && <li className="text-sm text-muted">No messages yet. Say hello.</li>}
       </ol>
+      </ScrollToEnd>
 
-      <ReplyBox conversationId={c.id} />
-    </div>
+      <div className="border-t border-line p-3 sm:p-4">
+        <ReplyBox conversationId={c.id} />
+      </div>
+    </section>
   );
 }

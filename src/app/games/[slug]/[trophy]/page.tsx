@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { plainText } from "@/lib/rich-text";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { trophyHref } from "@/lib/trophy-slug";
@@ -125,7 +126,7 @@ export default async function TrophyPage({ params }: { params: Promise<Params> }
                       {s.guide.title} · {s.kind.toLowerCase()}
                     </Link>
                     <div className="mt-1 font-semibold">{s.title}</div>
-                    <p className="prose-guide mt-1 line-clamp-4 text-sm text-muted">{s.body}</p>
+                    <p className="mt-1 line-clamp-4 text-sm text-muted">{plainText(s.body)}</p>
                   </li>
                 ))}
               </ul>

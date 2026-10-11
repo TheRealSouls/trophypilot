@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ReportButton } from "@/components/ReportButton";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { prisma } from "@/lib/db";
@@ -159,8 +160,10 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
                 <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted">
                   <a href={`#post-${p.id}`} className="hover:text-text">{timeAgo(p.createdAt)}</a>
                   {p.editedAt && <span>· edited {timeAgo(p.editedAt)}</span>}
+                  <span className="ml-auto" />
+                  <ReportButton type="FORUM_POST" id={p.id} authorId={p.author?.id} what={`post by ${p.author?.username ?? "a deleted member"}`} />
                   {(mine || admin) && (
-                    <form action={deletePost} className="ml-auto">
+                    <form action={deletePost}>
                       <input type="hidden" name="postId" value={p.id} />
                       <ConfirmButton
                         message={p.id === firstPost?.id ? "This is the first post, so the whole thread will be deleted. Continue?" : "Delete this post?"}

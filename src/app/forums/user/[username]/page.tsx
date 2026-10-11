@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { plainText } from "@/lib/rich-text";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { reputationOf } from "@/lib/community";
@@ -110,7 +111,7 @@ export default async function ForumUserPage({ params }: { params: Promise<Params
                   <Link href={`/forums/thread/${p.thread.id}#post-${p.id}`} className="block truncate text-sm font-semibold hover:underline hover:underline-offset-4">
                     {p.thread.title}
                   </Link>
-                  <p className="line-clamp-2 text-sm text-muted">{p.body}</p>
+                  <p className="line-clamp-2 text-sm text-muted">{plainText(p.body)}</p>
                   <div className="text-xs text-faint">{timeAgo(p.createdAt)}</div>
                 </li>
               ))}

@@ -4,6 +4,8 @@ import { useActionState, useEffect, useRef } from "react";
 import { createClub, createPost } from "@/actions/social";
 import { SubmitButton } from "./client";
 import { FormMessage } from "./ui";
+import { RichTextArea } from "./RichTextArea";
+import { CardThemePicker } from "./CardThemePicker";
 
 /** Box for posting an update. `clubs` lets the member post into one of their clubs; `clubId` fixes it to one. */
 export function PostComposer({ clubs = [], clubId }: { clubs?: { id: string; name: string }[]; clubId?: string }) {
@@ -17,7 +19,7 @@ export function PostComposer({ clubs = [], clubId }: { clubs?: { id: string; nam
       <label htmlFor="post-body" className="label">
         {clubId ? "Post to the club" : "Post an update"}
       </label>
-      <textarea
+      <RichTextArea
         id="post-body"
         name="body"
         required
@@ -68,8 +70,9 @@ export function ClubForm() {
         <label htmlFor="club-description" className="label">
           What it&apos;s about
         </label>
-        <textarea id="club-description" name="description" maxLength={300} rows={3} className="input" />
+        <RichTextArea id="club-description" name="description" maxLength={300} rows={3} className="input" />
       </div>
+      <CardThemePicker legend="Club theme" />
       <FormMessage state={state} />
       <SubmitButton className="btn-primary w-full" pendingText="Creating…">
         Create club

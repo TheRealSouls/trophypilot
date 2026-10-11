@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import clsx from "clsx";
+import { cardClass } from "@/lib/profile-themes";
+import { ProfileCardArt } from "@/components/ProfileCardArt";
+import { plainText } from "@/lib/rich-text";
 import { prisma } from "@/lib/db";
 import { getSessionUserId } from "@/lib/auth";
 import { formatNumber } from "@/lib/utils";
@@ -31,12 +35,20 @@ export default async function ClubsPage() {
             <ul className="grid gap-3 sm:grid-cols-2">
               {clubs.map((c) => (
                 <li key={c.id}>
-                  <Link href={`/clubs/${c.slug}`} className="card flex h-full flex-col gap-2 p-4 hover:border-muted">
-                    <div className="flex items-start justify-between gap-2">
+                  <Link
+                    href={`/clubs/${c.slug}`}
+                    className={clsx("card relative flex h-full flex-col gap-2 overflow-hidden p-4 hover:border-muted", cardClass(c.theme), c.theme && "pt-16")}
+                  >
+                    {c.theme && (
+                      <span className="absolute inset-x-0 top-0 h-12 overflow-hidden" aria-hidden>
+                        <ProfileCardArt card={c.theme} part="banner" />
+                      </span>
+                    )}
+                    <div className="relative flex items-start justify-between gap-2">
                       <h2 className="font-semibold">{c.name}</h2>
                       {Array.isArray(c.members) && c.members.length > 0 && <span className="chip border-good/50 text-good">Joined</span>}
                     </div>
-                    {c.description && <p className="line-clamp-3 text-sm text-muted">{c.description}</p>}
+                    {c.description && <p className="line-clamp-3 text-sm text-muted">{plainText(c.description)}</p>}
                     <div className="mt-auto text-xs text-muted">
                       {formatNumber(c._count.members)} member{c._count.members === 1 ? "" : "s"} · {formatNumber(c._count.posts)} update
                       {c._count.posts === 1 ? "" : "s"}

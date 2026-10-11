@@ -25,7 +25,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     psn?.verified ? nextManualSyncAt(user.id, user.plan) : null,
     psn?.verified ? prisma.psnTitleSync.count({ where: { userId: user.id } }) : 0,
   ]);
-  const [myGames, recentGames, vaultOptions, vault] = await Promise.all([
+  const [myGames, recentGames, earnedCount, vault] = await Promise.all([
     prisma.userGame.findMany({ where: { userId: user.id }, orderBy: { game: { title: "asc" } }, select: { game: { select: { id: true, title: true } } } }),
     // Pictures for the banner and profile picture pickers: their most recently played games.
     prisma.userGame.findMany({
@@ -34,14 +34,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       take: 12,
       select: { game: { select: { id: true, slug: true, title: true, coverHue: true, iconUrl: true, screenshots: true } } },
     }),
-    // Candidates for the Trophy Vault: the member's rarest earned trophies.
-    prisma.userTrophy.findMany({
+    // Whether there's anything to pick from; the picker searches the rest itself.
+    prisma.userTrophy.count({ where: { userId: user.id } }),
+    prisma.vaultTrophy.findMany({
       where: { userId: user.id },
-      orderBy: { trophy: { earnedRate: { sort: "asc", nulls: "last" } } },
-      take: 100,
+      orderBy: { position: "asc" },
       select: { trophy: { select: { id: true, name: true, type: true, earnedRate: true, game: { select: { title: true } } } } },
     }),
-    prisma.vaultTrophy.findMany({ where: { userId: user.id }, orderBy: { position: "asc" }, select: { trophyId: true } }),
   ]);
   const demo = isDemoMode();
   const plan = planOf(user);
@@ -240,8 +239,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
         <Section id="vault" title="The Trophy Vault">
           <VaultForm
-            options={vaultOptions.map(({ trophy: t }) => ({ id: t.id, name: t.name, game: t.game.title, type: t.type, rate: t.earnedRate }))}
-            picked={vault.map((v) => v.trophyId)}
+            hasTrophies={earnedCount > 0}
+            picked={vault.map(({ trophy: t }) => ({ id: t.id, name: t.name, game: t.game.title, type: t.type, rate: t.earnedRate }))}
           />
         </Section>
 

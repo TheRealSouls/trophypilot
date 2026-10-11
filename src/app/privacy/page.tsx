@@ -44,6 +44,11 @@ export default function PrivacyPage() {
             Private messages you send and receive. They are stored so the people in the conversation can read them. We don&apos;t
             read them as a matter of course; staff may look at a conversation when someone in it reports abuse or the law requires it.
           </li>
+          <li>
+            Reports you send about posts, messages or profiles: what you reported, your reason and any details, and a copy of the
+            reported text. Only staff see them, and the person reported isn&apos;t told who reported them. When you report a
+            private message, staff see that message (and only that one).
+          </li>
           <li>Profile extras you choose to add: streaming links, a banner, a profile picture and card theme (picked from built-in art or your games; we don't take uploads), your Trophy Vault and a &quot;playing now&quot; status.</li>
           <li>
             Anything you send through the <Link href="/contact">contact form</Link>: your email, the message, and your name, username
