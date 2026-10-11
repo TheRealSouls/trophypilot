@@ -148,7 +148,7 @@ export async function siteTotals() {
 export async function gamesNeedingGuides(limit = 5) {
   const rows = await prisma.psnPlayerTitle.groupBy({
     by: ["gameId"],
-    where: { game: { guides: { none: {} } } },
+    where: { game: { guides: { none: { status: "PUBLISHED" } } } },
     _count: true,
     orderBy: { _count: { gameId: "desc" } },
     take: limit,

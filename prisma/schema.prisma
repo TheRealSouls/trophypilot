@@ -28,6 +28,10 @@ model User {
   plan               String   @default("FREE")
   // USER | ADMIN. Admins manage forum sections and moderate threads (npm run user:role).
   role               String   @default("USER")
+  // Trusted members publish guides straight away; everyone else's wait for staff approval.
+  trusted            Boolean  @default(false)
+  // The platinum they're proudest of, shown on their profile (one of their own platinum games).
+  favouritePlatinumGameId String?
   // light | dark. The site is light unless the member picks dark in Settings; it never follows the device.
   theme              String   @default("light")
   // Profile extras. The banner is artwork from one of the member's games (no uploads).
@@ -77,6 +81,8 @@ model User {
   conversations    ConversationMember[]
   messages         Message[]
   reportsFiled     Report[]             @relation("reportsFiled")
+  wishlist         WishlistGame[]
+  favouritePlatinumGame Game?           @relation("favouritePlatinum", fields: [favouritePlatinumGameId], references: [id], onDelete: SetNull)
   reportsResolved  Report[]             @relation("reportsResolved")
 }
 
@@ -287,6 +293,8 @@ model Game {
   ratings      GameRating[]
   bannerOf     User[]        @relation("banner")
   playingNow   User[]        @relation("nowPlaying")
+  favouriteOf  User[]        @relation("favouritePlatinum")
+  wishlistedBy WishlistGame[]
 
   @@index([title])
   @@index([titleKey])
@@ -396,6 +404,10 @@ model Guide {
   onlineRequired Boolean  @default(false)
   videoYoutubeId String?
   views          Int      @default(0)
+  // PUBLISHED | PENDING (waiting for staff) | REJECTED. Guides by staff and trusted members publish straight away.
+  status         String   @default("PUBLISHED")
+  // Why staff sent it back, shown to the author.
+  reviewNote     String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -406,6 +418,7 @@ model Guide {
   favourites GuideFavourite[]
 
   @@index([gameId])
+  @@index([status, createdAt])
 }
 
 model GuideStep {
@@ -662,6 +675,8 @@ model Club {
   description String   @default("")
   // Card theme for the club's header and listing, same choices as profile cards ("" for plain).
   theme       String   @default("")
+  // Club picture: "preset:<key>" (the built-in pictures) or null for its initial.
+  avatar      String?
   ownerId     String
   createdAt   DateTime @default(now())
 
@@ -758,4 +773,17 @@ model Report {
 
   @@index([status, createdAt])
   @@index([targetType, targetId])
+}
+
+// Games a member wants to play (their wishlist), shown on their profile and the game page.
+model WishlistGame {
+  userId    String
+  gameId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@id([userId, gameId])
+  @@index([gameId])
 }

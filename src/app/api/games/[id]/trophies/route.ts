@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { ensureGameTrophies } from "@/lib/psn/catalogue";
-import { getProvider, isDemoMode } from "@/lib/psn/sync";
+import { isDemoMode } from "@/lib/psn/sync";
+import { loadListFromPsn } from "@/app/games/[slug]/data";
 
 /** Trophies of one list, for guide steps, trophy-by-trophy notes and session targets. Fetches the list from PSN first if we don't have it yet. */
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -12,7 +12,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   let error: string | null = null;
   if (!isDemoMode()) {
     try {
-      await ensureGameTrophies(getProvider(), game);
+      await loadListFromPsn(game);
     } catch (err) {
       console.error("[trophies] loading list failed", err);
       error = "Couldn't load this trophy list from PSN right now. You can still publish without linking trophies.";

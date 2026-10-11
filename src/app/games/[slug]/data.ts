@@ -16,25 +16,26 @@ const query = (slug: string) =>
   });
 
 /**
- * Games imported from a PSN profile arrive without trophies. The first visit
- * fetches the list from PSN; `trophyError` is set if that fails.
+ * A game and its trophy list, from the database only, so the page never waits
+ * for PlayStation Network. Games imported from a PSN profile arrive without
+ * trophies: `needsList` tells the page to fetch the list in the browser
+ * (ListLoader), which shows the page at once and fills the list in.
  */
 export const loadGame = cache(async (slug: string) => {
   // Shared by everyone viewing the game for a minute (bust("game:<slug>") after changing it).
-  let game = await cached(`game:${slug}`, () => query(slug), { ttlMs: 60_000, tags: ["games"] });
+  const game = await cached(`game:${slug}`, () => query(slug), { ttlMs: 60_000, tags: ["games"] });
   if (!game) notFound();
-  let trophyError: string | null = null;
-  if (game.trophies.length === 0 && game.npCommunicationId && !isDemoMode()) {
-    try {
-      if (await ensureGameTrophies(getProvider(), game)) {
-        // This list and its other platforms' pages ("list not loaded") change.
-        bust(`game:${slug}`, `lists:${game.titleKey || game.id}`);
-        game = (await query(slug))!;
-      }
-    } catch (err) {
-      console.error(`[catalogue] trophy list for ${slug} failed`, err);
-      trophyError = "We couldn't load this trophy list from PlayStation Network. Refresh to try again.";
-    }
-  }
-  return { ...game, trophyError };
+  return { ...game, needsList: game.trophies.length === 0 && !!game.npCommunicationId && !isDemoMode() };
 });
+
+/**
+ * Fetches a game's trophy list from PSN if we don't have it (or it grew).
+ * Used by /api/games/[id]/trophies, which ListLoader calls.
+ */
+export async function loadListFromPsn(game: Parameters<typeof ensureGameTrophies>[1] & { slug: string; titleKey: string }) {
+  if (isDemoMode()) return false;
+  const loaded = await ensureGameTrophies(getProvider(), game);
+  // This list and its other platforms' pages ("list not loaded") change.
+  if (loaded) bust(`game:${game.slug}`, `lists:${game.titleKey || game.id}`);
+  return loaded;
+}

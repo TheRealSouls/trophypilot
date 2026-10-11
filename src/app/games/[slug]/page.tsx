@@ -21,6 +21,7 @@ import { YouTube } from "@/components/YouTube";
 import { Avatar, DifficultyMeter, Notice, ProgressBar, SectionTitle, Stat, StatGrid } from "@/components/ui";
 import { loadGame } from "./data";
 import { PlayingNowButton, RateGameForm, UnobtainableForm } from "./forms";
+import { ListLoader } from "./ListLoader";
 
 type Params = { slug: string };
 
@@ -57,7 +58,7 @@ export default async function GamePage({ params, searchParams }: { params: Promi
   const family = game.titleKey ? { game: { titleKey: game.titleKey } } : { gameId: game.id };
   const [guides, myProgress, myTrophies, players, sessions, threads, myRating, playingNow, difficultyVotes] = await Promise.all([
     // Guides written on another platform's list count for this one too.
-    prisma.guide.findMany({ where: family, orderBy: { views: "desc" }, include: { author: true } }),
+    prisma.guide.findMany({ where: { ...family, status: "PUBLISHED" }, orderBy: { views: "desc" }, include: { author: true } }),
     viewerId ? prisma.userGame.findUnique({ where: { userId_gameId: { userId: viewerId, gameId: game.id } } }) : null,
     viewerId
       ? prisma.userTrophy.findMany({ where: { userId: viewerId, trophy: { gameId: game.id } }, select: { trophyId: true, earnedAt: true } })
@@ -242,8 +243,8 @@ export default async function GamePage({ params, searchParams }: { params: Promi
               >
                 Trophy list
               </SectionTitle>
-              {game.trophyError && <Notice tone="bad">{game.trophyError}</Notice>}
-              {!game.trophyError && game.trophies.length === 0 && <p className="text-sm text-muted">No trophy list is available for this game yet.</p>}
+              {game.needsList && <ListLoader gameId={game.id} />}
+              {!game.needsList && game.trophies.length === 0 && <p className="text-sm text-muted">No trophy list is available for this game yet.</p>}
               <TrophyList gameSlug={game.slug} groups={game.groups} trophies={game.trophies} earned={earned} sort={sort as "default" | "rarity" | "type"} />
             </section>
           </SpoilerGroup>

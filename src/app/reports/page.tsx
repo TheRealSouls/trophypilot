@@ -6,6 +6,8 @@ import { requireUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/forum";
 import { REPORT_REASONS, REPORT_TYPE_NAMES, type ReportType } from "@/lib/reports";
 import { resolveReport } from "@/actions/reports";
+import { reviewGuide } from "@/actions/community";
+import { plainText } from "@/lib/rich-text";
 import { ConfirmButton, SubmitButton } from "@/components/client";
 import { LocalTime } from "@/components/LocalTime";
 import { EmptyState, PageHeader } from "@/components/ui";
@@ -34,6 +36,12 @@ export default async function ReportsPage() {
       include: { resolvedBy: { select: { username: true } } },
     }),
   ]);
+  const pendingGuides = await prisma.guide.findMany({
+    where: { status: "PENDING" },
+    orderBy: { createdAt: "asc" },
+    take: 50,
+    select: { id: true, slug: true, title: true, summary: true, createdAt: true, game: { select: { title: true } }, author: { select: { username: true } } },
+  });
   // How many people reported the same thing.
   const counts = new Map<string, number>();
   for (const r of open) counts.set(`${r.targetType}:${r.targetId}`, (counts.get(`${r.targetType}:${r.targetId}`) ?? 0) + 1);
@@ -43,6 +51,45 @@ export default async function ReportsPage() {
       <PageHeader kicker="Staff" title="Reports">
         Things members have flagged. Oldest first. Removing something closes every report about it.
       </PageHeader>
+
+      {pendingGuides.length > 0 && (
+        <section className="mb-10" aria-labelledby="pending-guides">
+          <h2 id="pending-guides" className="mb-3 text-sm font-bold uppercase tracking-wider">
+            Guides waiting for approval ({pendingGuides.length})
+          </h2>
+          <ol className="space-y-3">
+            {pendingGuides.map((g) => (
+              <li key={g.id} className="card p-4 sm:p-5">
+                <div className="flex flex-wrap items-baseline gap-2 text-sm">
+                  <Link href={`/guides/${g.slug}`} className="font-semibold underline underline-offset-2" target="_blank">
+                    {g.title}
+                  </Link>
+                  <span className="text-muted">
+                    {g.game.title} · by {g.author.username} · <LocalTime date={g.createdAt} />
+                  </span>
+                </div>
+                <p className="mt-2 line-clamp-2 text-sm text-muted">{plainText(g.summary)}</p>
+                <div className="mt-3 flex flex-wrap items-end gap-2">
+                  <form action={reviewGuide}>
+                    <input type="hidden" name="guideId" value={g.id} />
+                    <input type="hidden" name="decision" value="approve" />
+                    <SubmitButton className="btn-primary px-3 py-1.5 text-xs">Approve and publish</SubmitButton>
+                  </form>
+                  <form action={reviewGuide} className="flex flex-wrap items-end gap-2">
+                    <input type="hidden" name="guideId" value={g.id} />
+                    <input type="hidden" name="decision" value="reject" />
+                    <label className="sr-only" htmlFor={`note-${g.id}`}>
+                      Note for the author
+                    </label>
+                    <input id={`note-${g.id}`} name="note" maxLength={500} placeholder="Note for the author (optional)" className="input w-64 py-1.5 text-xs" />
+                    <SubmitButton className="btn-ghost px-3 py-1.5 text-xs">Send back</SubmitButton>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       {open.length === 0 ? (
         <EmptyState title="Nothing to review">No open reports. Nice.</EmptyState>

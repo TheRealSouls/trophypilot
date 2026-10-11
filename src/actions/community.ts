@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { slugify, youtubeId } from "@/lib/utils";
 import { refreshEstimates } from "@/lib/estimates";
+import { isAdmin } from "@/lib/forum";
 import type { FormState } from "./auth";
 
 // ─── Tips ────────────────────────────────────────────────────────────────────
@@ -86,9 +87,12 @@ export async function createGuide(_: FormState, fd: FormData): Promise<FormState
   let slug = base;
   for (let i = 2; await prisma.guide.findUnique({ where: { slug }, select: { id: true } }); i++) slug = `${base}-${i}`;
 
+  // Staff and trusted members publish straight away; other guides wait for staff to approve them.
+  const publish = isAdmin(user) || user.trusted;
   await prisma.guide.create({
     data: {
       slug,
+      status: publish ? "PUBLISHED" : "PENDING",
       gameId: game.id,
       authorId: user.id,
       title: g.title,
@@ -111,10 +115,45 @@ export async function createGuide(_: FormState, fd: FormData): Promise<FormState
       },
     },
   });
-  await refreshEstimates([game.id]);
-  revalidatePath("/guides");
-  revalidatePath("/games", "layout");
+  if (publish) {
+    await refreshEstimates([game.id]);
+    revalidatePath("/guides");
+    revalidatePath("/games", "layout");
+  }
+  revalidatePath("/reports");
   redirect(`/guides/${slug}`);
+}
+
+/** Staff approve a waiting guide, or send it back to its author with a note. */
+export async function reviewGuide(fd: FormData) {
+  const user = await requireUser("/reports");
+  if (!isAdmin(user)) return;
+  const guide = await prisma.guide.findUnique({ where: { id: String(fd.get("guideId")) }, select: { id: true, slug: true, gameId: true, status: true } });
+  if (!guide || guide.status !== "PENDING") return;
+  const approve = fd.get("decision") === "approve";
+  const note = String(fd.get("note") ?? "").trim().slice(0, 500) || null;
+  await prisma.guide.update({
+    where: { id: guide.id },
+    data: approve ? { status: "PUBLISHED", reviewNote: null, createdAt: new Date() } : { status: "REJECTED", reviewNote: note ?? "Staff didn't approve this guide." },
+  });
+  if (approve) {
+    await refreshEstimates([guide.gameId]);
+    revalidatePath("/guides");
+    revalidatePath("/games", "layout");
+    revalidatePath("/");
+  }
+  revalidatePath(`/guides/${guide.slug}`);
+  revalidatePath("/reports");
+}
+
+/** Staff let a member publish guides without approval, or take that back. */
+export async function setTrusted(fd: FormData) {
+  const user = await requireUser();
+  if (!isAdmin(user)) return;
+  const target = await prisma.user.findUnique({ where: { id: String(fd.get("userId")) }, select: { id: true, username: true } });
+  if (!target) return;
+  await prisma.user.update({ where: { id: target.id }, data: { trusted: fd.get("trusted") === "1" } });
+  revalidatePath(`/u/${target.username}`);
 }
 
 /** Saves a guide to the member's favourites, or removes it. */

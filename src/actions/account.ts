@@ -10,7 +10,8 @@ import { prisma } from "@/lib/db";
 import { destroySession, requireUser } from "@/lib/auth";
 import { COUNTRIES } from "@/lib/countries";
 import { toPsnError } from "@/lib/psn/real";
-import { getProvider, SyncCooldownError, syncUntilDone, syncUser } from "@/lib/psn/sync";
+import { checkCanSync, getProvider, syncUntilDone } from "@/lib/psn/sync";
+import { bust } from "@/lib/cache";
 import { rateLimit } from "@/lib/rate-limit";
 import { isDemoAccount } from "@/lib/demo";
 import { PROFILE_ACCENTS, PROFILE_CARDS, streamLink } from "@/lib/profile-themes";
@@ -243,28 +244,29 @@ export async function verifyPsn(_: FormState): Promise<FormState> {
   redirect("/settings?linked=1");
 }
 
+/**
+ * Starts a sync and answers at once: the checks (linked, not already running,
+ * cooldown) run first so problems show straight away, then the sync itself
+ * runs in the background. The Sync buttons follow it through /api/sync.
+ */
 export async function syncNow(_: FormState): Promise<FormState> {
   const user = await requireUser();
   try {
-    // The first run answers straight away; a big backlog carries on in the background.
-    const job = await syncUser(user.id, { trigger: "MANUAL" });
-    if (job.remaining > 0) {
-      after(() => syncUntilDone(user.id, { trigger: "IMPORT" }).catch((err) => console.error("[psn] sync failed", err)));
-    }
-    revalidatePath("/", "layout");
-    const more = job.remaining ? ` ${job.remaining} more games are importing in the background.` : "";
-    return {
-      ok:
-        (job.gamesSynced === 0 && !job.remaining
-          ? "Already up to date."
-          : job.trophiesSynced
-            ? `Synced ${job.trophiesSynced} new trophies across ${job.gamesSynced} games.`
-            : `Checked ${job.gamesSynced} games, no new trophies.`) + more,
-    };
+    await checkCanSync(user.id, "MANUAL");
   } catch (e) {
-    if (!(e instanceof SyncCooldownError)) revalidatePath("/settings");
     return { error: e instanceof Error ? e.message : "Sync failed." };
   }
+  after(async () => {
+    try {
+      await syncUntilDone(user.id, { trigger: "MANUAL" });
+    } catch (err) {
+      console.error("[psn] sync failed", err);
+    } finally {
+      bust("boards");
+      revalidatePath(`/u/${user.username}`);
+    }
+  });
+  return { ok: "Syncing your trophies…" };
 }
 
 export async function unlinkPsn() {

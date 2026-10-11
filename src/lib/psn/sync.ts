@@ -102,20 +102,29 @@ async function saveEarnRates(rates: { id: string; rate: number }[]) {
  * (a 4,500-game library is six pages from PSN). The returned job carries the
  * list it used, for the next run.
  */
-export async function syncUser(
-  userId: string,
-  { trigger = "MANUAL", titles: knownTitles }: { trigger?: SyncTrigger; titles?: PsnTitle[] } = {},
-) {
+/**
+ * The quick checks before a sync: PSN linked and verified, no sync already
+ * running, and (for a manual sync) the plan allows another one now. Throws
+ * with a message for the member; returns the account otherwise.
+ */
+export async function checkCanSync(userId: string, trigger: SyncTrigger = "MANUAL") {
   const psn = await prisma.psnAccount.findUnique({ where: { userId }, include: { user: { select: { plan: true } } } });
   if (!psn?.verified || !psn.accountId) throw new Error("Link and verify your PSN account first.");
-  const accountId = psn.accountId;
-
   const running = await prisma.syncJob.findFirst({ where: { userId, status: "RUNNING" }, orderBy: { startedAt: "desc" } });
   if (running && Date.now() - running.startedAt.getTime() < 10 * 60_000) throw new Error("A sync is already running.");
   if (trigger === "MANUAL") {
     const at = await nextManualSyncAt(userId, psn.user.plan);
     if (at) throw new SyncCooldownError(`You can sync again in ${durationText(at.getTime() - Date.now())}.`);
   }
+  return { ...psn, accountId: psn.accountId };
+}
+
+export async function syncUser(
+  userId: string,
+  { trigger = "MANUAL", titles: knownTitles }: { trigger?: SyncTrigger; titles?: PsnTitle[] } = {},
+) {
+  const psn = await checkCanSync(userId, trigger);
+  const accountId = psn.accountId;
 
   const provider = getProvider();
   const job = await prisma.syncJob.create({ data: { userId, provider: provider.name, trigger } });

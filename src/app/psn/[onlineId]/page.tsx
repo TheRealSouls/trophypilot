@@ -71,6 +71,12 @@ export default async function PsnProfilePage({
     );
   }
 
+  // When we've seen this player before, their games start loading alongside the profile instead of after it.
+  const known = await prisma.psnPlayer.findFirst({
+    where: { onlineId: { equals: onlineId, mode: "insensitive" } },
+    select: { accountId: true },
+  });
+  const titlesEarly = known ? getPsnTitles(known.accountId, { limit: PER_PAGE, offset: (page - 1) * PER_PAGE }) : null;
   const res = await getPsnProfile(onlineId);
   if (!res.ok) {
     return (
@@ -152,7 +158,12 @@ export default async function PsnProfilePage({
           </SkeletonRegion>
         }
       >
-        <TitleList accountId={p.accountId} onlineId={p.onlineId} page={page} />
+        <TitleList
+          accountId={p.accountId}
+          onlineId={p.onlineId}
+          page={page}
+          early={known?.accountId === p.accountId ? titlesEarly : null}
+        />
       </Suspense>
     </div>
   );
@@ -209,8 +220,19 @@ function Header({ profile: p }: { profile: PsnPublicProfile }) {
   );
 }
 
-async function TitleList({ accountId, onlineId, page }: { accountId: string; onlineId: string; page: number }) {
-  const res = await getPsnTitles(accountId, { limit: PER_PAGE, offset: (page - 1) * PER_PAGE });
+async function TitleList({
+  accountId,
+  onlineId,
+  page,
+  early,
+}: {
+  accountId: string;
+  onlineId: string;
+  page: number;
+  /** The same request, already started alongside the profile. */
+  early: ReturnType<typeof getPsnTitles> | null;
+}) {
+  const res = await (early ?? getPsnTitles(accountId, { limit: PER_PAGE, offset: (page - 1) * PER_PAGE }));
   if (!res.ok) {
     if (res.kind === "private")
       return (

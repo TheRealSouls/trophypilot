@@ -7,7 +7,8 @@ export async function GET(req: NextRequest) {
   if (q.length < 2) return NextResponse.json({ games: [] });
   const games = await prisma.game.findMany({
     where: { title: { contains: q, mode: "insensitive" } },
-    orderBy: [{ userGames: { _count: "desc" } }, { title: "asc" }, { npServiceName: "desc" }],
+    // The stored player count, so typing doesn't make the database count players for every match.
+    orderBy: [{ players: "desc" }, { title: "asc" }, { npServiceName: "desc" }],
     take: 20,
     select: { id: true, title: true, platforms: true, iconUrl: true, npCommunicationId: true, _count: { select: { trophies: true } } },
   });

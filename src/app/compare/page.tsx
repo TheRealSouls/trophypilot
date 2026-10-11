@@ -17,8 +17,17 @@ type Search = { a?: string; b?: string; show?: string };
 type Loaded = NonNullable<Awaited<ReturnType<typeof loadUser>>>;
 type SideResult = { username: string; missing: true } | { username: string; hidden: true } | { user: Loaded; stats: UserStats };
 
-const loadUser = (username: string) =>
-  prisma.user.findUnique({ where: { username: username.trim().toLowerCase() }, include: { psn: true } });
+/** A member by their username or their PSN Online ID (people usually know the PSN one). */
+const loadUser = (name: string) =>
+  prisma.user.findFirst({
+    where: {
+      OR: [
+        { username: name.trim().toLowerCase() },
+        { psn: { verified: true, onlineId: { equals: name.trim(), mode: "insensitive" } } },
+      ],
+    },
+    include: { psn: true },
+  });
 
 async function loadSide(username: string | undefined, viewerId: string | null): Promise<SideResult | null> {
   if (!username) return null;
@@ -41,13 +50,13 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
         <label htmlFor="ca" className="label">
           Hunter
         </label>
-        <input id="ca" name="a" defaultValue={aName} required placeholder="username" className="input" />
+        <input id="ca" name="a" defaultValue={aName} required placeholder="Username or PSN ID" className="input" />
       </div>
       <div>
         <label htmlFor="cb" className="label">
           Compare with
         </label>
-        <input id="cb" name="b" defaultValue={sp.b} required placeholder="username" className="input" />
+        <input id="cb" name="b" defaultValue={sp.b} required placeholder="Username or PSN ID" className="input" />
       </div>
       <button className="btn-primary">Compare</button>
     </form>
@@ -63,7 +72,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
         {form}
         {problem && "missing" in problem && (
           <EmptyState title={`No member called ${problem.username}`}>
-            Check the username. Only members with a linked PSN account have trophies to compare.
+            Check the spelling. You can use a member's username or their PSN Online ID. Only TrophyPilot members can be compared, since we need their full trophy history.
           </EmptyState>
         )}
         {problem && "hidden" in problem && (

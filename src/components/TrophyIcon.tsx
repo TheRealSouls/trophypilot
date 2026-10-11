@@ -1,7 +1,8 @@
 import clsx from "clsx";
 
 const COLORS: Record<string, [fill: string, shade: string]> = {
-  PLATINUM: ["#c5cdd8", "#7d8899"],
+  // Platinum is a cool blue, so it reads apart from silver at a glance.
+  PLATINUM: ["#9fc4ef", "#3f6fa6"],
   GOLD: ["#d3a441", "#8f6a1f"],
   SILVER: ["#b6bcc4", "#737a84"],
   BRONZE: ["#bf7a4c", "#7a4526"],

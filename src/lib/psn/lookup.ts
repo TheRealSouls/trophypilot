@@ -77,8 +77,8 @@ const loadProfile = unstable_cache(
         levelProgress: profile.trophySummary?.progress ?? 0,
         earned: { platinum: e?.platinum ?? 0, gold: e?.gold ?? 0, silver: e?.silver ?? 0, bronze: e?.bronze ?? 0 },
       };
-      // Every profile we fetch feeds the leaderboards. This runs once per cache miss.
-      await recordPlayerQuietly(result);
+      // Every profile we fetch feeds the leaderboards (once per cache miss), without making the visitor wait for it.
+      void recordPlayerQuietly(result);
       return result;
     } catch (err) {
       if (toPsnError(err).kind === "not_found") return null;
@@ -100,12 +100,12 @@ const loadTitles = unstable_cache(
     } catch (err) {
       const e = toPsnError(err);
       if (e.kind === "private") {
-        await markTrophiesPrivate(accountId, true);
+        void markTrophiesPrivate(accountId, true);
         return "private";
       }
       throw e;
     }
-    await markTrophiesPrivate(accountId, false);
+    void markTrophiesPrivate(accountId, false);
     const titles = res.trophyTitles.map((t) => ({
       npCommunicationId: t.npCommunicationId,
       npServiceName: t.npServiceName,

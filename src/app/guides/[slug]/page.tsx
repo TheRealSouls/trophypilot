@@ -16,7 +16,7 @@ import { ShareMenu } from "@/components/ShareMenu";
 import { toggleGuideFavourite } from "@/actions/community";
 import { Tips } from "@/components/Tips";
 import { YouTube } from "@/components/YouTube";
-import { Avatar, DifficultyMeter, RarityBadge } from "@/components/ui";
+import { Avatar, DifficultyMeter, Notice, RarityBadge } from "@/components/ui";
 
 type Params = { slug: string };
 
@@ -47,9 +47,11 @@ const SECTIONS = [
 
 export default async function GuidePage({ params }: { params: Promise<Params> }) {
   const guide = await load((await params).slug);
-  await prisma.guide.update({ where: { id: guide.id }, data: { views: { increment: 1 } } });
-
   const viewerId = await getSessionUserId();
+  // A guide waiting for approval (or sent back) is only visible to its author and staff.
+  const viewerRole = viewerId ? (await prisma.user.findUnique({ where: { id: viewerId }, select: { role: true } }))?.role : null;
+  if (guide.status !== "PUBLISHED" && guide.authorId !== viewerId && viewerRole !== "ADMIN") notFound();
+  if (guide.status === "PUBLISHED") await prisma.guide.update({ where: { id: guide.id }, data: { views: { increment: 1 } } });
   const earnedIds = viewerId
     ? new Set(
         (
@@ -90,6 +92,16 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
 
   return (
     <div>
+      {guide.status === "PENDING" && (
+        <Notice tone="warn" className="mb-6">
+          This guide is waiting for staff approval. Only you and staff can see it until it&apos;s published.
+        </Notice>
+      )}
+      {guide.status === "REJECTED" && (
+        <Notice tone="bad" className="mb-6">
+          Staff didn&apos;t approve this guide{guide.reviewNote ? `: ${guide.reviewNote}` : "."}
+        </Notice>
+      )}
       <nav className="mb-4 text-sm text-muted">
         <Link href="/guides" className="hover:text-text">Guides</Link> <span className="mx-1">/</span>
         <Link href={`/games/${guide.game.slug}`} className="hover:text-text">{guide.game.title}</Link>

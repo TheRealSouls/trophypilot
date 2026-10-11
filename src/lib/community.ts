@@ -124,7 +124,7 @@ export async function reputations(userIds: string[]): Promise<Map<string, Reputa
   const [threads, posts, guides, tips, updates, sessions, upvotes] = await Promise.all([
     prisma.forumThread.groupBy({ by: ["authorId"], where, _count: { _all: true } }),
     prisma.forumPost.groupBy({ by: ["authorId"], where, _count: { _all: true } }),
-    prisma.guide.groupBy({ by: ["authorId"], where, _count: { _all: true } }),
+    prisma.guide.groupBy({ by: ["authorId"], where: { ...where, status: "PUBLISHED" }, _count: { _all: true } }),
     prisma.tip.groupBy({ by: ["authorId"], where, _count: { _all: true } }),
     prisma.post.groupBy({ by: ["authorId"], where, _count: { _all: true } }),
     prisma.session.groupBy({ by: ["hostId"], where: { hostId: { in: ids } }, _count: { _all: true } }),

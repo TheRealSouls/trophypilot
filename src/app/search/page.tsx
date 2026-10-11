@@ -72,7 +72,10 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           : [],
         want("guides")
           ? prisma.guide.findMany({
-              where: { OR: [{ title: { contains: q, mode: "insensitive" } }, { summary: { contains: q, mode: "insensitive" } }, { game: { title: { contains: q, mode: "insensitive" } } }] },
+              where: {
+                status: "PUBLISHED",
+                OR: [{ title: { contains: q, mode: "insensitive" } }, { summary: { contains: q, mode: "insensitive" } }, { game: { title: { contains: q, mode: "insensitive" } } }],
+              },
               take,
               include: { game: true, author: true },
               orderBy: { views: "desc" },

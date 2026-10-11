@@ -89,7 +89,22 @@ async function save(tokens: AuthTokensResponse, now: number) {
     expiresAt: new Date(state.expiresAt),
     refreshExpiresAt: new Date(state.refreshExpiresAt),
   };
-  await prisma.psnAuthState.upsert({ where: { id: "service" }, create: { id: "service", ...data }, update: data }).catch(() => {});
+  // Shared with other processes through the database; nobody waits for that write.
+  void prisma.psnAuthState.upsert({ where: { id: "service" }, create: { id: "service", ...data }, update: data }).catch(() => {});
+}
+
+/**
+ * Renews the PSN sign-in in the background before it runs out (called every
+ * few minutes from instrumentation.ts), so no visitor's request ever waits
+ * for a token exchange.
+ */
+export async function keepPsnSignedIn() {
+  if (!npsso()) return;
+  state ??= await loadSaved();
+  if (state && Date.now() < state.expiresAt - 15 * 60_000) return;
+  // Treat the token as spent so the next call renews it with the refresh token.
+  if (state) state = { ...state, expiresAt: 0 };
+  await psnAuth().catch((err) => console.error("[psn] renewing the sign-in failed:", toPsnError(err).message));
 }
 
 /**

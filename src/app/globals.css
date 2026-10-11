@@ -36,7 +36,7 @@
   --color-accent-hi: #b92a22;
   --color-accent-text: #c92e26;
 
-  --color-plat: #606c7b;
+  --color-plat: #3d6590;
   --color-gold: #8b640d;
   --color-silver: #656b74;
   --color-bronze: #97532a;
@@ -68,7 +68,7 @@
   --color-accent: #d8352c;
   --color-accent-hi: #b92a22;
   --color-accent-text: #ff8277;
-  --color-plat: #b8c4d3;
+  --color-plat: #a8c8f0;
   --color-gold: #e2b64f;
   --color-silver: #bcc3cc;
   --color-bronze: #e09a6c;
@@ -211,7 +211,7 @@ body {
 .pcard-arcade {
   color-scheme: dark;
   --color-bg: var(--color-surface-2);
-  --color-plat: #c9d3df;
+  --color-plat: #b3d0f2;
   --color-gold: #ecc363;
   --color-silver: #cfd5dc;
   --color-bronze: #eaa478;
@@ -266,7 +266,7 @@ body {
   --color-line: #c9dcea; --color-line-strong: #7d93a5;
   --color-text: #0e2232; --color-muted: #3a5265; --color-faint: #4a6275; --color-common: #3a5265;
   --color-accent: #1f63d6; --color-accent-hi: #184fae; --color-accent-text: #1b57be;
-  --color-plat: #56616f; --color-gold: #7f5b0b; --color-silver: #5a6069; --color-bronze: #8a4b25;
+  --color-plat: #3a6390; --color-gold: #7f5b0b; --color-silver: #5a6069; --color-bronze: #8a4b25;
   --color-ultra: #7f5b0b; --color-very: #974a18; --color-rare: #2a655e;
   --color-good: #276633; --color-bad: #a83026;
 }
@@ -425,3 +425,16 @@ body {
 }
 .rich-text .rt-spoiler * { color: transparent; }
 .rich-text .rt-spoiler-shown { border-radius: 4px; background: var(--color-surface-3); padding: 0 0.25em; }
+
+/* A member's chosen accent colour wins inside their profile card too. Dark
+   cards take the light text shade (same as dark mode), Frost the light-mode one. */
+.profile-accent-blue :is(.pcard-ember, .pcard-circuit, .pcard-ocean, .pcard-forest, .pcard-platinum, .pcard-arcade) { --color-accent: #1f63d6; --color-accent-hi: #184fae; --color-accent-text: #8ab6ff; }
+.profile-accent-green :is(.pcard-ember, .pcard-circuit, .pcard-ocean, .pcard-forest, .pcard-platinum, .pcard-arcade) { --color-accent: #1f7a3d; --color-accent-hi: #186230; --color-accent-text: #74d490; }
+.profile-accent-teal :is(.pcard-ember, .pcard-circuit, .pcard-ocean, .pcard-forest, .pcard-platinum, .pcard-arcade) { --color-accent: #0f766e; --color-accent-hi: #0b5d57; --color-accent-text: #63d1c6; }
+.profile-accent-gold :is(.pcard-ember, .pcard-circuit, .pcard-ocean, .pcard-forest, .pcard-platinum, .pcard-arcade) { --color-accent: #8a6100; --color-accent-hi: #6f4e00; --color-accent-text: #e6b94f; }
+.profile-accent-slate :is(.pcard-ember, .pcard-circuit, .pcard-ocean, .pcard-forest, .pcard-platinum, .pcard-arcade) { --color-accent: #475569; --color-accent-hi: #374252; --color-accent-text: #b6c1d1; }
+.profile-accent-blue .pcard-frost { --color-accent: #1f63d6; --color-accent-hi: #184fae; --color-accent-text: #1b57be; }
+.profile-accent-green .pcard-frost { --color-accent: #1f7a3d; --color-accent-hi: #186230; --color-accent-text: #1c6f37; }
+.profile-accent-teal .pcard-frost { --color-accent: #0f766e; --color-accent-hi: #0b5d57; --color-accent-text: #0f6b64; }
+.profile-accent-gold .pcard-frost { --color-accent: #8a6100; --color-accent-hi: #6f4e00; --color-accent-text: #7d5800; }
+.profile-accent-slate .pcard-frost { --color-accent: #475569; --color-accent-hi: #374252; --color-accent-text: #3f4c5e; }

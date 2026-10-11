@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { saveTheme, useMe } from "@/components/session";
 import { useRouter } from "next/navigation";
 import { durationText } from "@/lib/plans";
@@ -168,11 +168,29 @@ export function SyncButton({ nextAt, busy }: { nextAt: string | null; busy: bool
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, []);
+  // The sync runs in the background after the button answers: follow it until it's over.
+  const [following, setFollowing] = useState(false);
   useEffect(() => {
-    if (!busy) return;
-    const t = setInterval(() => router.refresh(), 4_000);
-    return () => clearInterval(t);
-  }, [busy, router]);
+    if (state?.ok) setFollowing(true);
+  }, [state]);
+  const seenBusy = useRef(false);
+  useEffect(() => {
+    if (busy) seenBusy.current = true;
+    else if (seenBusy.current) {
+      seenBusy.current = false;
+      setFollowing(false);
+    }
+  }, [busy]);
+  useEffect(() => {
+    if (!busy && !following) return;
+    const t = setInterval(() => router.refresh(), busy ? 3_000 : 1_500);
+    // Never follow for ever if the sync couldn't start.
+    const stop = setTimeout(() => setFollowing(false), 120_000);
+    return () => {
+      clearInterval(t);
+      clearTimeout(stop);
+    };
+  }, [busy, following, router]);
 
   const waitMs = nextAt ? new Date(nextAt).getTime() - now : 0;
   return (

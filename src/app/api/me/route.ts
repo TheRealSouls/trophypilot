@@ -19,7 +19,7 @@ export async function GET() {
     prisma.friendship.count({ where: { addresseeId: user.id, status: "PENDING" } }),
     unreadConversations(user.id),
     // Staff see how many reports are waiting.
-    admin ? prisma.report.count({ where: { status: "OPEN" } }) : 0,
+    admin ? prisma.report.count({ where: { status: "OPEN" } }).then(async (n) => n + (await prisma.guide.count({ where: { status: "PENDING" } }))) : 0,
   ]);
   return NextResponse.json(
     {

@@ -41,8 +41,9 @@ export async function refreshEstimates(gameIds: string[]) {
   let updated = 0;
   for (const ids of groups.values()) {
     const [guides, ratings] = await Promise.all([
+      // Only published guides count; ones waiting for approval don't move the numbers yet.
       prisma.guide.findMany({
-        where: { gameId: { in: ids } },
+        where: { gameId: { in: ids }, status: "PUBLISHED" },
         select: { difficulty: true, hoursEstimate: true, playthroughs: true },
       }),
       prisma.gameRating.findMany({ where: { gameId: { in: ids } }, select: { difficulty: true, rating: true } }),

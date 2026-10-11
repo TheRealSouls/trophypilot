@@ -60,7 +60,7 @@ export default async function Home() {
       include: { user: { include: { psn: true } }, trophy: { include: { game: true } } },
     }),
     getLeaderboard({ metric: "points", period: "weekly", scope: "global", limit: 5 }),
-    prisma.guide.findMany({ orderBy: { createdAt: "desc" }, take: 4, include: { game: true, author: true } }),
+    prisma.guide.findMany({ where: { status: "PUBLISHED" }, orderBy: { createdAt: "desc" }, take: 4, include: { game: true, author: true } }),
     trendingGameIds(monthAgo, 24),
     gamesNeedingGuides(5),
     newTrophyLists(8),
