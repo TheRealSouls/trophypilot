@@ -89,6 +89,26 @@ export const RichTextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttribut
     const href = /^https?:\/\//i.test(url) ? url : `https://${url}`;
     wrap("[", `](${href})`, "link text");
   };
+  const addImage = () => {
+    const url = window.prompt("Picture link (https://… ending in .png, .jpg, .gif or .webp)");
+    if (!url) return;
+    const alt = window.prompt("Describe the picture for people who can't see it (optional)") ?? "";
+    const t = el();
+    const before = t.value.slice(0, t.selectionStart);
+    const pad = before && !before.endsWith("\n") ? "\n" : "";
+    insert(`${pad}![${alt.replace(/[\[\]]/g, "")}](${url.trim()})\n`);
+  };
+  const centre = () => {
+    const t = el();
+    const { selectionStart: s, selectionEnd: e, value } = t;
+    const start = value.lastIndexOf("\n", s - 1) + 1;
+    const endNl = value.indexOf("\n", e);
+    const end = endNl === -1 ? value.length : endNl;
+    const lines = value.slice(start, end).split("\n");
+    const allCentred = lines.every((l) => /^->.*<-$/.test(l));
+    const next = lines.map((l) => (allCentred ? l.replace(/^->\s*(.*?)\s*<-$/, "$1") : l.trim() ? `->${l}<-` : l)).join("\n");
+    setValue(value.slice(0, start) + next + value.slice(end), start, start + next.length);
+  };
   const addVideo = () => {
     const url = window.prompt("YouTube link");
     if (!url) return;
@@ -173,6 +193,11 @@ export const RichTextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttribut
             </div>
           )}
         </div>
+        <button type="button" className={tool} onClick={centre} aria-label="Centre" title="Centre the line">
+          <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden>
+            <path d="M4 5h12M6.5 8.5h7M4 12h12M6.5 15.5h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
         <button type="button" className={tool} onClick={() => linePrefix("> ")} aria-label="Quote" title="Quote">
           <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden>
             <path d="M4 5v10M8 7h8M8 10h8M8 13h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -197,6 +222,13 @@ export const RichTextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttribut
         <button type="button" className={tool} onClick={addLink} aria-label="Link" title="Link">
           <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden>
             <path d="M8.5 11.5a3 3 0 0 0 4.2 0l2.6-2.6a3 3 0 0 0-4.2-4.2l-.9.9M11.5 8.5a3 3 0 0 0-4.2 0l-2.6 2.6a3 3 0 0 0 4.2 4.2l.9-.9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button type="button" className={tool} onClick={addImage} aria-label="Picture (link)" title="Picture from a link">
+          <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden>
+            <rect x="2.5" y="4" width="15" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <circle cx="7" cy="8.2" r="1.4" fill="currentColor" />
+            <path d="m3.5 14.5 4.5-4 3 2.5 2.5-2 3 3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
           </svg>
         </button>
         <button type="button" className={tool} onClick={addVideo} aria-label="YouTube video" title="YouTube video">

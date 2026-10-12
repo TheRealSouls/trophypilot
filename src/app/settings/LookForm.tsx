@@ -13,7 +13,7 @@ import { Avatar, FormMessage } from "@/components/ui";
 
 export type LookGame = { id: string; slug: string; title: string; coverHue: number; iconUrl: string | null; screenshots: string };
 
-export type LookValues = { profileCard: string; profileAccent: string; bannerGameId: string; avatar: string };
+export type LookValues = { profileCard: string; profileAccent: string; bannerGameId: string; avatar: string; favouritePlatinumGameId: string };
 
 const ACCENT_SWATCH: Record<string, string> = {
   "": "#dc332a",
@@ -37,7 +37,10 @@ export function LookForm({
   name,
   avatarHue,
   psnAvatarUrl,
+  platinums,
 }: {
+  /** Their platinum games, for the favourite platinum. */
+  platinums: { id: string; title: string }[];
   values: LookValues;
   /** The member's most recently played games, shown as pictures. */
   games: LookGame[];
@@ -199,6 +202,25 @@ export function LookForm({
           </div>
         )}
       </Picker>
+
+      <div>
+        <label htmlFor="fav-plat" className="label">
+          Favourite platinum
+        </label>
+        {platinums.length ? (
+          <select id="fav-plat" name="favouritePlatinumGameId" defaultValue={values.favouritePlatinumGameId} className="input max-w-md">
+            <option value="">None</option>
+            {platinums.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.title}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <p className="text-sm text-muted">Earn a platinum and you can show it off here.</p>
+        )}
+        <p className="mt-1 text-xs text-muted">Shown at the top of your profile.</p>
+      </div>
 
       <Picker legend="Accent colour" hint="Buttons, links and highlights on your profile page.">
         <div className="flex flex-wrap gap-2">

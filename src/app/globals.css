@@ -438,3 +438,9 @@ body {
 .profile-accent-teal .pcard-frost { --color-accent: #0f766e; --color-accent-hi: #0b5d57; --color-accent-text: #0f6b64; }
 .profile-accent-gold .pcard-frost { --color-accent: #8a6100; --color-accent-hi: #6f4e00; --color-accent-text: #7d5800; }
 .profile-accent-slate .pcard-frost { --color-accent: #475569; --color-accent-hi: #374252; --color-accent-text: #3f4c5e; }
+.rich-text .rt-image img {
+  max-width: 100%;
+  max-height: 480px;
+  border-radius: 8px;
+  border: 1px solid var(--color-line);
+}

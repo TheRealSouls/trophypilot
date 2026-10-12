@@ -20,7 +20,7 @@ import { TrophyIcon } from "@/components/TrophyIcon";
 import { YouTube } from "@/components/YouTube";
 import { Avatar, DifficultyMeter, Notice, ProgressBar, SectionTitle, Stat, StatGrid } from "@/components/ui";
 import { loadGame } from "./data";
-import { PlayingNowButton, RateGameForm, UnobtainableForm } from "./forms";
+import { PlayingNowButton, RateGameForm, UnobtainableForm, WishlistButton } from "./forms";
 import { ListLoader } from "./ListLoader";
 
 type Params = { slug: string };
@@ -95,6 +95,9 @@ export default async function GamePage({ params, searchParams }: { params: Promi
   const shots = parseJsonArray(game.screenshots);
   const dlcs = game.groups.filter((g) => g.isDlc);
   const iAmPlaying = playingNow.some((u) => u.id === viewerId);
+  const onWishlist = viewerId
+    ? !!(await prisma.wishlistGame.findUnique({ where: { userId_gameId: { userId: viewerId, gameId: game.id } }, select: { gameId: true } }))
+    : false;
   const unob = game.unobtainable === "PLATINUM" || game.unobtainable === "COMPLETION" ? UNOBTAINABLE[game.unobtainable] : null;
 
   // Look for this game's other trophy lists (PS5, other regions) once, after the page is sent.
@@ -162,7 +165,10 @@ export default async function GamePage({ params, searchParams }: { params: Promi
               </div>
             )}
             {viewerId && (
-              <PlayingNowButton gameId={game.id} playing={iAmPlaying} />
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                <PlayingNowButton gameId={game.id} playing={iAmPlaying} />
+                <WishlistButton gameId={game.id} wanted={onWishlist} />
+              </div>
             )}
           </div>
         </div>

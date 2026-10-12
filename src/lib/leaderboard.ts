@@ -8,9 +8,15 @@ import { levelFromPoints, ULTRA_RARE_MAX } from "./trophies";
 export const METRICS = {
   points: "Trophy points",
   platinums: "Platinums",
+  golds: "Golds",
+  silvers: "Silvers",
+  bronzes: "Bronzes",
   completion: "Avg. completion",
   rare: "Ultra rares",
 } as const;
+
+/** The boards that rank one trophy grade, and the matching column. */
+export const GRADE_METRICS = { golds: "gold", silvers: "silver", bronzes: "bronze" } as const;
 export const PERIODS = { all: "All time", weekly: "This week", monthly: "This month" } as const;
 export const SCOPES = { global: "Global", country: "Country", friends: "Friends" } as const;
 
@@ -36,6 +42,9 @@ export type LeaderboardRow = {
   level: number;
   points: number;
   platinums: number;
+  golds: number;
+  silvers: number;
+  bronzes: number;
   trophies: number;
   /** Members: from their synced trophies. Tracked players: counted list by list (see countUltraRares). */
   rare: number | null;
@@ -68,6 +77,9 @@ type MemberRaw = {
   accountId: string | null;
   points: number;
   platinums: number;
+  golds: number;
+  silvers: number;
+  bronzes: number;
   rare: number;
   trophies: number;
   completion: number;
@@ -123,6 +135,9 @@ function memberRow(m: MemberRaw, rank: number): LeaderboardRow {
     level: levelFromPoints(m.points).level,
     points: m.points,
     platinums: m.platinums,
+    golds: m.golds,
+    silvers: m.silvers,
+    bronzes: m.bronzes,
     trophies: m.trophies,
     rare: m.rare,
     rarePartial: false,
@@ -153,6 +168,9 @@ async function psnTotalsBoard(opts: Opts, members: MemberRaw[], limit: number): 
   const orderBy: Prisma.PsnPlayerOrderByWithRelationInput[] = {
     points: [{ points: "desc" }, { platinum: "desc" }],
     platinums: [{ platinum: "desc" }, { points: "desc" }],
+    golds: [{ gold: "desc" }, { points: "desc" }],
+    silvers: [{ silver: "desc" }, { points: "desc" }],
+    bronzes: [{ bronze: "desc" }, { points: "desc" }],
     rare: [{ ultraRare: { sort: "desc", nulls: "last" } }, { points: "desc" }],
     completion: [{ avgCompletion: { sort: "desc", nulls: "last" } }, { gamesPlayed: "desc" }],
   }[opts.metric] as Prisma.PsnPlayerOrderByWithRelationInput[];
@@ -211,6 +229,9 @@ async function psnTotalsBoard(opts: Opts, members: MemberRaw[], limit: number): 
       level: p.trophyLevel,
       points: p.points,
       platinums: p.platinum,
+      golds: p.gold ?? stats?.golds ?? 0,
+      silvers: p.silver ?? stats?.silvers ?? 0,
+      bronzes: p.bronze ?? stats?.bronzes ?? 0,
       trophies: p.trophies,
       // Weekly and monthly boards measure gains; a tracked player's ultra rares and completion are all-time only.
       rare: stats?.rare ?? (allTime ? (p.ultraRare ?? null) : null),
@@ -240,6 +261,9 @@ async function psnTotalsBoard(opts: Opts, members: MemberRaw[], limit: number): 
   const key = {
     points: (r: Omit<LeaderboardRow, "rank">) => [r.points, r.platinums],
     platinums: (r: Omit<LeaderboardRow, "rank">) => [r.platinums, r.points],
+    golds: (r: Omit<LeaderboardRow, "rank">) => [r.golds, r.points],
+    silvers: (r: Omit<LeaderboardRow, "rank">) => [r.silvers, r.points],
+    bronzes: (r: Omit<LeaderboardRow, "rank">) => [r.bronzes, r.points],
     rare: (r: Omit<LeaderboardRow, "rank">) => [r.rare ?? -1, r.points],
     completion: (r: Omit<LeaderboardRow, "rank">) => [r.completion ?? -1, r.games ?? 0],
   }[opts.metric];
@@ -264,6 +288,10 @@ type PlayerTotals = {
   points: number;
   platinum: number;
   trophies: number;
+  /** Known all time (Sony's totals); weekly and monthly gains don't track grades. */
+  gold?: number;
+  silver?: number;
+  bronze?: number;
   ultraRare?: number | null;
   ultraRarePending?: number | null;
   avgCompletion?: number | null;
@@ -334,6 +362,9 @@ async function memberBoard(opts: Opts & { metric: Metric; ids?: string[] }, limi
   const orderBy = {
     points: Prisma.sql`points DESC, platinums DESC`,
     platinums: Prisma.sql`platinums DESC, points DESC`,
+    golds: Prisma.sql`golds DESC, points DESC`,
+    silvers: Prisma.sql`silvers DESC, points DESC`,
+    bronzes: Prisma.sql`bronzes DESC, points DESC`,
     rare: Prisma.sql`rare DESC, points DESC`,
     completion: Prisma.sql`completion DESC, games DESC`,
   }[metric];
@@ -350,6 +381,9 @@ async function memberBoard(opts: Opts & { metric: Metric; ids?: string[] }, limi
       p."onlineId", p."avatarUrl", p."accountId",
       CAST(SUM(CASE t."type" WHEN 'PLATINUM' THEN 300 WHEN 'GOLD' THEN 90 WHEN 'SILVER' THEN 30 ELSE 15 END) AS INTEGER) AS points,
       CAST(SUM(CASE WHEN t."type" = 'PLATINUM' THEN 1 ELSE 0 END) AS INTEGER) AS platinums,
+      CAST(SUM(CASE WHEN t."type" = 'GOLD' THEN 1 ELSE 0 END) AS INTEGER) AS golds,
+      CAST(SUM(CASE WHEN t."type" = 'SILVER' THEN 1 ELSE 0 END) AS INTEGER) AS silvers,
+      CAST(SUM(CASE WHEN t."type" = 'BRONZE' THEN 1 ELSE 0 END) AS INTEGER) AS bronzes,
       CAST(SUM(CASE WHEN t."earnedRate" <= ${ULTRA_RARE_MAX} THEN 1 ELSE 0 END) AS INTEGER) AS rare,
       CAST(COUNT(*) AS INTEGER) AS trophies,
       CAST((SELECT ROUND(AVG(ug."progress")) FROM "UserGame" ug WHERE ug."userId" = u."id") AS INTEGER) AS completion,
@@ -369,6 +403,9 @@ async function memberBoard(opts: Opts & { metric: Metric; ids?: string[] }, limi
     ...r,
     points: Number(r.points),
     platinums: Number(r.platinums),
+    golds: Number(r.golds),
+    silvers: Number(r.silvers),
+    bronzes: Number(r.bronzes),
     rare: Number(r.rare),
     trophies: Number(r.trophies),
     completion: Number(r.completion ?? 0),

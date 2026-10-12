@@ -183,6 +183,13 @@ same contrast rules as the light ones.
   which become embedded videos. `src/lib/rich-text.ts` parses it and `RichText` shows it; raw HTML is never used.
 - **Reports**: a Report button on forum posts, updates, session comments, tips, guides, messages, profiles and clubs.
   Admins see open reports at `/reports` (with a count in their account menu) and can remove the content or dismiss.
+- **Guide approval**: guides from members who aren't trusted wait for staff (approve or send back with a note on
+  `/reports`). Staff mark a member "Trusted guide writer" from their profile, and their guides publish straight away.
+- **Wishlist and favourite platinum**: "Add to wishlist" on game pages (a Wishlist tab on profiles), and a favourite
+  platinum picked in Settings, Profile look, shown on the profile.
+- **Upcoming trophy lists** (`/games/upcoming`): lists nobody we track is playing yet, releasing soon or newest on PSN.
+  Staff can add any list by its id (NPWR12345_00) there, even before anyone has played it.
+- **Forum search** (`/forums/search`), club pictures, and leaderboards ranked by golds, silvers or bronzes.
 - **Reputation**: counted live from what a member contributes (threads, replies, guides, tips and their upvotes, updates,
   sessions hosted), with ranks from Newcomer to Legend and badges. Shown next to forum posts and on `/forums/user/<name>`.
 - **Profiles**: Trophy Vault (five chosen trophies), a profile card theme (Ember, Circuit, Ocean, Forest, Frost,
@@ -323,7 +330,10 @@ Render hosts the website, Neon holds the data. Both have free plans that don't n
 Without the ping, free Render sites sleep after 15 minutes without visitors and the first request afterwards takes up to
 a minute. The data is in Neon, so nothing is lost while it sleeps.
 
-**Speed.** The free plan has a tenth of a CPU, so the site avoids repeating work: the home page is built once a minute and
+**Speed.** PSN requests: DNS answers are cached and the PSN sign-in is renewed in the background
+(`src/instrumentation-node.ts`), Sync runs in the background with its progress at `/api/sync`, and pages never wait
+for PSN to load a trophy list (the browser fetches it while the page is up). The free plan has a tenth of a CPU, so the
+site also avoids repeating work: the home page is built once a minute and
 served to everyone; shared data (leaderboards, the games list, a game's details) is cached in memory for a minute or two
 and refreshed in the background (`src/lib/cache.ts`); and pages don't read the login cookie, so the navbar fills in from
 `/api/me` after the page arrives (`src/components/session.tsx`). Light or dark is applied in the browser before the

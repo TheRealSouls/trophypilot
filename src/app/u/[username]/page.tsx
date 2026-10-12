@@ -59,6 +59,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
     { key: "log", label: "Trophy log", href: `${base}?tab=log` },
     { key: "milestones", label: "Milestones", href: `${base}?tab=milestones` },
     { key: "saved", label: "Saved guides", href: `${base}?tab=saved` },
+    { key: "wishlist", label: "Wishlist", href: `${base}?tab=wishlist` },
     { key: "friends", label: "Friends", href: `${base}?tab=friends` },
   ];
 
@@ -83,6 +84,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
         {tab === "log" && <TrophyLog userId={owner.id} isOwner={relation === "SELF"} />}
         {tab === "milestones" && <Milestones userId={owner.id} stats={stats} isOwner={relation === "SELF"} />}
         {tab === "saved" && <SavedGuides userId={owner.id} isOwner={relation === "SELF"} />}
+        {tab === "wishlist" && <Wishlist userId={owner.id} isOwner={relation === "SELF"} />}
         {tab === "friends" && <FriendsTab userId={owner.id} />}
         {tab === "games" && (
           <GamesTab
@@ -211,6 +213,41 @@ async function TrophyLog({ userId, isOwner }: { userId: string; isOwner: boolean
           );
         })}
       </ol>
+    </section>
+  );
+}
+
+/** Games the member wants to play. */
+async function Wishlist({ userId, isOwner }: { userId: string; isOwner: boolean }) {
+  const games = await prisma.wishlistGame.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true, game: { select: { id: true, slug: true, title: true, platforms: true, coverHue: true, iconUrl: true } } },
+  });
+  if (!games.length)
+    return (
+      <EmptyState title="Nothing on the wishlist yet">
+        {isOwner ? "Use Add to wishlist on any game page to keep track of games you want to play." : "No games added yet."}
+      </EmptyState>
+    );
+  return (
+    <section>
+      <SectionTitle>Wants to play ({games.length})</SectionTitle>
+      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {games.map(({ game: g, createdAt }) => (
+          <li key={g.id}>
+            <Link href={`/games/${g.slug}`} className="card flex items-center gap-3 p-3 hover:border-muted">
+              <GameArt title={g.title} hue={g.coverHue} iconUrl={g.iconUrl} size="sm" className="w-12" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold">{g.title}</span>
+                <span className="block truncate text-xs text-muted">
+                  {g.platforms.split(",").join(" · ")} · added {timeAgo(createdAt)}
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

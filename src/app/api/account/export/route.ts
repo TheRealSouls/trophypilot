@@ -32,6 +32,8 @@ export async function GET() {
       theme: true,
       profileAccent: true,
       profileCard: true,
+      wishlist: { select: { createdAt: true, game: { select: { title: true } } } },
+      favouritePlatinumGame: { select: { title: true } },
       reportsFiled: { select: { targetType: true, reason: true, details: true, status: true, createdAt: true } },
       avatar: true,
       youtubeUrl: true,

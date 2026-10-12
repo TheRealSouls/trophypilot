@@ -6,7 +6,9 @@
  *   ||spoiler||  `code`  [text](https://link)  https://bare-links
  *   # Huge   ## Large   ### Medium   -# small text
  *   > quote   - bullet   1. numbered
- *   A YouTube link on a line of its own becomes an embedded video.
+ *   A YouTube link on a line of its own becomes an embedded video, and an
+ *   image link (or ![description](https://…)) on its own line shows the picture.
+ *   ->centred text<-
  *
  * Parsed into plain data here and rendered by components/RichText.tsx. Raw
  * HTML is never interpreted, so there is nothing to sanitise.
@@ -25,10 +27,23 @@ export type Block =
   | { t: "quote"; lines: Inline[][] }
   | { t: "ul" | "ol"; items: Inline[][] }
   | { t: "video"; id: string }
+  | { t: "image"; src: string; alt: string }
+  | { t: "center"; c: Inline[] }
   | { t: "pre"; v: string };
 
 const YOUTUBE =
   /^(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})(?:[?&#][^\s]*)?$/;
+
+const IMAGE_URL = /^https:\/\/[^\s<>"]+\.(?:png|jpe?g|gif|webp|avif)(?:\?[^\s<>"]*)?$/i;
+const IMAGE_MD = /^!\[([^\]\n]{0,200})\]\((https:\/\/[^\s)<>"]{1,1000})\)$/;
+
+/** A picture when the whole line is an https image link or ![description](https://…). */
+export function imageLine(s: string): { src: string; alt: string } | null {
+  const line = s.trim();
+  const md = IMAGE_MD.exec(line);
+  if (md) return { src: md[2], alt: md[1] };
+  return IMAGE_URL.test(line) ? { src: line, alt: "" } : null;
+}
 
 /** The video id when the whole string is a YouTube link. */
 export function youtubeId(s: string) {
@@ -63,6 +78,17 @@ export function parseRichText(src: string): Block[] {
     if (video) {
       flush();
       blocks.push({ t: "video", id: video });
+      continue;
+    }
+    const image = imageLine(line);
+    if (image) {
+      flush();
+      blocks.push({ t: "image", ...image });
+      continue;
+    }
+    if ((m = /^->\s*(.+?)\s*<-$/.exec(line))) {
+      flush();
+      blocks.push({ t: "center", c: parseInline(m[1]) });
       continue;
     }
     if ((m = /^(#{1,3})\s+(.+)$/.exec(line))) {
@@ -150,7 +176,7 @@ export function plainText(src: string) {
     .replace(/\r\n?/g, "\n")
     .split("\n")
     // Headings, quotes and list marks only count at the start of a line.
-    .map((l) => (youtubeId(l) ? "[video]" : l.replace(/^\s*(?:#{1,3}|-#|>|[-*•]|\d{1,3}[.)])\s+/, "")))
+    .map((l) => (youtubeId(l) ? "[video]" : imageLine(l) ? "[picture]" : l.replace(/^->\s*(.+?)\s*<-$/, "$1").replace(/^\s*(?:#{1,3}|-#|>|[-*•]|\d{1,3}[.)])\s+/, "")))
     .join(" ")
     .replace(/```/g, "")
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1")

@@ -39,6 +39,19 @@ export async function rateGame(_: FormState, fd: FormData): Promise<FormState> {
   return { ok: difficulty || rating ? "Thanks, your rating is saved." : "Rating removed." };
 }
 
+/** Adds a game to the member's wishlist, or takes it off. */
+export async function toggleWishlist(fd: FormData) {
+  const user = await requireUser();
+  const gameId = String(fd.get("gameId") ?? "");
+  const game = await prisma.game.findUnique({ where: { id: gameId }, select: { id: true, slug: true } });
+  if (!game) return;
+  const key = { userId_gameId: { userId: user.id, gameId } };
+  if (await prisma.wishlistGame.findUnique({ where: key })) await prisma.wishlistGame.delete({ where: key });
+  else await prisma.wishlistGame.create({ data: { userId: user.id, gameId } });
+  revalidatePath(`/u/${user.username}`);
+  revalidatePath(`/games/${game.slug}`);
+}
+
 /** How long "Playing now" stays up before it clears itself. */
 const PLAYING_FOR_MS = 3 * 3600_000;
 

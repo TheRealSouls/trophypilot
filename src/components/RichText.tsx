@@ -69,6 +69,20 @@ function renderBlock(b: Block, key: number): ReactNode {
           <YouTube id={b.id} title="YouTube video" />
         </div>
       );
+    case "image":
+      return (
+        <figure key={key} className="rt-image">
+          {/* Linked pictures from other sites; the description is the alt text. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={b.src} alt={b.alt} loading="lazy" referrerPolicy="no-referrer" />
+        </figure>
+      );
+    case "center":
+      return (
+        <p key={key} className="text-center">
+          {renderInline(b.c)}
+        </p>
+      );
     case "pre":
       return (
         <pre key={key}>

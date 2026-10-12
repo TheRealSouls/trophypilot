@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { FORUM_TABS, forumIndex, isAdmin } from "@/lib/forum";
 import { formatNumber, timeAgo } from "@/lib/utils";
 import { EmptyState, PageHeader, TabLinks } from "@/components/ui";
+import { ForumSearchBox } from "./ForumSearchBox";
 
 export const metadata: Metadata = { title: "Forums", description: "Talk trophies, platinums and games with other hunters." };
 
@@ -20,6 +21,8 @@ export default async function ForumsPage() {
       <div className="mb-6">
         <TabLinks tabs={FORUM_TABS} active="forums" />
       </div>
+
+      <ForumSearchBox />
 
       <div className="mb-6 flex flex-wrap gap-2">
         {sections.length > 0 && (

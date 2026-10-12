@@ -87,9 +87,16 @@ export async function updateLook(_: FormState, fd: FormData): Promise<FormState>
     avatar = icon;
   }
 
+  // Favourite platinum: one of their own platinums, or none.
+  const favId = given("favouritePlatinumGameId");
+  const fav = favId
+    ? await prisma.userGame.findFirst({ where: { userId: user.id, gameId: favId, hasPlatinum: true }, select: { gameId: true } })
+    : null;
+
   await prisma.user.update({
     where: { id: user.id },
     data: {
+      favouritePlatinumGameId: fav?.gameId ?? null,
       profileCard: card in PROFILE_CARDS ? card : "",
       profileAccent: accent in PROFILE_ACCENTS ? accent : "",
       bannerGameId: banner?.gameId ?? null,

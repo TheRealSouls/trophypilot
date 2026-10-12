@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { cached } from "@/lib/cache";
 import {
   COMPLETION_MIN_GAMES,
+  GRADE_METRICS,
   getLeaderboard,
   METRICS,
   PERIODS,
@@ -81,12 +82,17 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
     return `/leaderboards?${p}`;
   };
 
+  // The grade a golds, silvers or bronzes board ranks (its own column shows only there).
+  const grade = metric in GRADE_METRICS ? GRADE_METRICS[metric as keyof typeof GRADE_METRICS] : null;
+  const gradeCount = (r: (typeof rows)[number]) => (grade === "gold" ? r.golds : grade === "silver" ? r.silvers : r.bronzes);
   const valueOf = (r: (typeof rows)[number]) =>
     metric === "points"
       ? formatNumber(r.points)
       : metric === "platinums"
         ? formatNumber(r.platinums)
-        : metric === "rare"
+        : grade
+          ? formatNumber(gradeCount(r))
+          : metric === "rare"
           ? r.rare != null
             ? `${formatNumber(r.rare)}${r.rarePartial ? "+" : ""}`
             : "–"
@@ -261,6 +267,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
                   <Th>Level</Th>
                   <Th active={metric === "points"}>Points</Th>
                   <Th active={metric === "platinums"}>Plats</Th>
+                  {grade && <Th active>{METRICS[metric]}</Th>}
                   {showRare && <Th active>Ultra rares</Th>}
                   <Th>Trophies</Th>
                   {showCompletion && <Th active>Avg %</Th>}
@@ -294,6 +301,14 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
                         {formatNumber(r.platinums)}
                       </span>
                     </Td>
+                    {grade && (
+                      <Td active>
+                        <span className="inline-flex items-center gap-1">
+                          <TrophyIcon type={grade.toUpperCase()} size={13} />
+                          {formatNumber(gradeCount(r))}
+                        </span>
+                      </Td>
+                    )}
                     {showRare && (
                       <Td active>
                         <RareCount rare={r.rare} partial={r.rarePartial} allTime={period === "all"} />

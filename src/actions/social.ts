@@ -10,6 +10,7 @@ import { isAdmin } from "@/lib/forum";
 import { rateLimit } from "@/lib/rate-limit";
 import { slugify } from "@/lib/utils";
 import { PROFILE_CARDS } from "@/lib/profile-themes";
+import { AVATAR_PRESETS } from "@/components/avatars";
 import type { FormState } from "./auth";
 
 // ─── Follows ─────────────────────────────────────────────────────────────────
@@ -86,7 +87,10 @@ export async function setClubTheme(fd: FormData) {
   const club = await prisma.club.findUnique({ where: { id: String(fd.get("clubId")) }, select: { id: true, slug: true, ownerId: true } });
   if (!club || (club.ownerId !== me.id && me.role !== "ADMIN")) return;
   const theme = String(fd.get("theme") ?? "");
-  await prisma.club.update({ where: { id: club.id }, data: { theme: theme in PROFILE_CARDS ? theme : "" } });
+  // Club picture: one of the built-in pictures, or none (its initial).
+  const pick = String(fd.get("avatar") ?? "");
+  const avatar = pick.startsWith("preset:") && pick.slice(7) in AVATAR_PRESETS ? pick : null;
+  await prisma.club.update({ where: { id: club.id }, data: { theme: theme in PROFILE_CARDS ? theme : "", avatar } });
   revalidatePath(`/clubs/${club.slug}`);
   revalidatePath("/clubs");
 }

@@ -25,7 +25,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     psn?.verified ? nextManualSyncAt(user.id, user.plan) : null,
     psn?.verified ? prisma.psnTitleSync.count({ where: { userId: user.id } }) : 0,
   ]);
-  const [myGames, recentGames, earnedCount, vault] = await Promise.all([
+  const [myGames, recentGames, earnedCount, vault, platinumGames] = await Promise.all([
     prisma.userGame.findMany({ where: { userId: user.id }, orderBy: { game: { title: "asc" } }, select: { game: { select: { id: true, title: true } } } }),
     // Pictures for the banner and profile picture pickers: their most recently played games.
     prisma.userGame.findMany({
@@ -40,6 +40,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       where: { userId: user.id },
       orderBy: { position: "asc" },
       select: { trophy: { select: { id: true, name: true, type: true, earnedRate: true, game: { select: { title: true } } } } },
+    }),
+    prisma.userGame.findMany({
+      where: { userId: user.id, hasPlatinum: true },
+      orderBy: { game: { title: "asc" } },
+      select: { game: { select: { id: true, title: true } } },
     }),
   ]);
   const demo = isDemoMode();
@@ -215,7 +220,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               profileAccent: user.profileAccent,
               bannerGameId: user.bannerGameId ?? "",
               avatar: user.avatar ?? "",
+              favouritePlatinumGameId: user.favouritePlatinumGameId ?? "",
             }}
+            platinums={platinumGames.map((g) => g.game)}
             games={recentGames.map((g) => g.game)}
             allGames={myGames.map((g) => g.game)}
             name={user.psn?.verified ? user.psn.onlineId : user.username}

@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 import { getSessionUserId } from "@/lib/auth";
 import { formatNumber } from "@/lib/utils";
 import { ClubForm } from "@/components/community-forms";
-import { EmptyState, PageHeader } from "@/components/ui";
+import { Avatar, EmptyState, PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Clubs", description: "Groups of members around an interest: game collecting, online shooters, retro and more." };
 
@@ -45,7 +45,10 @@ export default async function ClubsPage() {
                       </span>
                     )}
                     <div className="relative flex items-start justify-between gap-2">
-                      <h2 className="font-semibold">{c.name}</h2>
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <Avatar name={c.name} hue={c.name.length * 37} avatar={c.avatar} size={36} />
+                        <h2 className="truncate font-semibold">{c.name}</h2>
+                      </span>
                       {Array.isArray(c.members) && c.members.length > 0 && <span className="chip border-good/50 text-good">Joined</span>}
                     </div>
                     {c.description && <p className="line-clamp-3 text-sm text-muted">{plainText(c.description)}</p>}

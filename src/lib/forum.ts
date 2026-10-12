@@ -66,7 +66,7 @@ export async function forumIndex() {
 /** "general-discussion", or "general-discussion-2" if taken. */
 export async function uniqueSectionSlug(base: string, exceptId?: string) {
   // These are pages of their own under /forums.
-  if (!base || ["new", "manage", "thread", "rules", "staff", "user"].includes(base)) base = `${base || "section"}-forum`;
+  if (!base || ["new", "manage", "thread", "rules", "staff", "user", "search"].includes(base)) base = `${base || "section"}-forum`;
   let slug = base;
   for (let i = 2; ; i++) {
     const hit = await prisma.forumSection.findUnique({ where: { slug }, select: { id: true } });

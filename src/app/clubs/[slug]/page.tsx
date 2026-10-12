@@ -5,6 +5,7 @@ import { cardClass } from "@/lib/profile-themes";
 import { ProfileCardArt } from "@/components/ProfileCardArt";
 import { CardThemePicker } from "@/components/CardThemePicker";
 import { ReportButton } from "@/components/ReportButton";
+import { AVATAR_PRESETS } from "@/components/avatars";
 import { RichText } from "@/components/RichText";
 import { notFound } from "next/navigation";
 import { cache } from "react";
@@ -64,6 +65,13 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
         )}
         <ProfileCardArt card={club.theme} part="body" />
         <div className="relative flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
+        <Avatar
+          name={club.name}
+          hue={club.name.length * 37}
+          avatar={club.avatar}
+          size={72}
+          className={club.theme ? "-mt-12 border-4 border-surface" : "border border-line"}
+        />
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{club.name}</h1>
           <div className="mt-2 text-muted">{club.description ? <RichText text={club.description} /> : "A club on TrophyPilot."}</div>
@@ -92,11 +100,28 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
       </section>
       {(isOwner || isAdmin(viewer)) && (
         <details className="card mb-8 p-4">
-          <summary className="cursor-pointer text-sm font-semibold">Club theme</summary>
-          <form action={setClubTheme} className="mt-4 space-y-3">
+          <summary className="cursor-pointer text-sm font-semibold">Club picture and theme</summary>
+          <form action={setClubTheme} className="mt-4 space-y-5">
             <input type="hidden" name="clubId" value={club.id} />
+            <fieldset>
+              <legend className="label">Club picture</legend>
+              <div className="flex flex-wrap gap-2">
+                {["", ...Object.keys(AVATAR_PRESETS).map((k) => `preset:${k}`)].map((v) => (
+                  <label key={v || "initial"} className="cursor-pointer">
+                    <input type="radio" name="avatar" value={v} defaultChecked={(club.avatar ?? "") === v} className="peer sr-only" />
+                    <span className="sr-only">{v ? AVATAR_PRESETS[v.slice(7)] : "The club's initial"}</span>
+                    <span
+                      aria-hidden
+                      className="block rounded-lg border-2 border-line p-0.5 peer-checked:border-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent-text"
+                    >
+                      <Avatar name={club.name} hue={club.name.length * 37} avatar={v || "letter"} size={44} />
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <CardThemePicker value={club.theme} legend="Pick a theme for the club's header" />
-            <SubmitButton className="btn-ghost">Save theme</SubmitButton>
+            <SubmitButton className="btn-ghost">Save</SubmitButton>
           </form>
         </details>
       )}

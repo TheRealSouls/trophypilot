@@ -2,7 +2,7 @@
 
 import { useActionState, useOptimistic, useState, useTransition } from "react";
 import clsx from "clsx";
-import { rateGame, setNowPlaying, setUnobtainable } from "@/actions/games";
+import { rateGame, setNowPlaying, setUnobtainable, toggleWishlist } from "@/actions/games";
 import { SubmitButton } from "@/components/client";
 import { FormMessage } from "@/components/ui";
 
@@ -149,12 +149,41 @@ export function PlayingNowButton({ gameId, playing }: { gameId: string; playing:
           await setNowPlaying(fd);
         })
       }
-      className="mt-5"
     >
       {!shown && <input type="hidden" name="gameId" value={gameId} />}
       <input type="hidden" name="from" value={gameId} />
       <button className={shown ? "btn-primary" : "btn-ghost"} aria-pressed={shown}>
         {shown ? "Playing now · stop" : "I'm playing this now"}
+      </button>
+    </form>
+  );
+}
+
+/** "Add to wishlist", for games a member wants to play. Flips at once while it saves. */
+export function WishlistButton({ gameId, wanted }: { gameId: string; wanted: boolean }) {
+  const [shown, setShown] = useOptimistic(wanted);
+  const [, startTransition] = useTransition();
+  return (
+    <form
+      action={(fd) =>
+        startTransition(async () => {
+          setShown(!shown);
+          await toggleWishlist(fd);
+        })
+      }
+    >
+      <input type="hidden" name="gameId" value={gameId} />
+      <button className="btn-ghost" aria-pressed={shown}>
+        <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden>
+          <path
+            d="M10 16.5s-6-3.6-6-8.2A3.4 3.4 0 0 1 10 6a3.4 3.4 0 0 1 6 2.3c0 4.6-6 8.2-6 8.2Z"
+            fill={shown ? "currentColor" : "none"}
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+          />
+        </svg>
+        {shown ? "On my wishlist" : "Add to wishlist"}
       </button>
     </form>
   );

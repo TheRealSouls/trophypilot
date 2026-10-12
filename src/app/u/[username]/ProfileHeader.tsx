@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { addFriend, removeFriend, respondToRequest } from "@/actions/friends";
 import { toggleFollow } from "@/actions/social";
+import { setTrusted } from "@/actions/community";
 import { prisma } from "@/lib/db";
 import { reputationOf } from "@/lib/community";
 import { COUNTRIES, flag } from "@/lib/countries";
@@ -10,8 +11,8 @@ import { ProfileCardArt } from "@/components/ProfileCardArt";
 import type { FriendState } from "@/lib/social";
 import type { UserStats } from "@/lib/stats";
 import { formatDate, formatNumber, timeAgo } from "@/lib/utils";
-import { SceneArt } from "@/components/art";
-import { TrophyCounts } from "@/components/TrophyIcon";
+import { GameArt, SceneArt } from "@/components/art";
+import { TrophyCounts, TrophyIcon } from "@/components/TrophyIcon";
 import { Avatar, LevelMeter, Stat, StatGrid } from "@/components/ui";
 import { ConfirmButton, SubmitButton } from "@/components/client";
 import { ReportButton } from "@/components/ReportButton";
@@ -34,7 +35,7 @@ export async function ProfileHeader({
   const level = psnLevel?.trophyLevel ?? stats?.level ?? 1;
   const progress = psnLevel?.levelProgress ?? stats?.progress ?? 0;
 
-  const [incoming, followers, following, iFollow, rep] = await Promise.all([
+  const [incoming, followers, following, iFollow, rep, viewer] = await Promise.all([
     relation === "INCOMING"
       ? prisma.friendship.findFirst({ where: { requesterId: owner.id, addresseeId: viewerId!, status: "PENDING" } })
       : null,
@@ -44,7 +45,9 @@ export async function ProfileHeader({
       ? prisma.follow.findUnique({ where: { followerId_followingId: { followerId: viewerId, followingId: owner.id } } })
       : null,
     reputationOf(owner.id),
+    viewerId ? prisma.user.findUnique({ where: { id: viewerId }, select: { role: true } }) : null,
   ]);
+  const staffViewing = viewer?.role === "ADMIN" && relation !== "SELF";
 
   const banner = bannerImage(owner.bannerGame);
   const card = owner.profileCard && owner.profileCard in PROFILE_CARDS ? owner.profileCard : "";
@@ -126,6 +129,11 @@ export async function ProfileHeader({
               <span className="chip">{owner.profileVisibility === "FRIENDS" ? "Friends only" : "Private"}</span>
             )}
             {owner.role === "ADMIN" && <span className="chip border-accent-text/50 text-accent-text">Staff</span>}
+            {owner.trusted && owner.role !== "ADMIN" && (
+              <span className="chip" title="Publishes guides without waiting for approval">
+                Trusted guide writer
+              </span>
+            )}
           </h1>
           <div className="mt-1 text-xs text-muted">
             @{owner.username} · joined {formatDate(owner.createdAt, { month: "short", year: "numeric" })}
@@ -142,6 +150,25 @@ export async function ProfileHeader({
             </p>
           )}
           {owner.bio && <p className="mt-3 max-w-2xl text-sm text-text/90">{owner.bio}</p>}
+          {owner.favouritePlatinumGame && (
+            <Link
+              href={`/u/${owner.username}/${owner.favouritePlatinumGame.slug}`}
+              className="mt-3 inline-flex items-center gap-2.5 rounded-lg border border-line bg-surface-2 py-1.5 pl-1.5 pr-3 text-sm hover:border-line-strong"
+            >
+              <GameArt
+                title={owner.favouritePlatinumGame.title}
+                hue={owner.favouritePlatinumGame.coverHue}
+                iconUrl={owner.favouritePlatinumGame.iconUrl}
+                size="sm"
+                className="w-8"
+              />
+              <span>
+                <span className="block text-[11px] uppercase tracking-wider text-muted">Favourite platinum</span>
+                <span className="font-semibold">{owner.favouritePlatinumGame.title}</span>
+              </span>
+              <TrophyIcon type="PLATINUM" size={18} />
+            </Link>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
             <Link href={`/forums/user/${owner.username}`} className="chip hover:text-text" title="Community reputation">
               {rep.rank} · {formatNumber(rep.points)} rep · forum profile
@@ -171,6 +198,13 @@ export async function ProfileHeader({
           )}
           {relation !== "SELF" && (
             <Link href={`/compare?b=${owner.username}`} className="btn-ghost">Compare</Link>
+          )}
+          {staffViewing && (
+            <form action={setTrusted}>
+              <input type="hidden" name="userId" value={owner.id} />
+              <input type="hidden" name="trusted" value={owner.trusted ? "0" : "1"} />
+              <SubmitButton className="btn-ghost">{owner.trusted ? "Stop trusting guides" : "Trust to publish guides"}</SubmitButton>
+            </form>
           )}
           {relation !== "SELF" && (
             <ReportButton type="USER" id={owner.id} what={`${display}'s profile`} className="self-center px-1" />

@@ -12,6 +12,7 @@ export const loadProfile = cache(async (username: string) => {
       psn: true,
       bannerGame: { select: { title: true, slug: true, coverHue: true, screenshots: true, iconUrl: true } },
       nowPlayingGame: { select: { title: true, slug: true } },
+      favouritePlatinumGame: { select: { title: true, slug: true, coverHue: true, iconUrl: true } },
     },
   });
   if (!owner) notFound();
