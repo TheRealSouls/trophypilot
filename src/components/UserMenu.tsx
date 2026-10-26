@@ -69,6 +69,7 @@ export function UserMenu({
     ["/friends", "Friends", count(pending)],
     ["/clubs", "Clubs"],
     ["/compare", "Compare hunters"],
+    ["/guides?sort=favourites", "Favourite guides"],
     ["/guides/new", "Write a guide"],
     ["/settings", "Settings and PSN"],
     ...(admin

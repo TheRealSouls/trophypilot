@@ -3,6 +3,7 @@ import Link from "next/link";
 import { plainText } from "@/lib/rich-text";
 import clsx from "clsx";
 import { prisma } from "@/lib/db";
+import { getSessionUserId } from "@/lib/auth";
 import { formatNumber, timeAgo } from "@/lib/utils";
 import { GameArt } from "@/components/art";
 import { DifficultyMeter, EmptyState, PageHeader } from "@/components/ui";
@@ -11,12 +12,16 @@ export const metadata: Metadata = { title: "Trophy Guides", description: "Commun
 
 export default async function GuidesPage({ searchParams }: { searchParams: Promise<{ q?: string; sort?: string }> }) {
   const { q, sort = "new" } = await searchParams;
-  const guides = await prisma.guide.findMany({
+  // Favourites are the signed-in member's saved guides, newest save first.
+  const favourites = sort === "favourites";
+  const viewerId = favourites ? await getSessionUserId() : null;
+  const guides = favourites && !viewerId ? [] : await prisma.guide.findMany({
     where: {
       status: "PUBLISHED",
+      ...(favourites ? { favourites: { some: { userId: viewerId! } } } : {}),
       ...(q ? { OR: [{ title: { contains: q, mode: "insensitive" } }, { game: { title: { contains: q, mode: "insensitive" } } }] } : {}),
     },
-    orderBy: sort === "new" ? { createdAt: "desc" } : sort === "easy" ? { difficulty: "asc" } : { views: "desc" },
+    orderBy: sort === "new" || favourites ? { createdAt: "desc" } : sort === "easy" ? { difficulty: "asc" } : { views: "desc" },
     include: { game: true, author: { include: { psn: true } }, _count: { select: { steps: true, tips: true } } },
   });
 
@@ -34,6 +39,7 @@ export default async function GuidesPage({ searchParams }: { searchParams: Promi
           ["new", "Newest"],
           ["popular", "Popular"],
           ["easy", "Easiest plats"],
+          ["favourites", "My favourites"],
         ].map(([k, l]) => (
           <Link key={k} href={`/guides?sort=${k}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className={clsx("chip min-h-6", sort === k && "chip-active")}>
             {l}
@@ -42,8 +48,16 @@ export default async function GuidesPage({ searchParams }: { searchParams: Promi
         <Link href="/guides/new" className="btn-primary">Write a guide</Link>
       </div>
 
-      {guides.length === 0 ? (
-        <EmptyState title="No guides found" />
+      {favourites && !viewerId ? (
+        <EmptyState title="Log in to see your favourites" action={<Link href="/login?next=/guides?sort=favourites" className="btn-primary">Log in</Link>}>
+          Save a guide with Add to favourites and it shows up here.
+        </EmptyState>
+      ) : guides.length === 0 ? (
+        favourites ? (
+          <EmptyState title="No favourites yet">Open a guide and press Add to favourites to keep it here.</EmptyState>
+        ) : (
+          <EmptyState title="No guides found" />
+        )
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {guides.map((g) => (

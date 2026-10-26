@@ -143,7 +143,7 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
                 Saved by {favouriteCount} member{favouriteCount === 1 ? "" : "s"}
               </span>
             )}
-            <ReportButton type="GUIDE" id={guide.id} authorId={guide.authorId} what="this guide" />
+            <ReportButton type="GUIDE" id={guide.id} authorId={guide.authorId} what="this guide" label="Report guide" className="btn-ghost no-underline hover:no-underline" />
           </div>
         </div>
         <GameArt title={guide.game.title} hue={guide.game.coverHue} iconUrl={guide.game.iconUrl} className="hidden w-28 md:block" />

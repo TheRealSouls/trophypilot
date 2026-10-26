@@ -1,13 +1,12 @@
 import Link from "next/link";
-import clsx from "clsx";
 import { prisma } from "@/lib/db";
 import { getSessionUserId } from "@/lib/auth";
 import { timeAgo } from "@/lib/utils";
-import { voteTip } from "@/actions/community";
 import { Avatar } from "./ui";
 import { TipForm } from "./TipForm";
 import { RichText } from "./RichText";
 import { ReportButton } from "./ReportButton";
+import { TipVotes } from "./TipVotes";
 
 /** Community tips for a trophy or a guide, sorted by score. */
 export async function Tips({ trophyId, guideId, path }: { trophyId?: string; guideId?: string; path: string }) {
@@ -30,13 +29,7 @@ export async function Tips({ trophyId, guideId, path }: { trophyId?: string; gui
       <ul className="space-y-3">
         {scored.map((t) => (
           <li key={t.id} className="card flex gap-4 p-4">
-            <div className="flex flex-col items-center gap-0.5">
-              <VoteButton tipId={t.id} value={1} active={t.mine === 1} path={path} disabled={!viewerId} />
-              <span className={clsx("text-sm font-bold tabular-nums", t.score > 0 ? "text-good" : t.score < 0 ? "text-bad" : "text-muted")}>
-                {t.score}
-              </span>
-              <VoteButton tipId={t.id} value={-1} active={t.mine === -1} path={path} disabled={!viewerId} />
-            </div>
+            <TipVotes tipId={t.id} score={t.score} mine={t.mine} path={path} signedIn={!!viewerId} />
             <div className="min-w-0 flex-1">
               <RichText text={t.body} />
               <div className="mt-2 flex items-center gap-2 text-xs text-muted">
@@ -65,23 +58,3 @@ export async function Tips({ trophyId, guideId, path }: { trophyId?: string; gui
   );
 }
 
-function VoteButton({ tipId, value, active, path, disabled }: { tipId: string; value: 1 | -1; active: boolean; path: string; disabled: boolean }) {
-  return (
-    <form action={voteTip}>
-      <input type="hidden" name="tipId" value={tipId} />
-      <input type="hidden" name="value" value={value} />
-      <input type="hidden" name="path" value={path} />
-      <button
-        disabled={disabled}
-        aria-label={value === 1 ? "Upvote" : "Downvote"}
-        aria-pressed={active}
-        className={clsx(
-          "flex h-7 w-7 items-center justify-center rounded-sm text-xs disabled:opacity-40",
-          active ? (value === 1 ? "bg-good/20 text-good" : "bg-bad/20 text-bad") : "text-muted hover:bg-surface-2 hover:text-text",
-        )}
-      >
-        {value === 1 ? "▲" : "▼"}
-      </button>
-    </form>
-  );
-}

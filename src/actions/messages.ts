@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { verifyFirst } from "@/lib/email";
+import { formText, hateSpeechError } from "@/lib/moderation";
 import { addMessage, directConversation, GROUP_MAX, MESSAGE_MAX, whyCantMessage } from "@/lib/community";
 import { rateLimit } from "@/lib/rate-limit";
 import type { FormState } from "./auth";
@@ -30,6 +31,8 @@ export async function startConversation(_: FormState, fd: FormData): Promise<For
   const me = await requireUser("/messages");
   const unverified = verifyFirst(me);
   if (unverified) return { error: unverified };
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   if (!(await rateLimit("message-start", 10, 10 * 60_000, me.id))) return { error: "You've started a lot of conversations just now. Try again in a few minutes." };
   const msg = cleanBody(fd);
   if ("error" in msg) return msg;
@@ -69,6 +72,8 @@ export async function sendMessage(_: FormState, fd: FormData): Promise<FormState
   const me = await requireUser("/messages");
   const unverified = verifyFirst(me);
   if (unverified) return { error: unverified };
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   if (!(await rateLimit("message", 30, 60_000, me.id))) return { error: "Slow down a little and try again in a minute." };
   const msg = cleanBody(fd);
   if ("error" in msg) return msg;
@@ -96,6 +101,8 @@ export async function sendDirect(_: FormState, fd: FormData): Promise<FormState>
   const me = await requireUser();
   const unverified = verifyFirst(me);
   if (unverified) return { error: unverified };
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   if (!(await rateLimit("message", 30, 60_000, me.id))) return { error: "Slow down a little and try again in a minute." };
   const msg = cleanBody(fd);
   if ("error" in msg) return msg;

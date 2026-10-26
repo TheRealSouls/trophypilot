@@ -16,6 +16,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { isDemoAccount } from "@/lib/demo";
 import { needsVerification, sendVerificationEmail } from "@/lib/email";
 import { deleteUploadsOf } from "@/lib/uploads";
+import { formText, hateSpeechError } from "@/lib/moderation";
 import { PROFILE_ACCENTS, PROFILE_CARDS, streamLink } from "@/lib/profile-themes";
 import { AVATAR_PRESETS } from "@/components/avatars";
 import { refreshEstimates } from "@/lib/estimates";
@@ -39,6 +40,8 @@ export async function resendVerification(): Promise<FormState> {
 
 export async function updateProfile(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   const bio =
     String(fd.get("bio") ?? "")
       .trim()

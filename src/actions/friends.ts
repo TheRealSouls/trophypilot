@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { verifyFirst } from "@/lib/email";
+import { formText, hateSpeechError } from "@/lib/moderation";
 import { blockBetween } from "@/lib/blocks";
 import type { FormState } from "./auth";
 
@@ -11,6 +12,8 @@ export async function sendFriendRequest(_: FormState, fd: FormData): Promise<For
   const me = await requireUser();
   const unverified = verifyFirst(me);
   if (unverified) return { error: unverified };
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   const handle = String(fd.get("username") ?? "").trim();
   if (!handle) return { error: "Enter a username or PSN ID." };
 

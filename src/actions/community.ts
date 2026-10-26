@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { verifyFirst } from "@/lib/email";
+import { formText, hateSpeechError } from "@/lib/moderation";
 import { slugify, youtubeId } from "@/lib/utils";
 import { refreshEstimates } from "@/lib/estimates";
 import { isAdmin, isStaff } from "@/lib/forum";
@@ -17,6 +18,8 @@ export async function addTip(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
   const unverified = verifyFirst(user);
   if (unverified) return { error: unverified };
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   const body = String(fd.get("body") ?? "").trim();
   const trophyId = (fd.get("trophyId") as string) || null;
   const guideId = (fd.get("guideId") as string) || null;
@@ -72,6 +75,8 @@ export async function createGuide(_: FormState, fd: FormData): Promise<FormState
   const user = await requireUser();
   const unverified = verifyFirst(user);
   if (unverified) return { error: unverified };
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   let steps: unknown;
   try {
     steps = JSON.parse(String(fd.get("steps") ?? "[]"));
@@ -188,6 +193,8 @@ export async function createSession(_: FormState, fd: FormData): Promise<FormSta
   const user = await requireUser();
   const unverified = verifyFirst(user);
   if (unverified) return { error: unverified };
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   const parsed = sessionSchema.safeParse(Object.fromEntries(fd));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   // Trophies the session is going for: only ones from the chosen game's list count.
@@ -212,6 +219,8 @@ export async function addSessionComment(_: FormState, fd: FormData): Promise<For
   const user = await requireUser();
   const unverified = verifyFirst(user);
   if (unverified) return { error: unverified };
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   const sessionId = String(fd.get("sessionId"));
   const body = String(fd.get("body") ?? "").trim();
   if (body.length < 2) return { error: "Write something first." };

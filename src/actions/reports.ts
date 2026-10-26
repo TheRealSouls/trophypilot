@@ -60,6 +60,10 @@ async function locate(type: ReportType, id: string, reporterId: string): Promise
       const c = await prisma.club.findUnique({ where: { id }, select: { slug: true, name: true, description: true } });
       return c ? { url: `/clubs/${c.slug}`, excerpt: `${c.name}: ${c.description}` } : null;
     }
+    case "SESSION": {
+      const s = await prisma.session.findUnique({ where: { id }, select: { title: true, description: true } });
+      return s ? { url: `/sessions/${id}`, excerpt: s.description ? `${s.title}: ${s.description}` : s.title } : null;
+    }
   }
 }
 
@@ -155,6 +159,10 @@ async function removeTarget(type: ReportType, id: string) {
     case "CLUB":
       await prisma.club.deleteMany({ where: { id } });
       revalidatePath("/clubs");
+      return;
+    case "SESSION":
+      await prisma.session.deleteMany({ where: { id } });
+      revalidatePath("/sessions");
       return;
     case "USER":
       return;

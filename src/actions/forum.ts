@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { verifyFirst } from "@/lib/email";
+import { formText, hateSpeechError } from "@/lib/moderation";
 import { isAdmin, isStaff, POSTS_PER_PAGE, uniqueSectionSlug } from "@/lib/forum";
 import { rateLimit } from "@/lib/rate-limit";
 import { slugify } from "@/lib/utils";
@@ -90,6 +91,8 @@ export async function createThread(_: FormState, fd: FormData): Promise<FormStat
   const user = await requireUser("/forums");
   const unverified = verifyFirst(user);
   if (unverified) return { error: unverified };
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   if (!(await rateLimit("forum-thread", 5, 10 * 60_000, user.id))) {
     return { error: "You've started a lot of threads just now. Try again in a few minutes." };
   }
@@ -122,6 +125,8 @@ export async function replyToThread(_: FormState, fd: FormData): Promise<FormSta
   const user = await requireUser("/forums");
   const unverified = verifyFirst(user);
   if (unverified) return { error: unverified };
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   if (!(await rateLimit("forum-post", 10, 60_000, user.id))) return { error: "Slow down a little and try again in a minute." };
   const threadId = String(fd.get("threadId"));
   const parsed = body.safeParse(fd.get("body"));
@@ -142,6 +147,8 @@ export async function replyToThread(_: FormState, fd: FormData): Promise<FormSta
 
 export async function editPost(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser("/forums");
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   const post = await prisma.forumPost.findUnique({ where: { id: String(fd.get("postId")) } });
   if (!post) return { error: "That post was deleted." };
   if (post.authorId !== user.id && !isStaff(user)) return { error: "You can only edit your own posts." };

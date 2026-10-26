@@ -87,6 +87,7 @@ export default async function SessionPage({ params }: { params: Promise<Params> 
             </span>
           </p>
           <TimeZoneNote className="mt-1 text-xs text-muted" />
+          <ReportButton type="SESSION" id={session.id} authorId={session.hostId} what="this session" label="Report session" className="mt-2" />
         </div>
         <div className="flex flex-col items-end gap-2">
           <span className={`chip ${full ? "border-bad/40 text-bad" : "border-good/40 text-good"}`}>

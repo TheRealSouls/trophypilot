@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { verifyFirst } from "@/lib/email";
+import { formText, hateSpeechError } from "@/lib/moderation";
 import { blockBetween } from "@/lib/blocks";
 import { clubActive } from "@/lib/idle-clubs";
 import { POST_MAX, REACTIONS } from "@/lib/community";
@@ -36,6 +37,8 @@ export async function createPost(_: FormState, fd: FormData): Promise<FormState>
   const me = await requireUser("/community");
   const unverified = verifyFirst(me);
   if (unverified) return { error: unverified };
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   if (!(await rateLimit("post", 10, 10 * 60_000, me.id))) return { error: "You've posted a lot just now. Try again in a few minutes." };
   const body = String(fd.get("body") ?? "").trim();
   if (body.length < 2) return { error: "Write something first." };
@@ -93,6 +96,8 @@ export async function createClub(_: FormState, fd: FormData): Promise<FormState>
   const me = await requireUser("/clubs");
   const unverified = verifyFirst(me);
   if (unverified) return { error: unverified };
+  const hate = hateSpeechError(...formText(fd));
+  if (hate) return { error: hate };
   if (!(await rateLimit("club", 3, 60 * 60_000, me.id))) return { error: "You've created a few clubs already. Try again later." };
   const parsed = clubSchema.safeParse(Object.fromEntries(fd));
   if (!parsed.success) return { error: parsed.error.issues[0].message };

@@ -8,6 +8,7 @@ import { createSession, destroySession } from "@/lib/auth";
 import { COUNTRIES } from "@/lib/countries";
 import { rateLimit } from "@/lib/rate-limit";
 import { emailEnabled, sendVerificationEmail } from "@/lib/email";
+import { hasHateSpeech } from "@/lib/moderation";
 import { hashString } from "@/lib/utils";
 
 export type FormState = { error?: string; ok?: string } | null;
@@ -37,6 +38,7 @@ export async function register(_: FormState, fd: FormData): Promise<FormState> {
   const parsed = registerSchema.safeParse(Object.fromEntries(fd));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const { email, username, password, country } = parsed.data;
+  if (hasHateSpeech(username)) return { error: "That username isn't allowed. Pick a different one." };
 
   const clash = await prisma.user.findFirst({ where: { OR: [{ email }, { username }] }, select: { email: true } });
   if (clash) return { error: clash.email === email ? "An account with that email already exists." : "That username is taken." };

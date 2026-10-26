@@ -15,7 +15,10 @@ export const metadata: Metadata = { title: "Compare hunters", robots: { index: f
 type Search = { a?: string; b?: string; show?: string };
 
 type Loaded = NonNullable<Awaited<ReturnType<typeof loadUser>>>;
-type SideResult = { username: string; missing: true } | { username: string; hidden: true } | { user: Loaded; stats: UserStats };
+type SideResult =
+  | { username: string; missing: true }
+  | { username: string; hidden: true }
+  | { user: Loaded; stats: UserStats; games: Awaited<ReturnType<typeof loadGames>> };
 
 /** A member by their username or their PSN Online ID (people usually know the PSN one). */
 const loadUser = (name: string) =>
@@ -29,12 +32,27 @@ const loadUser = (name: string) =>
     include: { psn: true },
   });
 
+/**
+ * Only what the game rows show. Whole game rows (descriptions, screenshots,
+ * details) for two big libraries were most of this page's load time.
+ */
+const gameRow = {
+  gameId: true,
+  progress: true,
+  hasPlatinum: true,
+  lastEarned: true,
+  game: { select: { id: true, slug: true, title: true, platforms: true, iconUrl: true, coverHue: true } },
+} as const;
+const loadGames = (userId: string) => prisma.userGame.findMany({ where: { userId }, select: gameRow });
+
 async function loadSide(username: string | undefined, viewerId: string | null): Promise<SideResult | null> {
   if (!username) return null;
   const user = await loadUser(username);
   if (!user) return { username, missing: true as const };
-  if (!(await canViewProfile(viewerId, user))) return { username: user.username, hidden: true as const };
-  return { user, stats: await getUserStats(user.id) };
+  // The privacy check, the totals and the games list all at once.
+  const [visible, stats, games] = await Promise.all([canViewProfile(viewerId, user), getUserStats(user.id), loadGames(user.id)]);
+  if (!visible) return { username: user.username, hidden: true as const };
+  return { user, stats, games };
 }
 
 export default async function ComparePage({ searchParams }: { searchParams: Promise<Search> }) {
@@ -86,10 +104,8 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   if (!("user" in a) || !("user" in b)) return null;
 
   const show = sp.show === "all" ? "all" : "shared";
-  const [aGames, bGames] = await Promise.all([
-    prisma.userGame.findMany({ where: { userId: a.user.id }, include: { game: true } }),
-    prisma.userGame.findMany({ where: { userId: b.user.id }, include: { game: true } }),
-  ]);
+  const aGames = a.games;
+  const bGames = b.games;
   const bByGame = new Map(bGames.map((g) => [g.gameId, g]));
   const aByGame = new Map(aGames.map((g) => [g.gameId, g]));
   const shared = aGames.filter((g) => bByGame.has(g.gameId));

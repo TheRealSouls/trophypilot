@@ -6,6 +6,7 @@ import { SessionProvider, THEME_BOOT } from "@/components/session";
 import { MobileNav } from "@/components/NavLinks";
 import { isDemoMode } from "@/lib/psn/sync";
 import { SITE } from "@/lib/site";
+import { StalePageNotice } from "@/components/StalePageNotice";
 import { uploadsEnabled } from "@/lib/uploads";
 import "./globals.css";
 
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to content
         </a>
         <Nav />
+        <StalePageNotice />
         <main id="main" className="mx-auto w-full max-w-7xl px-4 pb-24 pt-8 sm:px-6">
           {children}
         </main>
