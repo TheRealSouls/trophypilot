@@ -1,6 +1,6 @@
-# Render Blueprint: free web service. The data lives in a free Neon
+# Render Blueprint: free web service. The data lives in a free Supabase
 # PostgreSQL database (set DATABASE_URL when Render asks), so it survives
-# restarts and sleeping. See README, "Deploying for free (Render + Neon)".
+# restarts and sleeping.
 services:
   - type: web
     # Also the free address: https://trophypilot.onrender.com. Renaming it makes Render create a new service.
@@ -16,7 +16,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
-      # Neon connection string (direct, not pooled): postgresql://...neon.tech/neondb?sslmode=require
+      # Supabase session pooler (port 5432): postgresql://postgres.<project>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+      # The app switches itself to the transaction pooler (6543); see src/lib/db.ts.
       - key: DATABASE_URL
         sync: false
       - key: PSN_NPSSO
