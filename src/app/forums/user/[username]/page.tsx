@@ -50,7 +50,7 @@ export default async function ForumUserPage({ params }: { params: Promise<Params
         <div className="min-w-0 flex-1">
           <PageHeader title={name}>
             {rep.rank}
-            {user.role === "ADMIN" && " · Forum staff"}
+            {user.role === "ADMIN" ? " · Forum staff" : user.role === "MODERATOR" ? " · Moderator" : ""}
           </PageHeader>
         </div>
         <Link href={`/u/${user.username}`} className="btn-ghost">Trophy profile</Link>

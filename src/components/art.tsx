@@ -1,5 +1,12 @@
 import clsx from "clsx";
-import { artHue, hashString, mulberry32, secureUrl } from "@/lib/utils";
+import { artHue, hashString, mulberry32, psnImage } from "@/lib/utils";
+
+/** Roughly how wide a tile is drawn, from its Tailwind width classes (w-12 is 48px). */
+function shownWidth(className: string | undefined, size: "sm" | "md" | "lg") {
+  const widths = [...(className ?? "").matchAll(/(?:^|\s)(?:[a-z]+:)?w-(\d+)(?=\s|$)/g)].map((m) => Number(m[1]) * 4);
+  if (widths.length && !/(?:^|\s)(?:[a-z]+:)?w-full/.test(className ?? "")) return Math.max(...widths);
+  return size === "lg" ? 256 : 192;
+}
 
 /**
  * Game tile. Real PSN titles use their trophy icon; the fictional demo
@@ -23,7 +30,7 @@ export function GameArt({
       // PS4 icons are wide and PS5 icons are square, so letterbox rather than crop.
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={secureUrl(iconUrl)}
+        src={psnImage(iconUrl, shownWidth(className, size))}
         alt=""
         loading="lazy"
         referrerPolicy="no-referrer"

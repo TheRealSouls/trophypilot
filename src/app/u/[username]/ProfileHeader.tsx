@@ -5,6 +5,7 @@ import { setTrusted } from "@/actions/community";
 import { prisma } from "@/lib/db";
 import { reputationOf } from "@/lib/community";
 import { COUNTRIES, flag } from "@/lib/countries";
+import { staffTitle } from "@/lib/forum";
 import clsx from "clsx";
 import { PROFILE_CARDS, bannerImage, cardClass } from "@/lib/profile-themes";
 import { ProfileCardArt } from "@/components/ProfileCardArt";
@@ -128,8 +129,8 @@ export async function ProfileHeader({
             {owner.profileVisibility !== "PUBLIC" && (
               <span className="chip">{owner.profileVisibility === "FRIENDS" ? "Friends only" : "Private"}</span>
             )}
-            {owner.role === "ADMIN" && <span className="chip border-accent-text/50 text-accent-text">Staff</span>}
-            {owner.trusted && owner.role !== "ADMIN" && (
+            {staffTitle(owner.role) && <span className="chip border-accent-text/50 text-accent-text">{staffTitle(owner.role)}</span>}
+            {owner.trusted && !staffTitle(owner.role) && (
               <span className="chip" title="Publishes guides without waiting for approval">
                 Trusted guide writer
               </span>

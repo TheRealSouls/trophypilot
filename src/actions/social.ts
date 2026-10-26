@@ -6,7 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { POST_MAX } from "@/lib/community";
-import { isAdmin } from "@/lib/forum";
+import { isStaff } from "@/lib/forum";
 import { rateLimit } from "@/lib/rate-limit";
 import { slugify } from "@/lib/utils";
 import { PROFILE_CARDS } from "@/lib/profile-themes";
@@ -48,7 +48,7 @@ export async function createPost(_: FormState, fd: FormData): Promise<FormState>
 export async function deletePost(fd: FormData) {
   const me = await requireUser();
   const post = await prisma.post.findUnique({ where: { id: String(fd.get("postId")) } });
-  if (!post || (post.authorId !== me.id && !isAdmin(me))) return;
+  if (!post || (post.authorId !== me.id && !isStaff(me))) return;
   await prisma.post.delete({ where: { id: post.id } });
   revalidatePath("/community");
   revalidatePath("/clubs", "layout");
@@ -85,7 +85,7 @@ export async function createClub(_: FormState, fd: FormData): Promise<FormState>
 export async function setClubTheme(fd: FormData) {
   const me = await requireUser("/clubs");
   const club = await prisma.club.findUnique({ where: { id: String(fd.get("clubId")) }, select: { id: true, slug: true, ownerId: true } });
-  if (!club || (club.ownerId !== me.id && me.role !== "ADMIN")) return;
+  if (!club || (club.ownerId !== me.id && !isStaff(me))) return;
   const theme = String(fd.get("theme") ?? "");
   // Club picture: one of the built-in pictures, or none (its initial).
   const pick = String(fd.get("avatar") ?? "");
@@ -110,7 +110,7 @@ export async function toggleClubMembership(fd: FormData) {
 export async function deleteClub(fd: FormData) {
   const me = await requireUser("/clubs");
   const club = await prisma.club.findUnique({ where: { id: String(fd.get("clubId")) } });
-  if (!club || (club.ownerId !== me.id && !isAdmin(me))) return;
+  if (!club || (club.ownerId !== me.id && !isStaff(me))) return;
   await prisma.club.delete({ where: { id: club.id } });
   revalidatePath("/clubs", "layout");
   redirect("/clubs");

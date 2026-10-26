@@ -61,23 +61,45 @@ export const RichTextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttribut
     const inner = picked || placeholder;
     setValue(value.slice(0, s) + before + inner + after + value.slice(e), s + before.length, s + before.length + inner.length);
   };
-  /** Puts a mark at the start of every selected line (replacing any size or list mark already there). */
-  const linePrefix = (prefix: string | ((i: number) => string)) => {
+  /**
+   * Rewrites every line the selection touches. Each line reports how much it
+   * took off the front (cut) and put on the front (add), so the cursor stays on
+   * the same letter instead of the whole line being selected, which made the
+   * next key typed replace it (easy to miss on phones).
+   */
+  const editLines = (fn: (line: string, i: number) => { text: string; cut: number; add: number }) => {
     const t = el();
     const { selectionStart: s, selectionEnd: e, value } = t;
     const start = value.lastIndexOf("\n", s - 1) + 1;
     const endNl = value.indexOf("\n", e);
     const end = endNl === -1 ? value.length : endNl;
     const lines = value.slice(start, end).split("\n");
-    const next = lines
-      .map((l, i) => {
-        const bare = l.replace(/^(#{1,3}|-#|>|[-*•]|\d{1,3}[.)])\s+/, "");
-        const p = typeof prefix === "function" ? prefix(i) : prefix;
-        return p + bare;
-      })
-      .join("\n");
-    setValue(value.slice(0, start) + next + value.slice(end), start, start + next.length);
+    const out = lines.map(fn);
+    const next = out.map((o) => o.text).join("\n");
+    // Where a position inside line i of the old text lands in the new text.
+    const map = (pos: number) => {
+      let oldAt = start;
+      let newAt = start;
+      for (let i = 0; i < lines.length; i++) {
+        if (pos <= oldAt + lines[i].length || i === lines.length - 1) {
+          const offset = Math.max(0, pos - oldAt - out[i].cut);
+          return newAt + Math.min(out[i].add + offset, out[i].text.length);
+        }
+        oldAt += lines[i].length + 1;
+        newAt += out[i].text.length + 1;
+      }
+      return newAt;
+    };
+    const ns = map(s);
+    setValue(value.slice(0, start) + next + value.slice(end), ns, s === e ? ns : map(e));
   };
+  /** Puts a mark at the start of every selected line (replacing any size or list mark already there). */
+  const linePrefix = (prefix: string | ((i: number) => string)) =>
+    editLines((l, i) => {
+      const old = l.match(/^(#{1,3}|-#|>|[-*•]|\d{1,3}[.)])\s+/)?.[0] ?? "";
+      const p = typeof prefix === "function" ? prefix(i) : prefix;
+      return { text: p + l.slice(old.length), cut: old.length, add: p.length };
+    });
   const insert = (text: string) => {
     const t = el();
     const { selectionStart: s, selectionEnd: e, value } = t;
@@ -103,11 +125,17 @@ export const RichTextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttribut
     const { selectionStart: s, selectionEnd: e, value } = t;
     const start = value.lastIndexOf("\n", s - 1) + 1;
     const endNl = value.indexOf("\n", e);
-    const end = endNl === -1 ? value.length : endNl;
-    const lines = value.slice(start, end).split("\n");
-    const allCentred = lines.every((l) => /^->.*<-$/.test(l));
-    const next = lines.map((l) => (allCentred ? l.replace(/^->\s*(.*?)\s*<-$/, "$1") : l.trim() ? `->${l}<-` : l)).join("\n");
-    setValue(value.slice(0, start) + next + value.slice(end), start, start + next.length);
+    const allCentred = value
+      .slice(start, endNl === -1 ? value.length : endNl)
+      .split("\n")
+      .every((l) => /^->.*<-$/.test(l));
+    editLines((l) => {
+      if (allCentred) {
+        const m = l.match(/^->(\s*)(.*?)\s*<-$/)!;
+        return { text: m[2], cut: 2 + m[1].length, add: 0 };
+      }
+      return l.trim() ? { text: `->${l}<-`, cut: 0, add: 2 } : { text: l, cut: 0, add: 0 };
+    });
   };
   const addVideo = () => {
     const url = window.prompt("YouTube link");

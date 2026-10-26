@@ -4,7 +4,7 @@ import { TrophyIcon } from "./TrophyIcon";
 import { RevealButton, Spoiler, SpoilerSwap } from "./client";
 import { ProgressBar, RarityBadge } from "./ui";
 import { TROPHY_ORDER, TROPHY_POINTS, type TrophyType } from "@/lib/trophies";
-import { formatDate, secureUrl } from "@/lib/utils";
+import { formatDate, psnImage } from "@/lib/utils";
 import { trophyHref } from "@/lib/trophy-slug";
 import { LocalTime } from "./LocalTime";
 
@@ -103,7 +103,7 @@ export function TrophyList({
                         {t.iconUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={secureUrl(t.iconUrl)}
+                            src={psnImage(t.iconUrl, 44)}
                             alt=""
                             loading="lazy"
                             referrerPolicy="no-referrer"

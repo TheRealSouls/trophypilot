@@ -7,7 +7,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { flag } from "@/lib/countries";
 import { after } from "next/server";
 import { recentPlayers } from "@/lib/activity";
-import { isAdmin } from "@/lib/forum";
+import { isStaff } from "@/lib/forum";
 import { siblingLists } from "@/lib/games";
 import { probeSiblings } from "@/lib/psn/siblings";
 import { enrichGame, igdbEnabled } from "@/lib/igdb";
@@ -425,9 +425,9 @@ export default async function GamePage({ params, searchParams }: { params: Promi
             </ul>
           </section>
 
-          {isAdmin(viewer) && (
+          {isStaff(viewer) && (
             <section className="card p-5">
-              <h2 className="mb-1 font-bold">Admin: obtainable?</h2>
+              <h2 className="mb-1 font-bold">Staff: obtainable?</h2>
               <p className="mb-3 text-xs text-muted">Flag the list if servers shut down or a trophy is glitched. This applies to this trophy list only.</p>
               <UnobtainableForm gameId={game.id} unobtainable={game.unobtainable} reason={game.unobtainableReason} />
             </section>

@@ -8,7 +8,7 @@ import { trophyHref } from "@/lib/trophy-slug";
 import { getMilestones, getUserStats } from "@/lib/stats";
 import { getFriendIds } from "@/lib/social";
 import { flag } from "@/lib/countries";
-import { formatDate, timeAgo } from "@/lib/utils";
+import { formatDate, psnImage, timeAgo } from "@/lib/utils";
 import { GameArt } from "@/components/art";
 import { TrophyIcon } from "@/components/TrophyIcon";
 import { Avatar, EmptyState, ProgressBar, RarityBadge, SectionTitle, Skeleton, SkeletonRows, TabLinks } from "@/components/ui";
@@ -150,7 +150,7 @@ async function TrophyVault({ userId, isOwner }: { userId: string; isOwner: boole
                 {t.iconUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={t.iconUrl.replace(/^http:/, "https:")}
+                    src={psnImage(t.iconUrl, 64)}
                     alt=""
                     loading="lazy"
                     referrerPolicy="no-referrer"

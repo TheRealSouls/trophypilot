@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { isAdmin } from "@/lib/forum";
+import { isStaff } from "@/lib/forum";
 import { unreadConversations } from "@/lib/community";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ user: null }, { headers: { "Cache-Control": "private, no-store" } });
-  const admin = isAdmin(user);
+  const admin = isStaff(user);
   const [pending, unread, reports] = await Promise.all([
     prisma.friendship.count({ where: { addresseeId: user.id, status: "PENDING" } }),
     unreadConversations(user.id),

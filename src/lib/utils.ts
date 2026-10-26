@@ -128,6 +128,28 @@ export function secureUrl<T extends string | null | undefined>(url: T): T {
   return (url ? url.replace(/^http:\/\//i, "https://") : url) as T;
 }
 
+/** PlayStation's icon servers resize on request; avatars' server doesn't. */
+const RESIZING_HOSTS = new Set(["image.api.playstation.com", "psnobj.prod.dl.playstation.net"]);
+const WIDTHS = [64, 128, 192, 256, 384, 512];
+
+/**
+ * A PSN game or trophy icon at about the size it's shown. Full-size icons are
+ * up to 150 KB; asking for the width (doubled for sharp screens, rounded to a
+ * few fixed sizes so the CDN caches them) makes them about 5 times smaller.
+ */
+export function psnImage<T extends string | null | undefined>(url: T, shownPx: number): T {
+  const safe = secureUrl(url);
+  if (!safe) return safe;
+  try {
+    const u = new URL(safe);
+    if (!RESIZING_HOSTS.has(u.hostname) || u.searchParams.has("w")) return safe;
+    u.searchParams.set("w", String(WIDTHS.find((w) => w >= shownPx * 2) ?? 512));
+    return u.toString() as T;
+  } catch {
+    return safe;
+  }
+}
+
 /** How a PSN platform code reads on the page ("PSVITA" is "PS Vita"). */
 export function platformName(code: string) {
   return code === "PSVITA" ? "PS Vita" : code;

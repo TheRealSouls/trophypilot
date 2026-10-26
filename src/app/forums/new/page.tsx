@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/forum";
+import { isStaff } from "@/lib/forum";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { ThreadForm } from "../forms";
 
@@ -13,7 +13,7 @@ export default async function NewThreadPage({ searchParams }: { searchParams: Pr
   const user = await requireUser(`/forums/new${sp.section ? `?section=${sp.section}` : ""}`);
   const [sections, game] = await Promise.all([
     prisma.forumSection.findMany({
-      where: isAdmin(user) ? {} : { adminOnly: false },
+      where: isStaff(user) ? {} : { adminOnly: false },
       orderBy: [{ order: "asc" }, { name: "asc" }],
       select: { id: true, slug: true, name: true, parentId: true },
     }),

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/forum";
+import { isStaff } from "@/lib/forum";
 import { REPORT_REASONS, REPORT_TYPE_NAMES, type ReportType } from "@/lib/reports";
 import { resolveReport } from "@/actions/reports";
 import { reviewGuide } from "@/actions/community";
@@ -21,7 +21,7 @@ export const metadata: Metadata = { title: "Reports", robots: { index: false } }
  */
 export default async function ReportsPage() {
   const me = await requireUser("/reports");
-  if (!isAdmin(me)) notFound();
+  if (!isStaff(me)) notFound();
   const [open, recent] = await Promise.all([
     prisma.report.findMany({
       where: { status: "OPEN" },

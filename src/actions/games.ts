@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { refreshEstimates } from "@/lib/estimates";
-import { isAdmin } from "@/lib/forum";
+import { isStaff } from "@/lib/forum";
 import { bust } from "@/lib/cache";
 import type { FormState } from "./auth";
 
@@ -87,10 +87,10 @@ const unobtainableSchema = z.object({
   reason: z.string().trim().max(300).optional(),
 });
 
-/** Admins flag a list whose platinum or 100% can't be earned any more, with the reason. */
+/** Staff flag a list whose platinum or 100% can't be earned any more, with the reason. */
 export async function setUnobtainable(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
-  if (!isAdmin(user)) return { error: "Only admins can change this." };
+  if (!isStaff(user)) return { error: "Only staff can change this." };
   const parsed = unobtainableSchema.safeParse(Object.fromEntries(fd));
   if (!parsed.success) return { error: "Keep the reason under 300 characters." };
   const { gameId, unobtainable, reason } = parsed.data;

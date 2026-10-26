@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { isAdmin, POSTS_PER_PAGE, uniqueSectionSlug } from "@/lib/forum";
+import { isAdmin, isStaff, POSTS_PER_PAGE, uniqueSectionSlug } from "@/lib/forum";
 import { rateLimit } from "@/lib/rate-limit";
 import { slugify } from "@/lib/utils";
 import type { FormState } from "./auth";
@@ -96,7 +96,7 @@ export async function createThread(_: FormState, fd: FormData): Promise<FormStat
 
   const section = await prisma.forumSection.findUnique({ where: { id: t.sectionId } });
   if (!section) return { error: "That section doesn't exist any more." };
-  if (section.adminOnly && !isAdmin(user)) return { error: "Only admins can start threads in this section." };
+  if (section.adminOnly && !isStaff(user)) return { error: "Only admins can start threads in this section." };
   if (t.gameId && !(await prisma.game.findUnique({ where: { id: t.gameId }, select: { id: true } }))) {
     return { error: "Unknown game." };
   }
@@ -124,7 +124,7 @@ export async function replyToThread(_: FormState, fd: FormData): Promise<FormSta
 
   const thread = await prisma.forumThread.findUnique({ where: { id: threadId }, select: { id: true, locked: true } });
   if (!thread) return { error: "That thread was deleted." };
-  if (thread.locked && !isAdmin(user)) return { error: "This thread is locked." };
+  if (thread.locked && !isStaff(user)) return { error: "This thread is locked." };
 
   const post = await prisma.$transaction(async (tx) => {
     const p = await tx.forumPost.create({ data: { threadId, authorId: user.id, body: parsed.data } });
@@ -139,7 +139,7 @@ export async function editPost(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser("/forums");
   const post = await prisma.forumPost.findUnique({ where: { id: String(fd.get("postId")) } });
   if (!post) return { error: "That post was deleted." };
-  if (post.authorId !== user.id && !isAdmin(user)) return { error: "You can only edit your own posts." };
+  if (post.authorId !== user.id && !isStaff(user)) return { error: "You can only edit your own posts." };
   const parsed = body.safeParse(fd.get("body"));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   await prisma.forumPost.update({ where: { id: post.id }, data: { body: parsed.data, editedAt: new Date() } });
@@ -151,7 +151,7 @@ export async function editPost(_: FormState, fd: FormData): Promise<FormState> {
 export async function deletePost(fd: FormData) {
   const user = await requireUser("/forums");
   const post = await prisma.forumPost.findUnique({ where: { id: String(fd.get("postId")) }, include: { thread: true } });
-  if (!post || (post.authorId !== user.id && !isAdmin(user))) return;
+  if (!post || (post.authorId !== user.id && !isStaff(user))) return;
 
   const first = await prisma.forumPost.findFirst({ where: { threadId: post.threadId }, orderBy: { createdAt: "asc" }, select: { id: true } });
   if (first?.id === post.id) {
@@ -173,7 +173,8 @@ export async function deletePost(fd: FormData) {
 
 /** Admin moderation: pin, unpin, lock, unlock, move or delete a thread. */
 export async function moderateThread(fd: FormData) {
-  await requireAdmin();
+  const user = await requireUser("/forums");
+  if (!isStaff(user)) return;
   const id = String(fd.get("threadId"));
   const action = String(fd.get("action"));
   const thread = await prisma.forumThread.findUnique({ where: { id }, include: { section: { select: { slug: true } } } });

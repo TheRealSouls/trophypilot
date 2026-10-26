@@ -1,8 +1,9 @@
 /**
- * Makes a member an admin (forum sections and moderation), or back to a
- * normal user.
+ * Makes a member an admin (runs the site and moderates), a moderator
+ * (reports, guide approval, deleting and locking), or back to a normal user.
  *
  *   npm run user:role -- <username> ADMIN
+ *   npm run user:role -- <username> MODERATOR
  *   npm run user:role -- <username> USER
  */
 import { prisma } from "../src/lib/db";
@@ -15,10 +16,10 @@ try {
 
 async function main() {
   const [username, role = "ADMIN"] = process.argv.slice(2);
-  if (!username || !["ADMIN", "USER"].includes(role)) throw new Error("Usage: npm run user:role -- <username> ADMIN|USER");
+  if (!username || !["ADMIN", "MODERATOR", "USER"].includes(role)) throw new Error("Usage: npm run user:role -- <username> ADMIN|MODERATOR|USER");
   const user = await prisma.user.update({ where: { username: username.toLowerCase() }, data: { role } }).catch(() => null);
   if (!user) throw new Error(`No member called "${username}".`);
-  console.log(`${user.username} is now ${role === "ADMIN" ? "an admin" : "a normal user"}.`);
+  console.log(`${user.username} is now ${role === "ADMIN" ? "an admin" : role === "MODERATOR" ? "a moderator" : "a normal user"}.`);
 }
 
 main()

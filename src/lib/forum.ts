@@ -4,7 +4,16 @@ import { prisma } from "./db";
 export const THREADS_PER_PAGE = 25;
 export const POSTS_PER_PAGE = 20;
 
+/**
+ * Staff are admins and moderators. Moderators look after what members post:
+ * reports, guide approval, deleting, locking and moving threads. Admins also
+ * run the site: forum sections, adding trophy lists, trusting guide writers.
+ */
+export const isStaff = (user: { role: string } | null | undefined) => user?.role === "ADMIN" || user?.role === "MODERATOR";
 export const isAdmin = (user: { role: string } | null | undefined) => user?.role === "ADMIN";
+
+/** The chip shown next to staff names. */
+export const staffTitle = (role: string | null | undefined) => (role === "ADMIN" ? "Staff" : role === "MODERATOR" ? "Moderator" : null);
 
 /** The tabs across the top of the forum pages. */
 export const FORUM_TABS = [

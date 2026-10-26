@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { slugify, youtubeId } from "@/lib/utils";
 import { refreshEstimates } from "@/lib/estimates";
-import { isAdmin } from "@/lib/forum";
+import { isAdmin, isStaff } from "@/lib/forum";
 import type { FormState } from "./auth";
 
 // ─── Tips ────────────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ export async function createGuide(_: FormState, fd: FormData): Promise<FormState
   for (let i = 2; await prisma.guide.findUnique({ where: { slug }, select: { id: true } }); i++) slug = `${base}-${i}`;
 
   // Staff and trusted members publish straight away; other guides wait for staff to approve them.
-  const publish = isAdmin(user) || user.trusted;
+  const publish = isStaff(user) || user.trusted;
   await prisma.guide.create({
     data: {
       slug,
@@ -127,7 +127,7 @@ export async function createGuide(_: FormState, fd: FormData): Promise<FormState
 /** Staff approve a waiting guide, or send it back to its author with a note. */
 export async function reviewGuide(fd: FormData) {
   const user = await requireUser("/reports");
-  if (!isAdmin(user)) return;
+  if (!isStaff(user)) return;
   const guide = await prisma.guide.findUnique({ where: { id: String(fd.get("guideId")) }, select: { id: true, slug: true, gameId: true, status: true } });
   if (!guide || guide.status !== "PENDING") return;
   const approve = fd.get("decision") === "approve";
@@ -217,7 +217,7 @@ export async function deleteSessionComment(fd: FormData) {
   const user = await requireUser();
   const c = await prisma.sessionComment.findUnique({ where: { id: String(fd.get("commentId")) }, include: { session: { select: { hostId: true } } } });
   // The author, the session's host or an admin can remove a comment.
-  if (!c || (c.authorId !== user.id && c.session.hostId !== user.id && user.role !== "ADMIN")) return;
+  if (!c || (c.authorId !== user.id && c.session.hostId !== user.id && !isStaff(user))) return;
   await prisma.sessionComment.delete({ where: { id: c.id } });
   revalidatePath(`/sessions/${c.sessionId}`);
 }

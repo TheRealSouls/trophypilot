@@ -33,6 +33,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={inter.variable} data-theme="light" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+        {/* Icons and avatars come from PlayStation's servers: open those connections while the page loads. */}
+        <link rel="preconnect" href="https://image.api.playstation.com" />
+        <link rel="preconnect" href="https://psnobj.prod.dl.playstation.net" />
+        <link rel="preconnect" href="https://psn-rsc.prod.dl.playstation.net" />
       </head>
       <body className="min-h-screen overflow-x-clip font-sans text-[15px] antialiased">
         <SessionProvider>

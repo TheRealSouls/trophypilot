@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Forum staff", description: "The peop
 export default async function ForumStaffPage() {
   const [staff, viewerId] = await Promise.all([
     prisma.user.findMany({
-      where: { role: "ADMIN" },
+      where: { role: { in: ["ADMIN", "MODERATOR"] } },
       orderBy: { createdAt: "asc" },
       select: { id: true, username: true, country: true, avatarHue: true, avatar: true, createdAt: true, psn: { select: { onlineId: true, avatarUrl: true } } },
     }),

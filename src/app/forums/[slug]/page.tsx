@@ -5,7 +5,7 @@ import { cache } from "react";
 import clsx from "clsx";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { DELETED_USER, isAdmin, THREADS_PER_PAGE } from "@/lib/forum";
+import { DELETED_USER, isStaff, THREADS_PER_PAGE } from "@/lib/forum";
 import { formatNumber, timeAgo } from "@/lib/utils";
 import { EmptyState, PageHeader } from "@/components/ui";
 
@@ -47,7 +47,7 @@ export default async function SectionPage({ params, searchParams }: { params: Pr
     prisma.forumThread.count({ where: { sectionId: section.id } }),
   ]);
   const pages = Math.max(1, Math.ceil(total / THREADS_PER_PAGE));
-  const canPost = !!user && (!section.adminOnly || isAdmin(user));
+  const canPost = !!user && (!section.adminOnly || isStaff(user));
 
   return (
     <div>

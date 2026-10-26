@@ -47,7 +47,7 @@ export function PostList({ posts, viewer, empty }: { posts: FeedPost[]; viewer: 
     <ol className="space-y-3">
       {posts.map((p) => {
         const name = p.author.psn?.onlineId ?? p.author.username;
-        const canDelete = viewer && (viewer.id === p.author.id || viewer.role === "ADMIN");
+        const canDelete = viewer && (viewer.id === p.author.id || viewer.role === "ADMIN" || viewer.role === "MODERATOR");
         return (
           // Each update wears its author's profile card theme.
           <li key={p.id} className={clsx("card relative flex gap-3 overflow-hidden p-4", cardClass(p.author.profileCard))}>

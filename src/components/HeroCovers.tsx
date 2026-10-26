@@ -1,4 +1,4 @@
-import { secureUrl } from "@/lib/utils";
+import { psnImage } from "@/lib/utils";
 
 /**
  * The home page hero's background: a tilted wall of real PSN game icons
@@ -21,7 +21,7 @@ export function HeroCovers({ covers }: { covers: { id: string; title: string; ic
           // eslint-disable-next-line @next/next/no-img-element
           <img
             key={c.id}
-            src={secureUrl(c.iconUrl!)}
+            src={psnImage(c.iconUrl!, 160)}
             alt=""
             referrerPolicy="no-referrer"
             className="aspect-square w-full rounded-xl bg-surface-3 object-cover"

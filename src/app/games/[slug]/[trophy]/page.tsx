@@ -6,9 +6,8 @@ import { cache } from "react";
 import { trophyHref } from "@/lib/trophy-slug";
 import { prisma } from "@/lib/db";
 import { getSessionUserId } from "@/lib/auth";
-import { rarityOf } from "@/lib/trophies";
 import { flag } from "@/lib/countries";
-import { formatDate, timeAgo, secureUrl } from "@/lib/utils";
+import { formatDate, psnImage, timeAgo } from "@/lib/utils";
 import { GameArt } from "@/components/art";
 import { TrophyIcon } from "@/components/TrophyIcon";
 import { RevealButton, Spoiler, SpoilerSwap } from "@/components/client";
@@ -76,8 +75,9 @@ export default async function TrophyPage({ params }: { params: Promise<Params> }
           {t.iconUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={secureUrl(t.iconUrl)}
+              src={psnImage(t.iconUrl, 96)}
               alt={`${t.name} trophy icon`}
+              fetchPriority="high"
               referrerPolicy="no-referrer"
               className="h-24 w-24 shrink-0 border border-line bg-surface-2 object-contain"
             />
@@ -108,9 +108,22 @@ export default async function TrophyPage({ params }: { params: Promise<Params> }
       </Spoiler>
 
       <StatGrid className="mb-10 grid-cols-2 sm:grid-cols-4">
-        <Stat label="PSN rarity" value={<RarityBadge rate={t.earnedRate} className="text-sm" />} sub={t.earnedRate != null ? rarityOf(t.earnedRate).label : "Not reported yet"} />
-        <Stat label="Earned by members" value={earnerCount} sub={`of ${owners} players`} />
-        <Stat label="Member rate" value={owners ? `${((earnerCount / owners) * 100).toFixed(1)}%` : "n/a"} />
+        {/* PSN's rate covers everyone on PSN; the other two only count TrophyPilot members who synced the game. */}
+        <Stat
+          label="PSN rarity"
+          value={<RarityBadge rate={t.earnedRate} className="text-sm" />}
+          sub={t.earnedRate != null ? "of all PSN players with the game earned it" : "PSN hasn't reported it yet"}
+        />
+        <Stat
+          label="Earned on TrophyPilot"
+          value={earnerCount}
+          sub={owners ? `of ${owners} member${owners === 1 ? "" : "s"} who have the game` : "No member has synced this game yet"}
+        />
+        <Stat
+          label="TrophyPilot rate"
+          value={owners ? `${((earnerCount / owners) * 100).toFixed(1)}%` : "n/a"}
+          sub={owners ? "of members with the game earned it" : "Shows once a member has the game"}
+        />
         <Stat label="Game difficulty" value={t.game.difficulty ? `${Math.round(t.game.difficulty)}/10` : "n/a"} />
       </StatGrid>
 

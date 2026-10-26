@@ -50,7 +50,7 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
   const viewerId = await getSessionUserId();
   // A guide waiting for approval (or sent back) is only visible to its author and staff.
   const viewerRole = viewerId ? (await prisma.user.findUnique({ where: { id: viewerId }, select: { role: true } }))?.role : null;
-  if (guide.status !== "PUBLISHED" && guide.authorId !== viewerId && viewerRole !== "ADMIN") notFound();
+  if (guide.status !== "PUBLISHED" && guide.authorId !== viewerId && viewerRole !== "ADMIN" && viewerRole !== "MODERATOR") notFound();
   if (guide.status === "PUBLISHED") await prisma.guide.update({ where: { id: guide.id }, data: { views: { increment: 1 } } });
   const earnedIds = viewerId
     ? new Set(

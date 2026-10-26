@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/forum";
+import { isStaff } from "@/lib/forum";
 import { plainText } from "@/lib/rich-text";
 import { rateLimit } from "@/lib/rate-limit";
 import { trophyHref } from "@/lib/trophy-slug";
@@ -98,7 +98,7 @@ export async function reportContent(_: FormState, fd: FormData): Promise<FormSta
 /** Staff: take the reported thing down, or dismiss the report. Every open report on the same item closes with it. */
 export async function resolveReport(fd: FormData) {
   const me = await requireUser("/reports");
-  if (!isAdmin(me)) return;
+  if (!isStaff(me)) return;
   const report = await prisma.report.findUnique({ where: { id: String(fd.get("reportId")) } });
   if (!report || report.status !== "OPEN") return;
   const remove = fd.get("decision") === "remove";

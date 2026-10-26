@@ -12,7 +12,7 @@ import { cache } from "react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { flag } from "@/lib/countries";
-import { isAdmin } from "@/lib/forum";
+import { isStaff } from "@/lib/forum";
 import { formatDate } from "@/lib/utils";
 import { deleteClub, setClubTheme, toggleClubMembership } from "@/actions/social";
 import { ConfirmButton, SubmitButton } from "@/components/client";
@@ -89,7 +89,7 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
           )}
           {!viewer && <Link href={`/login?next=/clubs/${club.slug}`} className="btn-primary">Log in to join</Link>}
           {!isOwner && <ReportButton type="CLUB" id={club.id} authorId={club.ownerId} what="this club" className="self-center px-1" />}
-          {(isOwner || isAdmin(viewer)) && (
+          {(isOwner || isStaff(viewer)) && (
             <form action={deleteClub}>
               <input type="hidden" name="clubId" value={club.id} />
               <ConfirmButton message={`Delete "${club.name}" and all of its updates?`}>Delete club</ConfirmButton>
@@ -98,7 +98,7 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
         </div>
         </div>
       </section>
-      {(isOwner || isAdmin(viewer)) && (
+      {(isOwner || isStaff(viewer)) && (
         <details className="card mb-8 p-4">
           <summary className="cursor-pointer text-sm font-semibold">Club picture and theme</summary>
           <form action={setClubTheme} className="mt-4 space-y-5">
