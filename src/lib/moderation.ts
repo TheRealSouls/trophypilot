@@ -6,7 +6,7 @@
  * Before matching, text is folded: accents and look-alike letters from other
  * alphabets become plain letters, number and symbol swaps (1 for i, @ for a,
  * 0 for o) are undone, and letters may be repeated. The strongest slurs are
- * also caught with spaces or dots between their letters ("n i g g e r").
+ * also caught with spaces or dots between their letters.
  * Everything else must be a whole word, so innocent words that merely
  * contain the letters (snigger, raccoon, Pakistan) stay allowed.
  */
@@ -35,7 +35,7 @@ function fold(text: string, swaps: boolean) {
   return swaps ? plain.replace(/./gu, (c) => SWAPS[c] ?? c) : plain;
 }
 
-/** "nigger" becomes n+ i+ g+ g+ e+ r+, with optional separators between letters when spaced is true. */
+/** A word becomes each letter one or more times ("boss" matches b+ o+ s+ s+), with optional separators between letters when spaced is true. */
 const letters = (word: string, spaced: boolean) => [...word].map((c) => `${c}+`).join(spaced ? "[^a-z]{0,3}" : "");
 
 const STRONG_RE = new RegExp(`(?<![a-z])(?:${STRONG.map((w) => letters(w, true)).join("|")})|(?<![s])(?:${STRONG.map((w) => letters(w, false)).join("|")})`);
