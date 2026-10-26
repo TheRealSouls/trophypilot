@@ -5,7 +5,10 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { POST_MAX } from "@/lib/community";
+import { verifyFirst } from "@/lib/email";
+import { blockBetween } from "@/lib/blocks";
+import { clubActive } from "@/lib/idle-clubs";
+import { POST_MAX, REACTIONS } from "@/lib/community";
 import { isStaff } from "@/lib/forum";
 import { rateLimit } from "@/lib/rate-limit";
 import { slugify } from "@/lib/utils";
@@ -22,7 +25,7 @@ export async function toggleFollow(fd: FormData) {
   if (!target || target.id === me.id) return;
   const key = { followerId_followingId: { followerId: me.id, followingId: target.id } };
   if (await prisma.follow.findUnique({ where: key })) await prisma.follow.delete({ where: key });
-  else await prisma.follow.create({ data: { followerId: me.id, followingId: target.id } });
+  else if (!(await blockBetween(me.id, target.id))) await prisma.follow.create({ data: { followerId: me.id, followingId: target.id } });
   revalidatePath(`/u/${target.username}`);
   revalidatePath("/community");
 }
@@ -31,6 +34,8 @@ export async function toggleFollow(fd: FormData) {
 
 export async function createPost(_: FormState, fd: FormData): Promise<FormState> {
   const me = await requireUser("/community");
+  const unverified = verifyFirst(me);
+  if (unverified) return { error: unverified };
   if (!(await rateLimit("post", 10, 10 * 60_000, me.id))) return { error: "You've posted a lot just now. Try again in a few minutes." };
   const body = String(fd.get("body") ?? "").trim();
   if (body.length < 2) return { error: "Write something first." };
@@ -40,9 +45,28 @@ export async function createPost(_: FormState, fd: FormData): Promise<FormState>
     return { error: "Join the club to post in it." };
   }
   await prisma.post.create({ data: { authorId: me.id, clubId, body } });
+  if (clubId) await clubActive(clubId);
   revalidatePath("/community");
   revalidatePath("/clubs", "layout");
   return { ok: "Posted." };
+}
+
+/** Adds the member's reaction to an update, or takes it off again. */
+export async function toggleReaction(fd: FormData) {
+  const me = await requireUser();
+  const emoji = String(fd.get("emoji") ?? "");
+  if (!REACTIONS.some(([e]) => e === emoji)) return;
+  if (!(await rateLimit("reaction", 60, 60_000, me.id))) return;
+  const post = await prisma.post.findUnique({ where: { id: String(fd.get("postId")) }, select: { id: true, clubId: true, club: { select: { slug: true } } } });
+  if (!post) return;
+  const key = { postId_userId_emoji: { postId: post.id, userId: me.id, emoji } };
+  if (await prisma.postReaction.findUnique({ where: key })) await prisma.postReaction.delete({ where: key });
+  else {
+    await prisma.postReaction.create({ data: key.postId_userId_emoji });
+    if (post.clubId) await clubActive(post.clubId);
+  }
+  if (post.club) revalidatePath(`/clubs/${post.club.slug}`);
+  revalidatePath("/community");
 }
 
 export async function deletePost(fd: FormData) {
@@ -67,6 +91,8 @@ const clubSchema = z.object({
 
 export async function createClub(_: FormState, fd: FormData): Promise<FormState> {
   const me = await requireUser("/clubs");
+  const unverified = verifyFirst(me);
+  if (unverified) return { error: unverified };
   if (!(await rateLimit("club", 3, 60 * 60_000, me.id))) return { error: "You've created a few clubs already. Try again later." };
   const parsed = clubSchema.safeParse(Object.fromEntries(fd));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
@@ -102,7 +128,10 @@ export async function toggleClubMembership(fd: FormData) {
   if (!club || club.ownerId === me.id) return;
   const key = { clubId_userId: { clubId: club.id, userId: me.id } };
   if (await prisma.clubMember.findUnique({ where: key })) await prisma.clubMember.delete({ where: key });
-  else await prisma.clubMember.create({ data: { clubId: club.id, userId: me.id } });
+  else {
+    await prisma.clubMember.create({ data: { clubId: club.id, userId: me.id } });
+    await clubActive(club.id);
+  }
   revalidatePath("/clubs", "layout");
   revalidatePath("/community");
 }

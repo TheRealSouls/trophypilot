@@ -2,6 +2,7 @@ import Link from "next/link";
 import { addFriend, removeFriend, respondToRequest } from "@/actions/friends";
 import { toggleFollow } from "@/actions/social";
 import { setTrusted } from "@/actions/community";
+import { toggleBlock } from "@/actions/blocks";
 import { prisma } from "@/lib/db";
 import { reputationOf } from "@/lib/community";
 import { COUNTRIES, flag } from "@/lib/countries";
@@ -36,7 +37,7 @@ export async function ProfileHeader({
   const level = psnLevel?.trophyLevel ?? stats?.level ?? 1;
   const progress = psnLevel?.levelProgress ?? stats?.progress ?? 0;
 
-  const [incoming, followers, following, iFollow, rep, viewer] = await Promise.all([
+  const [incoming, followers, following, iFollow, rep, viewer, iBlocked] = await Promise.all([
     relation === "INCOMING"
       ? prisma.friendship.findFirst({ where: { requesterId: owner.id, addresseeId: viewerId!, status: "PENDING" } })
       : null,
@@ -47,6 +48,9 @@ export async function ProfileHeader({
       : null,
     reputationOf(owner.id),
     viewerId ? prisma.user.findUnique({ where: { id: viewerId }, select: { role: true } }) : null,
+    viewerId && relation !== "SELF"
+      ? prisma.block.findUnique({ where: { blockerId_blockedId: { blockerId: viewerId, blockedId: owner.id } } })
+      : null,
   ]);
   const staffViewing = viewer?.role === "ADMIN" && relation !== "SELF";
 
@@ -209,6 +213,24 @@ export async function ProfileHeader({
           )}
           {relation !== "SELF" && (
             <ReportButton type="USER" id={owner.id} what={`${display}'s profile`} className="self-center px-1" />
+          )}
+          {relation !== "SELF" && viewerId && (
+            <form action={toggleBlock} className="self-center">
+              <input type="hidden" name="userId" value={owner.id} />
+              {iBlocked ? (
+                <>
+                  <input type="hidden" name="block" value="0" />
+                  <SubmitButton className="px-1 text-xs text-muted underline-offset-2 hover:text-text hover:underline">Unblock</SubmitButton>
+                </>
+              ) : (
+                <ConfirmButton
+                  message={`Block ${display}? Neither of you will be able to message, friend or follow the other. They won't be told.`}
+                  className="px-1 text-xs text-muted underline-offset-2 hover:text-bad hover:underline"
+                >
+                  Block
+                </ConfirmButton>
+              )}
+            </form>
           )}
           {relation === "NONE" && viewerId && (
             <form action={addFriend}>

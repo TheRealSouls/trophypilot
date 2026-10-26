@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { verifyFirst } from "@/lib/email";
 import { slugify, youtubeId } from "@/lib/utils";
 import { refreshEstimates } from "@/lib/estimates";
 import { isAdmin, isStaff } from "@/lib/forum";
@@ -14,6 +15,8 @@ import type { FormState } from "./auth";
 
 export async function addTip(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
+  const unverified = verifyFirst(user);
+  if (unverified) return { error: unverified };
   const body = String(fd.get("body") ?? "").trim();
   const trophyId = (fd.get("trophyId") as string) || null;
   const guideId = (fd.get("guideId") as string) || null;
@@ -67,6 +70,8 @@ const guideSchema = z.object({
 
 export async function createGuide(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
+  const unverified = verifyFirst(user);
+  if (unverified) return { error: unverified };
   let steps: unknown;
   try {
     steps = JSON.parse(String(fd.get("steps") ?? "[]"));
@@ -181,6 +186,8 @@ const sessionSchema = z.object({
 
 export async function createSession(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
+  const unverified = verifyFirst(user);
+  if (unverified) return { error: unverified };
   const parsed = sessionSchema.safeParse(Object.fromEntries(fd));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   // Trophies the session is going for: only ones from the chosen game's list count.
@@ -203,6 +210,8 @@ export async function createSession(_: FormState, fd: FormData): Promise<FormSta
 
 export async function addSessionComment(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
+  const unverified = verifyFirst(user);
+  if (unverified) return { error: unverified };
   const sessionId = String(fd.get("sessionId"));
   const body = String(fd.get("body") ?? "").trim();
   if (body.length < 2) return { error: "Write something first." };

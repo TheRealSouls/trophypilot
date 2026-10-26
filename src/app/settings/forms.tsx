@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { durationText } from "@/lib/plans";
 import {
   deleteAccount,
+  resendVerification,
   searchMyTrophies,
   startPsnLink,
   syncNow,
@@ -398,6 +399,17 @@ export function DeleteAccountForm({ username }: { username: string }) {
       </div>
       <FormMessage state={state} />
       <SubmitButton className="btn-danger" pendingText="Deleting…">Delete my account</SubmitButton>
+    </form>
+  );
+}
+
+/** "Send a new link" for members who haven't confirmed their email yet. */
+export function ResendVerificationForm() {
+  const [state, action] = useActionState(resendVerification, null);
+  return (
+    <form action={action} className="mt-3 space-y-2">
+      <SubmitButton className="btn-ghost px-3 py-1.5 text-xs">Send a new link</SubmitButton>
+      <FormMessage state={state} />
     </form>
   );
 }

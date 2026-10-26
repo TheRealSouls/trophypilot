@@ -14,12 +14,28 @@ import { checkCanSync, getProvider, syncUntilDone } from "@/lib/psn/sync";
 import { bust } from "@/lib/cache";
 import { rateLimit } from "@/lib/rate-limit";
 import { isDemoAccount } from "@/lib/demo";
+import { needsVerification, sendVerificationEmail } from "@/lib/email";
+import { deleteUploadsOf } from "@/lib/uploads";
 import { PROFILE_ACCENTS, PROFILE_CARDS, streamLink } from "@/lib/profile-themes";
 import { AVATAR_PRESETS } from "@/components/avatars";
 import { refreshEstimates } from "@/lib/estimates";
 import type { FormState } from "./auth";
 
 const DEMO_LOCKED = "The shared demo account can't do this. Create your own account to link PSN or delete an account.";
+
+/** Sends a fresh verification link, a few times an hour at most. */
+export async function resendVerification(): Promise<FormState> {
+  const user = await requireUser("/settings");
+  if (!needsVerification(user)) return { ok: "Your email address is already confirmed." };
+  if (!(await rateLimit("verify-email", 3, 60 * 60_000, user.id))) return { error: "We've sent a few links already. Check your spam folder, or try again in an hour." };
+  try {
+    await sendVerificationEmail(user);
+  } catch (err) {
+    console.error("[email] verification email failed", err);
+    return { error: "The email didn't send. Try again in a few minutes." };
+  }
+  return { ok: "Sent. Check your inbox (and spam folder) for the link." };
+}
 
 export async function updateProfile(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
@@ -301,6 +317,8 @@ export async function deleteAccount(_: FormState, fd: FormData): Promise<FormSta
   if (user.psn?.accountId) await prisma.psnPlayer.deleteMany({ where: { accountId: user.psn.accountId } });
   // Their guides go with them, so the estimates they fed are worked out again without them.
   const guided = await prisma.guide.findMany({ where: { authorId: user.id }, select: { gameId: true }, distinct: ["gameId"] });
+  // Pictures they uploaded go too (the rows go with the account).
+  await deleteUploadsOf(user.id).catch((err) => console.error("[uploads] couldn't delete a member's pictures", err));
   await prisma.user.delete({ where: { id: user.id } });
   await refreshEstimates(guided.map((g) => g.gameId));
   await destroySession();

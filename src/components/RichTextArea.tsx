@@ -21,6 +21,11 @@ export const RichTextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttribut
   const [preview, setPreview] = useState<string | null>(null);
   const [menu, setMenu] = useState<"size" | "emoji" | null>(null);
   const label = props["aria-label"] ?? "text";
+  // Picture uploads only show when the site has storage set up (data-uploads on <body>).
+  const [canUpload, setCanUpload] = useState(false);
+  const [uploadNote, setUploadNote] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+  useEffect(() => setCanUpload(document.body.dataset.uploads === "1"), []);
 
   // Close menus with Escape or a click elsewhere.
   const bar = useRef<HTMLDivElement>(null);
@@ -119,6 +124,25 @@ export const RichTextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttribut
     const before = t.value.slice(0, t.selectionStart);
     const pad = before && !before.endsWith("\n") ? "\n" : "";
     insert(`${pad}![${alt.replace(/[\[\]]/g, "")}](${url.trim()})\n`);
+  };
+  /** Shrinks a picture from the device, uploads it (/api/uploads) and puts it in the text on its own line. */
+  const uploadImage = async (file: File) => {
+    setUploadNote("Uploading picture…");
+    try {
+      const body = new FormData();
+      body.set("file", await shrinkImage(file));
+      const res = await fetch("/api/uploads", { method: "POST", body });
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw new Error(data.error ?? "The upload didn't work. Try again in a moment.");
+      const alt = window.prompt("Describe the picture for people who can't see it (optional)") ?? "";
+      const t = el();
+      const before = t.value.slice(0, t.selectionStart);
+      const pad = before && !before.endsWith("\n") ? "\n" : "";
+      insert(`${pad}![${alt.replace(/[\[\]]/g, "")}](${data.url})\n`);
+      setUploadNote("Picture added.");
+    } catch (err) {
+      setUploadNote(err instanceof Error ? err.message : "The upload didn't work.");
+    }
   };
   const centre = () => {
     const t = el();
@@ -259,6 +283,35 @@ export const RichTextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttribut
             <path d="m3.5 14.5 4.5-4 3 2.5 2.5-2 3 3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
           </svg>
         </button>
+        {canUpload && (
+          <>
+            <button
+              type="button"
+              className={tool}
+              onClick={() => fileInput.current?.click()}
+              aria-label="Upload a picture from your device"
+              title="Upload a picture"
+            >
+              <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden>
+                <path d="M10 13V4m0 0L6.5 7.5M10 4l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M3.5 12.5v2a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              tabIndex={-1}
+              aria-hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void uploadImage(file);
+              }}
+            />
+          </>
+        )}
         <button type="button" className={tool} onClick={addVideo} aria-label="YouTube video" title="YouTube video">
           <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden>
             <rect x="2.5" y="4.5" width="15" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
@@ -318,6 +371,9 @@ export const RichTextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttribut
           {preview !== null ? "Edit" : "Preview"}
         </button>
       </div>
+      <p aria-live="polite" className={clsx("px-3 text-xs text-muted", uploadNote && "border-b border-line py-1.5")}>
+        {uploadNote}
+      </p>
       {preview !== null && (
         <div className="min-h-24 px-3 py-2.5" aria-live="polite">
           {preview.trim() ? <RichText text={preview} /> : <p className="text-sm text-muted">Nothing to preview yet.</p>}
@@ -336,6 +392,38 @@ export const RichTextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttribut
     </div>
   );
 });
+
+/**
+ * Makes a picture small enough to upload: at most 1600px on its longest side,
+ * as WebP (JPEG where the browser can't make WebP), stepping the quality down
+ * until it's under about 400 KB. GIFs are sent as they are so they keep moving.
+ */
+async function shrinkImage(file: File): Promise<Blob> {
+  if (file.type === "image/gif") {
+    if (file.size > 1_000_000) throw new Error("GIFs can be up to 1 MB. Try a shorter or smaller one.");
+    return file;
+  }
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error("That file isn't a picture we can read. Try a JPEG, PNG or WebP.");
+  }
+  let scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const quality = attempt < 3 ? 0.82 - attempt * 0.1 : 0.6;
+    const encode = (type: string) => new Promise<Blob | null>((done) => canvas.toBlob(done, type, quality));
+    let blob = await encode("image/webp");
+    if (!blob || blob.type !== "image/webp") blob = await encode("image/jpeg");
+    if (blob && blob.size <= 400_000) return blob;
+    if (attempt >= 2) scale *= 0.8;
+  }
+  throw new Error("That picture is too detailed to shrink enough. Try a smaller one.");
+}
 
 const EMOJIS: [string, [string, string][]][] = [
   [

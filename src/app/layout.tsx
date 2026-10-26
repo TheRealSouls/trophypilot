@@ -6,6 +6,7 @@ import { SessionProvider, THEME_BOOT } from "@/components/session";
 import { MobileNav } from "@/components/NavLinks";
 import { isDemoMode } from "@/lib/psn/sync";
 import { SITE } from "@/lib/site";
+import { uploadsEnabled } from "@/lib/uploads";
 import "./globals.css";
 
 const inter = Inter({
@@ -38,7 +39,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://psnobj.prod.dl.playstation.net" />
         <link rel="preconnect" href="https://psn-rsc.prod.dl.playstation.net" />
       </head>
-      <body className="min-h-screen overflow-x-clip font-sans text-[15px] antialiased">
+      {/* data-uploads tells the formatting toolbar whether picture uploads are set up (src/lib/uploads.ts). */}
+      <body className="min-h-screen overflow-x-clip font-sans text-[15px] antialiased" data-uploads={uploadsEnabled() ? "1" : undefined}>
         <SessionProvider>
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 btn-primary">
           Skip to content

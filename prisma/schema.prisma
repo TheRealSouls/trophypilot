@@ -13,77 +13,112 @@ datasource db {
 // ─── Accounts ────────────────────────────────────────────────────────────────
 
 model User {
-  id                 String   @id @default(cuid())
-  email              String   @unique
-  username           String   @unique
-  passwordHash       String
-  country            String? // ISO 3166-1 alpha-2
-  bio                String?
-  avatarHue          Int      @default(215)
+  id                      String    @id @default(cuid())
+  email                   String    @unique
+  username                String    @unique
+  passwordHash            String
+  country                 String? // ISO 3166-1 alpha-2
+  bio                     String?
+  avatarHue               Int       @default(215)
   // PUBLIC | FRIENDS | PRIVATE
-  profileVisibility  String   @default("PUBLIC")
-  showOnLeaderboards Boolean  @default(true)
-  showActivity       Boolean  @default(true)
+  profileVisibility       String    @default("PUBLIC")
+  showOnLeaderboards      Boolean   @default(true)
+  showActivity            Boolean   @default(true)
   // FREE | PREMIUM: how often trophies sync (see src/lib/plans.ts).
-  plan               String   @default("FREE")
-  // USER | ADMIN. Admins manage forum sections and moderate threads (npm run user:role).
-  role               String   @default("USER")
+  plan                    String    @default("FREE")
+  // USER | MODERATOR | ADMIN (npm run user:role). Moderators look after members' posts; admins also run the site.
+  role                    String    @default("USER")
   // Trusted members publish guides straight away; everyone else's wait for staff approval.
-  trusted            Boolean  @default(false)
+  trusted                 Boolean   @default(false)
   // The platinum they're proudest of, shown on their profile (one of their own platinum games).
   favouritePlatinumGameId String?
   // light | dark. The site is light unless the member picks dark in Settings; it never follows the device.
-  theme              String   @default("light")
+  theme                   String    @default("light")
   // Profile extras. The banner is artwork from one of the member's games (no uploads).
-  bannerGameId       String?
+  bannerGameId            String?
   // Accent colour for the member's own profile page: "" (site red) or a preset key (see src/lib/profile-themes.ts).
-  profileAccent      String   @default("")
+  profileAccent           String    @default("")
   // Pre-built profile card theme ("" for none), see PROFILE_CARDS in src/lib/profile-themes.ts.
-  profileCard        String   @default("")
+  profileCard             String    @default("")
   // Profile picture: null for the default (PSN avatar, else an initial), "preset:<key>" for a built-in picture,
   // "letter" for the initial, or the https icon of one of the member's games. No uploads.
-  avatar             String?
-  youtubeUrl         String?
-  twitchUrl          String?
-  streamUrl          String?
+  avatar                  String?
+  youtubeUrl              String?
+  twitchUrl               String?
+  streamUrl               String?
   // "Playing now", set by the member; shown until nowPlayingUntil.
-  nowPlayingGameId   String?
-  nowPlayingUntil    DateTime?
+  nowPlayingGameId        String?
+  nowPlayingUntil         DateTime?
   // EVERYONE | FRIENDS (friends and people they follow) | NOBODY
-  allowMessages      String   @default("EVERYONE")
-  createdAt          DateTime @default(now())
+  allowMessages           String    @default("EVERYONE")
+  // When the member clicked the link in their verification email. Only checked once email sending is set up
+  // (RESEND_API_KEY); members who joined before that count as verified.
+  emailVerifiedAt         DateTime?
+  createdAt               DateTime  @default(now())
 
-  psn              PsnAccount?
-  games            UserGame[]
-  trophies         UserTrophy[]
-  sentRequests     Friendship[]    @relation("requester")
-  receivedRequests Friendship[]    @relation("addressee")
-  guides           Guide[]
-  tips             Tip[]
-  tipVotes         TipVote[]
-  syncJobs         SyncJob[]
-  titleSyncs       PsnTitleSync[]
-  hostedSessions   Session[]
-  sessionSlots     SessionMember[]
-  forumThreads     ForumThread[]
-  forumPosts       ForumPost[]
-  bannerGame       Game?                @relation("banner", fields: [bannerGameId], references: [id], onDelete: SetNull)
-  nowPlayingGame   Game?                @relation("nowPlaying", fields: [nowPlayingGameId], references: [id], onDelete: SetNull)
-  gameRatings      GameRating[]
-  guideFavourites  GuideFavourite[]
-  vault            VaultTrophy[]
-  sessionComments  SessionComment[]
-  following        Follow[]             @relation("follower")
-  followers        Follow[]             @relation("following")
-  posts            Post[]
-  ownedClubs       Club[]
-  clubMemberships  ClubMember[]
-  conversations    ConversationMember[]
-  messages         Message[]
-  reportsFiled     Report[]             @relation("reportsFiled")
-  wishlist         WishlistGame[]
-  favouritePlatinumGame Game?           @relation("favouritePlatinum", fields: [favouritePlatinumGameId], references: [id], onDelete: SetNull)
-  reportsResolved  Report[]             @relation("reportsResolved")
+  psn                   PsnAccount?
+  games                 UserGame[]
+  trophies              UserTrophy[]
+  sentRequests          Friendship[]         @relation("requester")
+  receivedRequests      Friendship[]         @relation("addressee")
+  guides                Guide[]
+  tips                  Tip[]
+  tipVotes              TipVote[]
+  syncJobs              SyncJob[]
+  titleSyncs            PsnTitleSync[]
+  hostedSessions        Session[]
+  sessionSlots          SessionMember[]
+  forumThreads          ForumThread[]
+  forumPosts            ForumPost[]
+  bannerGame            Game?                @relation("banner", fields: [bannerGameId], references: [id], onDelete: SetNull)
+  nowPlayingGame        Game?                @relation("nowPlaying", fields: [nowPlayingGameId], references: [id], onDelete: SetNull)
+  gameRatings           GameRating[]
+  guideFavourites       GuideFavourite[]
+  vault                 VaultTrophy[]
+  sessionComments       SessionComment[]
+  following             Follow[]             @relation("follower")
+  followers             Follow[]             @relation("following")
+  posts                 Post[]
+  ownedClubs            Club[]
+  clubMemberships       ClubMember[]
+  conversations         ConversationMember[]
+  messages              Message[]
+  reportsFiled          Report[]             @relation("reportsFiled")
+  wishlist              WishlistGame[]
+  favouritePlatinumGame Game?                @relation("favouritePlatinum", fields: [favouritePlatinumGameId], references: [id], onDelete: SetNull)
+  reportsResolved       Report[]             @relation("reportsResolved")
+  blocking              Block[]              @relation("blocker")
+  blockedBy             Block[]              @relation("blocked")
+  reactions             PostReaction[]
+  uploads               Upload[]
+}
+
+// A member who doesn't want to hear from another: no messages, friend requests or follows either way.
+model Block {
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+// Pictures members upload, stored in Supabase Storage (src/lib/uploads.ts). Rows count the daily limit
+// and the total space used.
+model Upload {
+  id        String   @id @default(cuid())
+  userId    String
+  // Path inside the storage bucket.
+  path      String   @unique
+  bytes     Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model PsnAccount {
@@ -277,11 +312,11 @@ model Game {
   // Tracked players and members who have any list of this game, for "Most played" (refreshGamePopularity).
   players            Int       @default(0)
   // When we last looked for sibling trophy lists (other regions/platforms) next to this one.
-  siblingsProbedAt DateTime?
+  siblingsProbedAt   DateTime?
   // IGDB match for release date, description, genre, screenshots and trailer.
   // igdbCheckedAt is set even when nothing matched, so a title is looked up once.
-  igdbId           Int?
-  igdbCheckedAt    DateTime?
+  igdbId             Int?
+  igdbCheckedAt      DateTime?
 
   groups       TrophyGroup[]
   trophies     Trophy[]
@@ -291,9 +326,9 @@ model Game {
   sessions     Session[]
   forumThreads ForumThread[]
   ratings      GameRating[]
-  bannerOf     User[]        @relation("banner")
-  playingNow   User[]        @relation("nowPlaying")
-  favouriteOf  User[]        @relation("favouritePlatinum")
+  bannerOf     User[]           @relation("banner")
+  playingNow   User[]           @relation("nowPlaying")
+  favouriteOf  User[]           @relation("favouritePlatinum")
   wishlistedBy WishlistGame[]
 
   @@index([title])
@@ -337,8 +372,8 @@ model Trophy {
   iconUrl     String?
   earnedRate  Float? // % of players who earned it; null until PSN reports it
 
-  game    Game         @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  group   TrophyGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  game     Game            @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  group    TrophyGroup     @relation(fields: [groupId], references: [id], onDelete: Cascade)
   earners  UserTrophy[]
   tips     Tip[]
   steps    GuideStep[]
@@ -411,8 +446,8 @@ model Guide {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  game   Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  author User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  game       Game             @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  author     User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
   steps      GuideStep[]
   tips       Tip[]
   favourites GuideFavourite[]
@@ -660,25 +695,43 @@ model Post {
   body      String
   createdAt DateTime @default(now())
 
-  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  club   Club? @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  author    User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  club      Club?          @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  reactions PostReaction[]
 
   @@index([createdAt])
   @@index([authorId, createdAt])
   @@index([clubId, createdAt])
 }
 
+// One emoji reaction from one member on an update (REACTIONS in src/lib/community.ts).
+model PostReaction {
+  postId    String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId, emoji])
+  @@index([createdAt])
+}
+
 model Club {
-  id          String   @id @default(cuid())
-  slug        String   @unique
-  name        String
-  description String   @default("")
+  id           String    @id @default(cuid())
+  slug         String    @unique
+  name         String
+  description  String    @default("")
   // Card theme for the club's header and listing, same choices as profile cards ("" for plain).
-  theme       String   @default("")
+  theme        String    @default("")
   // Club picture: "preset:<key>" (the built-in pictures) or null for its initial.
-  avatar      String?
-  ownerId     String
-  createdAt   DateTime @default(now())
+  avatar       String?
+  ownerId      String
+  createdAt    DateTime  @default(now())
+  // Clubs with no new members, updates or reactions for 5 days get a warning; 2 days later they're deleted
+  // (src/lib/idle-clubs.ts). Set when the warning went out.
+  idleWarnedAt DateTime?
 
   owner   User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   members ClubMember[]
@@ -703,6 +756,8 @@ model Conversation {
   // Group chats have a name; one-to-one conversations show the other person's.
   title         String?
   isGroup       Boolean  @default(false)
+  // Notices from TrophyPilot itself (for example a club about to be deleted): one member, no replies.
+  system        Boolean  @default(false)
   createdAt     DateTime @default(now())
   lastMessageAt DateTime @default(now())
 

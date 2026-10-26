@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { createSession, destroySession } from "@/lib/auth";
 import { COUNTRIES } from "@/lib/countries";
 import { rateLimit } from "@/lib/rate-limit";
+import { emailEnabled, sendVerificationEmail } from "@/lib/email";
 import { hashString } from "@/lib/utils";
 
 export type FormState = { error?: string; ok?: string } | null;
@@ -47,8 +48,11 @@ export async function register(_: FormState, fd: FormData): Promise<FormState> {
       passwordHash: await bcrypt.hash(password, 12),
       country,
       avatarHue: hashString(username) % 360,
+      // Without email sending there's no way to verify, so the account counts as verified.
+      emailVerifiedAt: emailEnabled() ? null : new Date(),
     },
   });
+  if (emailEnabled()) await sendVerificationEmail(user).catch((err) => console.error("[email] verification email failed", err));
   await createSession(user.id);
   redirect("/settings?welcome=1#psn");
 }

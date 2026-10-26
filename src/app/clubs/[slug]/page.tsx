@@ -18,7 +18,8 @@ import { deleteClub, setClubTheme, toggleClubMembership } from "@/actions/social
 import { ConfirmButton, SubmitButton } from "@/components/client";
 import { loadFeed, PostList } from "@/components/community";
 import { PostComposer } from "@/components/community-forms";
-import { Avatar } from "@/components/ui";
+import { Avatar, Notice } from "@/components/ui";
+import { deletionDate, WARN_AFTER_DAYS } from "@/lib/idle-clubs";
 
 type Params = { slug: string };
 
@@ -98,6 +99,12 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
         </div>
         </div>
       </section>
+      {club.idleWarnedAt && (
+        <Notice tone="warn" className="mb-8">
+          This club has been quiet for {WARN_AFTER_DAYS} days. It will be deleted on {formatDate(deletionDate(club.idleWarnedAt))} unless
+          someone joins, posts an update or reacts to one.
+        </Notice>
+      )}
       {(isOwner || isStaff(viewer)) && (
         <details className="card mb-8 p-4">
           <summary className="cursor-pointer text-sm font-semibold">Club picture and theme</summary>

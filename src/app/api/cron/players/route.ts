@@ -4,6 +4,7 @@ import { discoverPlayers, refreshPlayer } from "@/lib/psn/players";
 import { toPsnError } from "@/lib/psn/real";
 import { getProvider, isDemoMode } from "@/lib/psn/sync";
 import { keepListsFresh } from "@/lib/psn/catalogue";
+import { cleanUpIdleClubs } from "@/lib/idle-clubs";
 
 /**
  * Keeps tracked PSN players fresh: re-reads the stalest few (level, totals,
@@ -30,7 +31,9 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (isDemoMode()) return NextResponse.json({ skipped: "demo mode" });
+  // Clubs nobody has used for a while: warn their owners, then delete (src/lib/idle-clubs.ts). Not PSN, so demo mode too.
+  const clubs = await cleanUpIdleClubs().catch((err) => ({ error: String(err) }));
+  if (isDemoMode()) return NextResponse.json({ skipped: "demo mode", clubs });
 
   const stale = await prisma.psnPlayer.findMany({
     where: { hidden: false },
@@ -63,5 +66,5 @@ export async function GET(req: Request) {
     grown: Math.max(0, Number(process.env.PSN_GROWN_LISTS_PER_RUN) || 5),
   }).catch((err) => ({ error: toPsnError(err).message }));
 
-  return NextResponse.json({ refreshed, discovery, lists });
+  return NextResponse.json({ refreshed, discovery, lists, clubs });
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { verifyFirst } from "@/lib/email";
 import { addMessage, directConversation, GROUP_MAX, MESSAGE_MAX, whyCantMessage } from "@/lib/community";
 import { rateLimit } from "@/lib/rate-limit";
 import type { FormState } from "./auth";
@@ -27,6 +28,8 @@ const findMember = (handle: string) =>
  */
 export async function startConversation(_: FormState, fd: FormData): Promise<FormState> {
   const me = await requireUser("/messages");
+  const unverified = verifyFirst(me);
+  if (unverified) return { error: unverified };
   if (!(await rateLimit("message-start", 10, 10 * 60_000, me.id))) return { error: "You've started a lot of conversations just now. Try again in a few minutes." };
   const msg = cleanBody(fd);
   if ("error" in msg) return msg;
@@ -64,6 +67,8 @@ export async function startConversation(_: FormState, fd: FormData): Promise<For
 /** A message in a conversation the sender already belongs to. */
 export async function sendMessage(_: FormState, fd: FormData): Promise<FormState> {
   const me = await requireUser("/messages");
+  const unverified = verifyFirst(me);
+  if (unverified) return { error: unverified };
   if (!(await rateLimit("message", 30, 60_000, me.id))) return { error: "Slow down a little and try again in a minute." };
   const msg = cleanBody(fd);
   if ("error" in msg) return msg;
@@ -73,6 +78,7 @@ export async function sendMessage(_: FormState, fd: FormData): Promise<FormState
     include: { conversation: { include: { members: { include: { user: { select: { id: true, username: true, allowMessages: true } } } } } } },
   });
   if (!member) return { error: "You're not in this conversation." };
+  if (member.conversation.system) return { error: "This is a notice from TrophyPilot, so it can't be replied to." };
   // In a one-to-one conversation the other person may have closed their messages since.
   if (!member.conversation.isGroup) {
     const other = member.conversation.members.find((m) => m.userId !== me.id)?.user;
@@ -88,6 +94,8 @@ export async function sendMessage(_: FormState, fd: FormData): Promise<FormState
 /** Sends something (a guide link, say) straight to one member, from anywhere on the site. */
 export async function sendDirect(_: FormState, fd: FormData): Promise<FormState> {
   const me = await requireUser();
+  const unverified = verifyFirst(me);
+  if (unverified) return { error: unverified };
   if (!(await rateLimit("message", 30, 60_000, me.id))) return { error: "Slow down a little and try again in a minute." };
   const msg = cleanBody(fd);
   if ("error" in msg) return msg;

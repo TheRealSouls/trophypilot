@@ -10,20 +10,27 @@ import { isDemoAccount } from "@/lib/demo";
 import { formatDate, timeAgo } from "@/lib/utils";
 import { unlinkPsn } from "@/actions/account";
 import { Avatar, Notice, PageHeader, ProgressBar } from "@/components/ui";
-import { ConfirmButton } from "@/components/client";
-import { DeleteAccountForm, LinkPsnForm, PrivacyForm, ProfileForm, SyncButton, ThemeForm, VaultForm, VerifyPsnButton } from "./forms";
+import { ConfirmButton, SubmitButton } from "@/components/client";
+import { toggleBlock } from "@/actions/blocks";
+import { DeleteAccountForm, LinkPsnForm, PrivacyForm, ProfileForm, ResendVerificationForm, SyncButton, ThemeForm, VaultForm, VerifyPsnButton } from "./forms";
+import { needsVerification } from "@/lib/email";
 import { LookForm } from "./LookForm";
 
 export const metadata: Metadata = { title: "Settings", robots: { index: false } };
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ welcome?: string; linked?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ welcome?: string; linked?: string; verified?: string }> }) {
   const user = await requireUser("/settings");
-  const { welcome, linked } = await searchParams;
+  const { welcome, linked, verified } = await searchParams;
   const psn = user.psn;
-  const [jobs, nextManual, imported] = await Promise.all([
+  const [jobs, nextManual, imported, blocked] = await Promise.all([
     prisma.syncJob.findMany({ where: { userId: user.id }, orderBy: { startedAt: "desc" }, take: 5 }),
     psn?.verified ? nextManualSyncAt(user.id, user.plan) : null,
     psn?.verified ? prisma.psnTitleSync.count({ where: { userId: user.id } }) : 0,
+    prisma.block.findMany({
+      where: { blockerId: user.id },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true, blocked: { select: { id: true, username: true, psn: { select: { onlineId: true } } } } },
+    }),
   ]);
   const [myGames, recentGames, earnedCount, vault, platinumGames] = await Promise.all([
     prisma.userGame.findMany({ where: { userId: user.id }, orderBy: { game: { title: "asc" } }, select: { game: { select: { id: true, title: true } } } }),
@@ -71,6 +78,23 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             Create your own account
           </Link>{" "}
           to link your PSN.
+        </Notice>
+      )}
+
+      {verified === "1" && (
+        <Notice tone="good" className="mb-6">
+          Your email address is confirmed. You can post, message and start clubs now.
+        </Notice>
+      )}
+      {verified === "0" && needsVerification(user) && (
+        <Notice tone="bad" className="mb-6">
+          That link didn&apos;t work. It may be more than 3 days old, or for an older address. Send yourself a new one below.
+        </Notice>
+      )}
+      {needsVerification(user) && (
+        <Notice tone="warn" className="mb-6">
+          Confirm your email address to post, message and start clubs. We sent a link to {user.email} when you signed up.
+          <ResendVerificationForm />
         </Notice>
       )}
 
@@ -257,6 +281,31 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             showOnLeaderboards={user.showOnLeaderboards}
             showActivity={user.showActivity}
           />
+        </Section>
+
+        <Section id="blocked" title="Blocked members">
+          {blocked.length === 0 ? (
+            <p className="text-sm text-muted">
+              You haven&apos;t blocked anyone. Block someone from their profile or your conversation with them: neither of you can then
+              message, friend or follow the other.
+            </p>
+          ) : (
+            <ul className="divide-y divide-line text-sm">
+              {blocked.map(({ blocked: b, createdAt }) => (
+                <li key={b.id} className="flex flex-wrap items-center gap-3 py-2.5">
+                  <Link href={`/u/${b.username}`} className="font-semibold hover:underline hover:underline-offset-4">
+                    {b.psn?.onlineId ?? b.username}
+                  </Link>
+                  <span className="text-xs text-muted">blocked {timeAgo(createdAt)}</span>
+                  <form action={toggleBlock} className="ml-auto">
+                    <input type="hidden" name="userId" value={b.id} />
+                    <input type="hidden" name="block" value="0" />
+                    <SubmitButton className="btn-ghost px-3 py-1.5 text-xs">Unblock</SubmitButton>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
         </Section>
 
         <Section title="Your data">

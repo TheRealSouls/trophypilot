@@ -3,10 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { verifyFirst } from "@/lib/email";
+import { blockBetween } from "@/lib/blocks";
 import type { FormState } from "./auth";
 
 export async function sendFriendRequest(_: FormState, fd: FormData): Promise<FormState> {
   const me = await requireUser();
+  const unverified = verifyFirst(me);
+  if (unverified) return { error: unverified };
   const handle = String(fd.get("username") ?? "").trim();
   if (!handle) return { error: "Enter a username or PSN ID." };
 
@@ -15,6 +19,9 @@ export async function sendFriendRequest(_: FormState, fd: FormData): Promise<For
   });
   if (!target) return { error: `No member called "${handle}".` };
   if (target.id === me.id) return { error: "You can't friend yourself (we checked)." };
+  const block = await blockBetween(me.id, target.id);
+  if (block === "YOU") return { error: `You've blocked ${target.username}. Unblock them in Settings first.` };
+  if (block === "THEM") return { error: `${target.username} isn't taking friend requests.` };
 
   const existing = await prisma.friendship.findFirst({
     where: {

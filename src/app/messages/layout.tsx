@@ -58,7 +58,11 @@ export default async function MessagesLayout({ children }: { children: React.Rea
                 return (
                   <li key={c.id}>
                     <ConversationLink href={`/messages/${c.id}`}>
-                      {c.isGroup || !other ? (
+                      {c.system ? (
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent text-xs font-bold text-white" aria-hidden>
+                          TP
+                        </span>
+                      ) : c.isGroup || !other ? (
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-3 text-xs font-bold text-muted" aria-hidden>
                           {c.members.length}
                         </span>

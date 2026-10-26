@@ -1,3 +1,4 @@
+import { DELETE_AFTER_WARNING_DAYS, WARN_AFTER_DAYS } from "@/lib/idle-clubs";
 import type { Metadata } from "next";
 import Link from "next/link";
 import clsx from "clsx";
@@ -72,6 +73,10 @@ export default async function ClubsPage() {
                 <Link href="/login?next=/clubs" className="link">Log in</Link> to start or join a club.
               </p>
             )}
+            <p className="mt-4 text-xs text-muted">
+              Clubs with no new members, updates or reactions for {WARN_AFTER_DAYS + DELETE_AFTER_WARNING_DAYS} days are deleted. The owner
+              gets a message {DELETE_AFTER_WARNING_DAYS} days before.
+            </p>
           </section>
         </aside>
       </div>

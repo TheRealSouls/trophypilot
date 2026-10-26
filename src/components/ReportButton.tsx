@@ -19,6 +19,7 @@ export function ReportButton({
   id,
   authorId,
   what = "this",
+  label = "Report",
   className,
 }: {
   type: ReportType;
@@ -27,6 +28,8 @@ export function ReportButton({
   authorId?: string | null;
   /** Read out with the button, e.g. "post by Alex". */
   what?: string;
+  /** The button text, "Report" unless the place needs more ("Report member"). */
+  label?: string;
   className?: string;
 }) {
   const { me } = useMe();
@@ -51,7 +54,7 @@ export function ReportButton({
         className={clsx("text-xs text-muted underline-offset-2 hover:text-bad hover:underline", className)}
         aria-label={`Report ${what}`}
       >
-        Report
+        {label}
       </button>
       <dialog
         ref={dialog}

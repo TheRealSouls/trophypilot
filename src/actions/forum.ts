@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { verifyFirst } from "@/lib/email";
 import { isAdmin, isStaff, POSTS_PER_PAGE, uniqueSectionSlug } from "@/lib/forum";
 import { rateLimit } from "@/lib/rate-limit";
 import { slugify } from "@/lib/utils";
@@ -87,6 +88,8 @@ const threadSchema = z.object({
 
 export async function createThread(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser("/forums");
+  const unverified = verifyFirst(user);
+  if (unverified) return { error: unverified };
   if (!(await rateLimit("forum-thread", 5, 10 * 60_000, user.id))) {
     return { error: "You've started a lot of threads just now. Try again in a few minutes." };
   }
@@ -117,6 +120,8 @@ export async function createThread(_: FormState, fd: FormData): Promise<FormStat
 
 export async function replyToThread(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser("/forums");
+  const unverified = verifyFirst(user);
+  if (unverified) return { error: unverified };
   if (!(await rateLimit("forum-post", 10, 60_000, user.id))) return { error: "Slow down a little and try again in a minute." };
   const threadId = String(fd.get("threadId"));
   const parsed = body.safeParse(fd.get("body"));

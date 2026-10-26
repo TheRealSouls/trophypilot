@@ -38,5 +38,14 @@ services:
       # reCAPTCHA v2 site key for the contact form (the secret goes in Formspree).
       - key: CAPTCHA_SITE_KEY
         sync: false
+      # Email verification (resend.com) and picture uploads (Supabase Storage). Optional: see .env.example.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
       - key: NEXT_PUBLIC_FORMSPREE_FORM_ID
         value: xljdozjl

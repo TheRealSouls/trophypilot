@@ -1,12 +1,22 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { friendState } from "./social";
+import { blockBetween } from "./blocks";
 
 /**
  * Follows, private messages and community reputation.
  */
 
 export const POST_MAX = 1000;
+/** The reactions members can put on club and community updates. */
+export const REACTIONS = [
+  ["👍", "thumbs up"],
+  ["❤️", "heart"],
+  ["😂", "laughing"],
+  ["🏆", "trophy"],
+  ["🔥", "fire"],
+  ["😮", "wow"],
+] as const;
 export const MESSAGE_MAX = 2000;
 /** Most people a group chat can hold, the starter included. */
 export const GROUP_MAX = 20;
@@ -16,7 +26,9 @@ export const GROUP_MAX = 20;
 /** Null if the sender may message this member, otherwise the reason they can't. */
 export async function whyCantMessage(senderId: string, recipient: { id: string; username: string; allowMessages: string }) {
   if (recipient.id === senderId) return "You can't message yourself.";
-  if (recipient.allowMessages === "NOBODY") return `${recipient.username} isn't accepting messages.`;
+  const block = await blockBetween(senderId, recipient.id);
+  if (block === "YOU") return `You've blocked ${recipient.username}. Unblock them in Settings to message them.`;
+  if (block === "THEM" || recipient.allowMessages === "NOBODY") return `${recipient.username} isn't accepting messages.`;
   if (recipient.allowMessages === "FRIENDS") {
     const [friends, follows] = await Promise.all([
       friendState(senderId, recipient.id),
@@ -30,7 +42,7 @@ export async function whyCantMessage(senderId: string, recipient: { id: string; 
 /** The one-to-one conversation between two members, created on first use. */
 export async function directConversation(a: string, b: string) {
   const existing = await prisma.conversation.findFirst({
-    where: { isGroup: false, AND: [{ members: { some: { userId: a } } }, { members: { some: { userId: b } } }] },
+    where: { isGroup: false, system: false, AND: [{ members: { some: { userId: a } } }, { members: { some: { userId: b } } }] },
     select: { id: true },
   });
   if (existing) return existing.id;
@@ -51,6 +63,28 @@ export async function addMessage(conversationId: string, authorId: string, body:
       where: { conversationId_userId: { conversationId, userId: authorId } },
       data: { lastReadAt: now },
     }),
+  ]);
+}
+
+/**
+ * A notice from TrophyPilot in the member's Messages (it counts as unread
+ * like any message). Each member has one TrophyPilot conversation.
+ */
+export async function sendNotice(userId: string, body: string) {
+  const now = new Date();
+  const existing = await prisma.conversation.findFirst({ where: { system: true, members: { some: { userId } } }, select: { id: true } });
+  const conversationId =
+    existing?.id ??
+    (
+      await prisma.conversation.create({
+        // Read up to a moment ago, so the notice shows as new.
+        data: { system: true, title: "TrophyPilot", members: { create: { userId, lastReadAt: new Date(now.getTime() - 1000) } } },
+        select: { id: true },
+      })
+    ).id;
+  await prisma.$transaction([
+    prisma.message.create({ data: { conversationId, authorId: null, body, createdAt: now } }),
+    prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: now } }),
   ]);
 }
 
@@ -159,9 +193,10 @@ export async function reputationOf(userId: string) {
 
 /** What a conversation is called for one of its members. */
 export function conversationName(
-  c: { title: string | null; isGroup: boolean; members: { userId: string; user: { username: string; psn: { onlineId: string } | null } }[] },
+  c: { title: string | null; isGroup: boolean; system?: boolean; members: { userId: string; user: { username: string; psn: { onlineId: string } | null } }[] },
   viewerId: string,
 ) {
+  if (c.system) return "TrophyPilot";
   const others = c.members.filter((m) => m.userId !== viewerId).map((m) => m.user.psn?.onlineId ?? m.user.username);
   if (c.isGroup) return c.title || (others.length ? others.slice(0, 3).join(", ") + (others.length > 3 ? ` +${others.length - 3}` : "") : "Group chat");
   return others[0] ?? "Member who left";
