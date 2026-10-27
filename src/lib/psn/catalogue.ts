@@ -41,6 +41,7 @@ async function createGame(title: PsnTitle, sampleAccountId: string | null) {
           platforms: title.platforms.join(","),
           iconUrl: title.iconUrl,
           definedTrophies: title.definedTrophies ?? null,
+          definedCounts: title.definedCounts ?? null,
           coverHue: hashString(title.title) % 360,
           psnSampleAccountId: sampleAccountId,
         },
@@ -66,15 +67,17 @@ export async function importTitles(titles: PsnTitle[], sampleAccountId: string |
   const ids = titles.map((t) => t.npCommunicationId);
   const existing = await prisma.game.findMany({
     where: { npCommunicationId: { in: ids } },
-    select: { slug: true, npCommunicationId: true, iconUrl: true, psnSampleAccountId: true, definedTrophies: true },
+    select: { slug: true, npCommunicationId: true, iconUrl: true, psnSampleAccountId: true, definedTrophies: true, definedCounts: true },
   });
   const slugs = new Map(existing.map((g) => [g.npCommunicationId!, g.slug]));
 
   // Remember PSN's trophy total, so a list that grows (new DLC) gets fetched again.
   for (const g of existing) {
-    const defined = titles.find((x) => x.npCommunicationId === g.npCommunicationId)?.definedTrophies;
-    if (defined && defined !== g.definedTrophies) {
-      await prisma.game.update({ where: { slug: g.slug }, data: { definedTrophies: defined } });
+    const t = titles.find((x) => x.npCommunicationId === g.npCommunicationId);
+    const defined = t?.definedTrophies;
+    const counts = t?.definedCounts;
+    if ((defined && defined !== g.definedTrophies) || (counts && counts !== g.definedCounts)) {
+      await prisma.game.update({ where: { slug: g.slug }, data: { definedTrophies: defined ?? g.definedTrophies, definedCounts: counts ?? g.definedCounts } });
     }
   }
 
@@ -130,6 +133,7 @@ async function createGamesInBulk(titles: PsnTitle[], sampleAccountId: string | n
       platforms: t.platforms.join(","),
       iconUrl: t.iconUrl,
       definedTrophies: t.definedTrophies ?? null,
+      definedCounts: t.definedCounts ?? null,
       coverHue: hashString(t.title) % 360,
       psnSampleAccountId: sampleAccountId,
     };
@@ -264,8 +268,9 @@ export async function keepListsFresh(provider: TrophyProvider, { newest = 5, gro
   const [fresh, grownIds] = await Promise.all([
     prisma.game.findMany({
       where: { npCommunicationId: { startsWith: "NPWR" }, trophies: { none: {} } },
-      orderBy: { npCommunicationId: "desc" },
-      // Extra candidates, so a few lists PSN refuses don't block the rest.
+      // Lists never tried come first, newest first; ones PSN refused go to the back of the queue, so they
+      // can't hold up everything behind them (that left the home page showing "List not loaded").
+      orderBy: [{ listTriedAt: { sort: "asc", nulls: "first" } }, { npCommunicationId: "desc" }],
       take: newest * 2,
     }),
     prisma.$queryRaw<{ id: string }[]>`
@@ -279,6 +284,7 @@ export async function keepListsFresh(provider: TrophyProvider, { newest = 5, gro
   let refreshed = 0;
   let failed = 0;
   const attempt = async (g: (typeof fresh)[number]) => {
+    await prisma.game.update({ where: { id: g.id }, data: { listTriedAt: new Date() } });
     try {
       return await ensureGameTrophies(provider, g);
     } catch (err) {

@@ -16,11 +16,13 @@ import { formatDate, parseJsonArray, platformName, timeAgo } from "@/lib/utils";
 import { GameArt, SceneArt } from "@/components/art";
 import { RevealAllButton, SpoilerGroup } from "@/components/client";
 import { TrophyList } from "@/components/TrophyList";
+import { sortParam } from "@/lib/trophies";
 import { TrophyIcon } from "@/components/TrophyIcon";
 import { YouTube } from "@/components/YouTube";
 import { Avatar, DifficultyMeter, Notice, ProgressBar, SectionTitle, Stat, StatGrid } from "@/components/ui";
 import { loadGame } from "./data";
-import { PlayingNowButton, RateGameForm, UnobtainableForm, WishlistButton } from "./forms";
+import { PlayingNowButton, RateGameForm, StaffHoursForm, UnobtainableForm, WishlistButton } from "./forms";
+import { listRegions, REGION_NAMES, type Region } from "@/lib/regions";
 import { ListLoader } from "./ListLoader";
 
 type Params = { slug: string };
@@ -53,6 +55,8 @@ export default async function GamePage({ params, searchParams }: { params: Promi
   const viewerId = viewer?.id ?? null;
   // The same for every visitor, so shared for a while (cleared with the game, see bust("game:<slug>")).
   const lists = await cached(`lists:${game.titleKey || game.id}`, () => siblingLists(game), { ttlMs: 10 * 60_000 });
+  // Which region each stack is from, where owners' countries or the list's name make it clear.
+  const regions = lists.length > 1 ? await cached(`regions:${game.titleKey || game.id}`, () => listRegions(lists), { ttlMs: 60 * 60_000 }) : new Map<string, Region>();
   const familyIds = lists.length ? lists.map((l) => l.id) : [game.id];
 
   const family = game.titleKey ? { game: { titleKey: game.titleKey } } : { gameId: game.id };
@@ -108,21 +112,33 @@ export default async function GamePage({ params, searchParams }: { params: Promi
   if (igdbEnabled() && !game.igdbCheckedAt) {
     after(() => enrichGame(game.id).catch((err) => console.error("[igdb]", err)));
   }
-  // Label repeated platforms "PS4 (2)" so regional stacks are distinguishable.
+  // "PS4 · EU" where the region is known; otherwise repeated platforms are numbered "PS4 (2)" so stacks stay distinguishable.
   const seen = new Map<string, number>();
   const listLabels = lists.map((l) => {
-    const n = (seen.get(l.platform) ?? 0) + 1;
-    seen.set(l.platform, n);
-    const dupes = lists.filter((x) => x.platform === l.platform).length > 1;
-    return dupes ? `${l.platform} (${n})` : l.platform;
+    const region = regions.get(l.id);
+    const twins = lists.filter((x) => x.platform === l.platform && regions.get(x.id) === region);
+    const n = (seen.get(`${l.platform}:${region}`) ?? 0) + 1;
+    seen.set(`${l.platform}:${region}`, n);
+    return [platformName(l.platform), region, twins.length > 1 ? `(${n})` : null].filter(Boolean).join(" · ");
   });
+  // Stacks grouped by platform, newest platform first, for the list picker.
+  const byPlatform = [...new Set(lists.map((l) => l.platform))].map((p) => ({ platform: p, items: lists.map((l, i) => ({ l, label: listLabels[i] })).filter((x) => x.l.platform === p) }));
+  const banner = shots.find((x) => !x.startsWith("art:"));
+  const hours = game.hoursToPlatinum ?? game.staffHours;
 
   return (
     <div>
       {/* Header */}
-      <section className="card mb-8">
-        <div className="grid gap-6 p-5 sm:p-7 md:grid-cols-[180px_1fr]">
-          <GameArt title={game.title} hue={game.coverHue} iconUrl={game.iconUrl} size="lg" className="w-36 md:w-full" />
+      <section className="card relative mb-8 overflow-hidden">
+        {banner && (
+          <div className="relative h-28 overflow-hidden sm:h-40" aria-hidden>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={banner} alt="" referrerPolicy="no-referrer" fetchPriority="high" className="h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-transparent" />
+          </div>
+        )}
+        <div className={clsx("relative grid gap-6 p-5 sm:p-7 md:grid-cols-[180px_1fr]", banner && "-mt-16 sm:-mt-20")}>
+          <GameArt title={game.title} hue={game.coverHue} iconUrl={game.iconUrl} size="lg" className={clsx("w-36 md:w-full", banner && "border-4 border-surface shadow-[var(--shadow-raised)]")} />
           <div>
             <div className="flex flex-wrap gap-1.5">
               {game.platforms.split(",").map((p) => (
@@ -186,22 +202,34 @@ export default async function GamePage({ params, searchParams }: { params: Promi
             This game has {lists.length} separate trophy lists on PSN. Each platform, and sometimes each region, gets its own list,
             so a platinum on one doesn&apos;t count for another.
           </div>
-          <nav className="flex flex-wrap gap-2">
-            {lists.map((l, i) => (
-              <Link
-                key={l.id}
-                href={`/games/${l.slug}`}
-                aria-current={l.current ? "page" : undefined}
-                className={clsx("rounded-lg border px-3 py-1.5 text-xs", l.current ? "border-accent-text text-text" : "border-line text-muted hover:border-muted hover:text-text")}
-              >
-                <span className="font-semibold">{listLabels[i]}</span>
-                <span className="ml-2 text-faint">
-                  {l._count.trophies ? `${l._count.trophies} trophies` : "list not loaded"}
-                  {l._count.userGames > 0 && ` · ${l._count.userGames} members`}
-                </span>
-              </Link>
+          <nav className="card divide-y divide-line">
+            {byPlatform.map(({ platform, items }) => (
+              <div key={platform} className="flex flex-wrap items-center gap-2 px-4 py-3">
+                <span className="w-16 shrink-0 text-xs font-bold uppercase tracking-wider text-muted">{platformName(platform)}</span>
+                {items.map(({ l, label }) => (
+                  <Link
+                    key={l.id}
+                    href={`/games/${l.slug}`}
+                    aria-current={l.current ? "page" : undefined}
+                    title={regions.get(l.id) ? `${REGION_NAMES[regions.get(l.id)!]} list` : undefined}
+                    className={clsx(
+                      "rounded-lg border px-3 py-1.5 text-xs",
+                      l.current ? "border-accent-text bg-accent/5 text-text" : "border-line text-muted hover:border-muted hover:text-text",
+                    )}
+                  >
+                    <span className="font-semibold">{label}</span>
+                    <span className="ml-2 text-faint">
+                      {l._count.trophies ? `${l._count.trophies} trophies` : "not loaded yet"}
+                      {l._count.userGames > 0 && ` · ${l._count.userGames} members`}
+                    </span>
+                  </Link>
+                ))}
+              </div>
             ))}
           </nav>
+          {regions.size > 0 && (
+            <p className="mt-1.5 text-xs text-faint">Regions are worked out from where the players who own each list are, so a few may be missing.</p>
+          )}
         </section>
       )}
 
@@ -213,14 +241,18 @@ export default async function GamePage({ params, searchParams }: { params: Promi
             <Stat
               label="Obtainable"
               value={<span className={clsx("text-base", unob ? "text-bad" : "text-good")}>{unob ? unob.short : "Platinum and 100%"}</span>}
-              sub={unob ? (game.unobtainableReason ?? undefined) : undefined}
+              sub={[unob ? game.unobtainableReason : null, game.unobtainableAt ? `Checked by staff ${formatDate(game.unobtainableAt)}` : null].filter(Boolean).join(" · ") || undefined}
             />
             <Stat
               label="Game rating"
               value={game.rating != null ? `${game.rating.toFixed(1)} / 5` : "n/a"}
               sub={game.ratingCount ? `From ${game.ratingCount} member${game.ratingCount === 1 ? "" : "s"}` : "Not rated yet"}
             />
-            <Stat label="Time to platinum" value={game.hoursToPlatinum ? `~${game.hoursToPlatinum}h` : "n/a"} sub={guideSource} />
+            <Stat
+              label="Time to platinum"
+              value={hours ? `~${hours}h` : "n/a"}
+              sub={game.hoursToPlatinum ? guideSource : game.staffHours ? "Staff estimate until a guide is written" : guideSource}
+            />
             <Stat label="Playthroughs" value={game.playthroughs ?? "n/a"} sub={guideSource} />
             <Stat
               label="Platinum rate"
@@ -233,25 +265,14 @@ export default async function GamePage({ params, searchParams }: { params: Promi
             <section>
               <SectionTitle
                 action={
-                  <div className="flex flex-wrap items-center justify-end gap-1.5 text-sm">
-                    {hiddenLeft > 0 && <RevealAllButton count={hiddenLeft} className="chip hover:text-text" />}
-                    {[
-                      ["default", "Default"],
-                      ["rarity", "Rarest"],
-                      ["type", "Grade"],
-                    ].map(([k, l]) => (
-                      <Link key={k} href={`/games/${game.slug}?sort=${k}`} scroll={false} className={clsx("chip min-h-6", sort === k && "chip-active")}>
-                        {l}
-                      </Link>
-                    ))}
-                  </div>
+                  hiddenLeft > 0 ? <RevealAllButton count={hiddenLeft} className="chip hover:text-text" /> : undefined
                 }
               >
                 Trophy list
               </SectionTitle>
               {game.needsList && <ListLoader gameId={game.id} />}
               {!game.needsList && game.trophies.length === 0 && <p className="text-sm text-muted">No trophy list is available for this game yet.</p>}
-              <TrophyList gameSlug={game.slug} groups={game.groups} trophies={game.trophies} earned={earned} sort={sort as "default" | "rarity" | "type"} />
+              <TrophyList gameSlug={game.slug} groups={game.groups} trophies={game.trophies} earned={earned} sort={sortParam(sort)} />
             </section>
           </SpoilerGroup>
 
@@ -430,6 +451,16 @@ export default async function GamePage({ params, searchParams }: { params: Promi
               <h2 className="mb-1 font-bold">Staff: obtainable?</h2>
               <p className="mb-3 text-xs text-muted">Flag the list if servers shut down or a trophy is glitched. This applies to this trophy list only.</p>
               <UnobtainableForm gameId={game.id} unobtainable={game.unobtainable} reason={game.unobtainableReason} />
+              <div className="mt-5 border-t border-line pt-4">
+                <StaffHoursForm gameId={game.id} hours={game.staffHours} />
+              </div>
+              <p className="mt-4 text-xs text-muted">
+                Online trophies: open a trophy to mark it, or review members&apos; flags on the{" "}
+                <Link href="/staff?tab=online" className="link">
+                  staff dashboard
+                </Link>
+                .
+              </p>
             </section>
           )}
         </aside>

@@ -26,8 +26,12 @@ model User {
   showActivity            Boolean   @default(true)
   // FREE | PREMIUM: how often trophies sync (see src/lib/plans.ts).
   plan                    String    @default("FREE")
-  // USER | MODERATOR | ADMIN (npm run user:role). Moderators look after members' posts; admins also run the site.
+  // USER | MODERATOR | ADMIN | OWNER (npm run user:role). Moderators look after members' posts; admins also run
+  // the site; the owner also appoints admins and is the only one who can delete accounts (src/lib/roles.ts).
   role                    String    @default("USER")
+  // Staff can suspend a member: until then they can read but not post, message or start anything.
+  suspendedUntil          DateTime?
+  suspendReason           String?
   // Trusted members publish guides straight away; everyone else's wait for staff approval.
   trusted                 Boolean   @default(false)
   // The platinum they're proudest of, shown on their profile (one of their own platinum games).
@@ -87,6 +91,9 @@ model User {
   wishlist              WishlistGame[]
   favouritePlatinumGame Game?                @relation("favouritePlatinum", fields: [favouritePlatinumGameId], references: [id], onDelete: SetNull)
   reportsResolved       Report[]             @relation("reportsResolved")
+  postComments          PostComment[]
+  onlineFlags           OnlineFlag[]         @relation("onlineFlagger")
+  staffActions          StaffAction[]        @relation("staffActor")
   blocking              Block[]              @relation("blocker")
   blockedBy             Block[]              @relation("blocked")
   reactions             PostReaction[]
@@ -306,9 +313,18 @@ model Game {
   // PLATINUM | COMPLETION when the platinum or 100% can't be earned any more (servers shut, glitched trophy). Set by admins.
   unobtainable       String?
   unobtainableReason String?
+  // When staff last set obtainability, and who (shown on the game page).
+  unobtainableAt     DateTime?
+  unobtainableById   String?
+  // Staff estimate of hours to platinum, used while no guide has been published (guides take over after).
+  staffHours         Int?
   // Trophies in the list according to PSN's game listings. When it grows past
   // what's stored (a DLC pack was added), the list is fetched again.
   definedTrophies    Int?
+  // PSN's count by type, "platinum,gold,silver,bronze", so lists show their trophies before they're loaded.
+  definedCounts      String?
+  // When the background job last tried to load this list. Lists PSN refuses go to the back of the queue.
+  listTriedAt        DateTime?
   // Tracked players and members who have any list of this game, for "Most played" (refreshGamePopularity).
   players            Int       @default(0)
   // When we last looked for sibling trophy lists (other regions/platforms) next to this one.
@@ -372,13 +388,14 @@ model Trophy {
   iconUrl     String?
   earnedRate  Float? // % of players who earned it; null until PSN reports it
 
-  game     Game            @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  group    TrophyGroup     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  earners  UserTrophy[]
-  tips     Tip[]
-  steps    GuideStep[]
-  sessions SessionTrophy[]
-  vaults   VaultTrophy[]
+  game        Game            @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  group       TrophyGroup     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  earners     UserTrophy[]
+  tips        Tip[]
+  steps       GuideStep[]
+  sessions    SessionTrophy[]
+  vaults      VaultTrophy[]
+  onlineFlags OnlineFlag[]
 
   @@unique([gameId, psnTrophyId])
   @@unique([gameId, slug])
@@ -439,7 +456,8 @@ model Guide {
   onlineRequired Boolean  @default(false)
   videoYoutubeId String?
   views          Int      @default(0)
-  // PUBLISHED | PENDING (waiting for staff) | REJECTED. Guides by staff and trusted members publish straight away.
+  // DRAFT (only its author sees it) | PENDING (waiting for staff) | PUBLISHED | REJECTED.
+  // Guides by staff and trusted members publish straight away.
   status         String   @default("PUBLISHED")
   // Why staff sent it back, shown to the author.
   reviewNote     String?
@@ -547,9 +565,11 @@ model SessionComment {
 }
 
 model SessionMember {
-  sessionId String
-  userId    String
-  joinedAt  DateTime @default(now())
+  sessionId  String
+  userId     String
+  joinedAt   DateTime  @default(now())
+  // When this player got the "your session is today" notice.
+  remindedAt DateTime?
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -698,10 +718,70 @@ model Post {
   author    User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
   club      Club?          @relation(fields: [clubId], references: [id], onDelete: Cascade)
   reactions PostReaction[]
+  comments  PostComment[]
 
   @@index([createdAt])
   @@index([authorId, createdAt])
   @@index([clubId, createdAt])
+}
+
+// A reply under a community or club update.
+model PostComment {
+  id        String   @id @default(cuid())
+  postId    String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+}
+
+// A member suggesting a trophy needs online play. Shown only once staff approve it (then Trophy.online is set).
+model OnlineFlag {
+  id           String    @id @default(cuid())
+  trophyId     String
+  userId       String
+  // true: needs online; false: doesn't (to correct a trophy marked online).
+  online       Boolean   @default(true)
+  note         String?
+  // PENDING | APPROVED | REJECTED
+  status       String    @default("PENDING")
+  createdAt    DateTime  @default(now())
+  reviewedAt   DateTime?
+  reviewedById String?
+
+  trophy Trophy @relation(fields: [trophyId], references: [id], onDelete: Cascade)
+  user   User   @relation("onlineFlagger", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([trophyId, userId])
+  @@index([status, createdAt])
+}
+
+// What staff did: approvals, removals, warnings, suspensions, role changes. Read on the staff dashboard.
+model StaffAction {
+  id         String   @id @default(cuid())
+  actorId    String?
+  // e.g. "report.remove", "guide.approve", "user.suspend", "role.set", "rules.edit"
+  action     String
+  targetType String?
+  targetId   String?
+  detail     String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation("staffActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}
+
+// Site-wide text staff can edit, such as the forum rules (key "forum-rules").
+model SiteSetting {
+  key         String   @id
+  value       String
+  updatedAt   DateTime @updatedAt
+  updatedById String?
 }
 
 // One emoji reaction from one member on an update (REACTIONS in src/lib/community.ts).
@@ -727,6 +807,10 @@ model Club {
   theme        String    @default("")
   // Club picture: "preset:<key>" (the built-in pictures) or null for its initial.
   avatar       String?
+  // House rules the owner writes, shown on the club page.
+  rules        String    @default("")
+  // Banner: an uploaded picture or a game's artwork (https), shown across the top of the club page.
+  bannerUrl    String?
   ownerId      String
   createdAt    DateTime  @default(now())
   // Clubs with no new members, updates or reactions for 5 days get a warning; 2 days later they're deleted

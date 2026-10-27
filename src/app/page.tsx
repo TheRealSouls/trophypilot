@@ -187,9 +187,9 @@ export default async function Home() {
                         ) : null,
                       )}
                     </span>
-                  ) : (
-                    <span className="shrink-0 text-xs text-faint">List not loaded</span>
-                  )}
+                  ) : g.total ? (
+                    <span className="shrink-0 text-xs tabular-nums text-muted">{g.total} trophies</span>
+                  ) : null}
                 </li>
               );
             })}

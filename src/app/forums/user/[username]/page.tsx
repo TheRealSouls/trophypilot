@@ -1,3 +1,4 @@
+import { staffTitle } from "@/lib/forum";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { plainText } from "@/lib/rich-text";
@@ -50,7 +51,7 @@ export default async function ForumUserPage({ params }: { params: Promise<Params
         <div className="min-w-0 flex-1">
           <PageHeader title={name}>
             {rep.rank}
-            {user.role === "ADMIN" ? " · Forum staff" : user.role === "MODERATOR" ? " · Moderator" : ""}
+            {staffTitle(user.role) ? ` · ${staffTitle(user.role)}` : ""}
           </PageHeader>
         </div>
         <Link href={`/u/${user.username}`} className="btn-ghost">Trophy profile</Link>

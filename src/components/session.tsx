@@ -16,6 +16,8 @@ export type Me = {
   avatarHue: number;
   psnVerified: boolean;
   admin: boolean;
+  /** Admin or owner (forum sections and site settings), not just a moderator. */
+  siteAdmin?: boolean;
   pending: number;
   unread: number;
   /** Open reports, for staff. */
@@ -168,6 +170,7 @@ export function NavAccount() {
         unread={me.unread}
         reports={me.reports ?? 0}
         admin={me.admin}
+        siteAdmin={!!me.siteAdmin}
         onLogout={reload}
       />
     </>

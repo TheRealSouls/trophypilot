@@ -152,6 +152,17 @@ const PAGE = 800;
 export const sumCounts = (c?: { bronze?: number; silver?: number; gold?: number; platinum?: number }) =>
   c ? (c.bronze ?? 0) + (c.silver ?? 0) + (c.gold ?? 0) + (c.platinum ?? 0) : undefined;
 
+/** PSN's per-type counts as "platinum,gold,silver,bronze", stored on Game.definedCounts. */
+export const countsString = (c?: { bronze?: number; silver?: number; gold?: number; platinum?: number }) =>
+  c ? [c.platinum ?? 0, c.gold ?? 0, c.silver ?? 0, c.bronze ?? 0].join(",") : undefined;
+
+/** Game.definedCounts back into counts by type. */
+export function parseCounts(s: string | null | undefined): Partial<Record<"PLATINUM" | "GOLD" | "SILVER" | "BRONZE", number>> {
+  const [platinum, gold, silver, bronze] = (s ?? "").split(",").map(Number);
+  if (!s || [platinum, gold, silver, bronze].some((n) => !Number.isFinite(n))) return {};
+  return { PLATINUM: platinum, GOLD: gold, SILVER: silver, BRONZE: bronze };
+}
+
 export class RealPsnProvider implements TrophyProvider {
   readonly name = "psn" as const;
 
@@ -198,6 +209,7 @@ export class RealPsnProvider implements TrophyProvider {
           platforms: String(t.trophyTitlePlatform).split(","),
           lastUpdated: new Date(t.lastUpdatedDateTime),
           definedTrophies: sumCounts(t.definedTrophies),
+          definedCounts: countsString(t.definedTrophies),
         })),
       };
     };
@@ -225,14 +237,22 @@ export class RealPsnProvider implements TrophyProvider {
 
   async getTitleDefinition(title: PsnTitle) {
     const a = await psnAuth();
-    const opts = title.npServiceName === "trophy" ? { npServiceName: "trophy" as const } : {};
-    const [groups, trophies] = await withTimeout(
-      Promise.all([
-        getTitleTrophyGroups(a, title.npCommunicationId, opts),
-        getTitleTrophies(a, title.npCommunicationId, "all", opts),
-      ]),
-    ).catch((e) => {
-      throw toPsnError(e);
+    const fetchFrom = (service: "trophy" | "trophy2") => {
+      const opts = service === "trophy" ? { npServiceName: "trophy" as const } : {};
+      return withTimeout(
+        Promise.all([getTitleTrophyGroups(a, title.npCommunicationId, opts), getTitleTrophies(a, title.npCommunicationId, "all", opts)]),
+      ).catch((e) => {
+        throw toPsnError(e);
+      });
+    };
+    // Some lists are filed under the other trophy service than their listing says (PS4 lists played on PS5,
+    // cross-buy stacks): if PSN can't find it, ask the other one before giving up.
+    const service = title.npServiceName === "trophy" ? "trophy" : "trophy2";
+    const [groups, trophies] = await fetchFrom(service).catch((e: PsnError) => {
+      if (e.kind === "rate_limited" || e.kind === "auth") throw e;
+      return fetchFrom(service === "trophy" ? "trophy2" : "trophy").catch(() => {
+        throw e;
+      });
     });
     return {
       groups: groups.trophyGroups.map((g) => ({ psnGroupId: g.trophyGroupId, name: g.trophyGroupName, iconUrl: g.trophyGroupIconUrl ?? null })),

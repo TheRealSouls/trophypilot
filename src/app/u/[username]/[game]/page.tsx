@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import clsx from "clsx";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { GameArt } from "@/components/art";
 import { TrophyList } from "@/components/TrophyList";
+import { sortParam } from "@/lib/trophies";
 import { RevealAllButton, SpoilerGroup } from "@/components/client";
 import { TrophyIcon } from "@/components/TrophyIcon";
 import { EmptyState, ProgressBar } from "@/components/ui";
@@ -46,12 +46,7 @@ export default async function UserGamePage({
   ]);
   const earned = new Map(earnedRows.map((r) => [r.trophyId, r.earnedAt]));
   const hiddenLeft = game.trophies.filter((t) => t.hidden && !earned.has(t.id)).length;
-  const trophies = game.trophies.filter((t) =>
-    filter === "earned" ? earned.has(t.id) : filter === "unearned" ? !earned.has(t.id) : true,
-  );
   const display = owner.psn?.onlineId ?? owner.username;
-  const base = `/u/${owner.username}/${game.slug}`;
-  const q = (o: Record<string, string>) => `${base}?${new URLSearchParams({ sort, filter, ...o })}`;
 
   return (
     <div>
@@ -83,36 +78,20 @@ export default async function UserGamePage({
       </header>
 
       <SpoilerGroup>
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-        {hiddenLeft > 0 && <RevealAllButton count={hiddenLeft} className="chip hover:text-text" />}
-        {[
-          ["all", "All"],
-          ["earned", `Earned (${earned.size})`],
-          ["unearned", `Unearned (${game.trophies.length - earned.size})`],
-        ].map(([k, l]) => (
-          <Link key={k} href={q({ filter: k })} scroll={false} className={clsx("chip min-h-6", filter === k && "chip-active")}>
-            {l}
-          </Link>
-        ))}
-        <span className="ml-auto text-muted">Sort:</span>
-        {[
-          ["default", "Default"],
-          ["rarity", "Rarest"],
-          ["type", "Grade"],
-        ].map(([k, l]) => (
-          <Link key={k} href={q({ sort: k })} scroll={false} className={clsx("chip min-h-6", sort === k && "chip-active")}>
-            {l}
-          </Link>
-        ))}
-      </div>
+      {hiddenLeft > 0 && (
+        <div className="mb-3 flex justify-end">
+          <RevealAllButton count={hiddenLeft} className="chip hover:text-text" />
+        </div>
+      )}
 
       <TrophyList
         gameSlug={game.slug}
         groups={game.groups}
-        trophies={trophies}
+        trophies={game.trophies}
         earned={earned}
         ownerLabel={display}
-        sort={sort as "default" | "rarity" | "type"}
+        sort={sortParam(sort)}
+        show={filter === "earned" || filter === "unearned" ? filter : "all"}
       />
       </SpoilerGroup>
     </div>

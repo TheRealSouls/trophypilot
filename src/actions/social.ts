@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { logStaff } from "@/lib/staff";
 import { requireUser } from "@/lib/auth";
 import { verifyFirst } from "@/lib/email";
 import { formText, hateSpeechError } from "@/lib/moderation";
@@ -146,6 +147,7 @@ export async function deleteClub(fd: FormData) {
   const club = await prisma.club.findUnique({ where: { id: String(fd.get("clubId")) } });
   if (!club || (club.ownerId !== me.id && !isStaff(me))) return;
   await prisma.club.delete({ where: { id: club.id } });
+  if (club.ownerId !== me.id) await logStaff(me.id, "club.delete", { type: "CLUB", id: club.id }, club.name);
   revalidatePath("/clubs", "layout");
   redirect("/clubs");
 }

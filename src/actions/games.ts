@@ -6,6 +6,10 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { refreshEstimates } from "@/lib/estimates";
 import { isStaff } from "@/lib/forum";
+import { logStaff } from "@/lib/staff";
+import { verifyFirst } from "@/lib/email";
+import { hateSpeechError } from "@/lib/moderation";
+import { rateLimit } from "@/lib/rate-limit";
 import { bust } from "@/lib/cache";
 import type { FormState } from "./auth";
 
@@ -97,8 +101,53 @@ export async function setUnobtainable(_: FormState, fd: FormData): Promise<FormS
   if (unobtainable && !reason) return { error: "Say why: servers shut down, a glitched trophy, a delisted DLC…" };
   await prisma.game.update({
     where: { id: gameId },
-    data: { unobtainable: unobtainable || null, unobtainableReason: unobtainable ? reason : null },
+    // When and by whom, so the game page can say how current it is.
+    data: { unobtainable: unobtainable || null, unobtainableReason: unobtainable ? reason : null, unobtainableAt: new Date(), unobtainableById: user.id },
   });
+  await logStaff(user.id, "game.obtainable", { type: "GAME", id: gameId }, unobtainable ? `${unobtainable}: ${reason}` : "obtainable");
   await refreshGamePage(gameId);
   return { ok: "Saved." };
+}
+
+/**
+ * Staff estimate of the hours to platinum, for games no guide covers yet. It
+ * applies to every list of the game; once a guide is published, its estimate
+ * is shown instead. 0 clears it.
+ */
+export async function setStaffHours(_: FormState, fd: FormData): Promise<FormState> {
+  const user = await requireUser();
+  if (!isStaff(user)) return { error: "Only staff can change this." };
+  const hours = Math.round(Number(fd.get("hours")));
+  if (!(hours >= 0 && hours <= 2000)) return { error: "Enter the hours as a number, 0 to clear." };
+  const game = await prisma.game.findUnique({ where: { id: String(fd.get("gameId") ?? "") }, select: { id: true, titleKey: true } });
+  if (!game) return { error: "That game doesn't exist." };
+  await prisma.game.updateMany({ where: game.titleKey ? { titleKey: game.titleKey } : { id: game.id }, data: { staffHours: hours || null } });
+  await logStaff(user.id, "game.hours", { type: "GAME", id: game.id }, hours ? `${hours}h` : "cleared");
+  await refreshGamePage(game.id);
+  return { ok: hours ? `Saved: about ${hours} hours.` : "Cleared." };
+}
+
+/**
+ * A member says a trophy needs online play (or doesn't). It waits for staff
+ * (Online flags on the staff dashboard) and changes nothing until approved.
+ */
+export async function flagOnline(_: FormState, fd: FormData): Promise<FormState> {
+  const user = await requireUser();
+  const unverified = verifyFirst(user);
+  if (unverified) return { error: unverified };
+  if (!(await rateLimit("online-flag", 20, 60 * 60_000, user.id))) return { error: "You've sent a lot of these this hour. Try again later." };
+  const note = String(fd.get("note") ?? "").trim().slice(0, 300) || null;
+  const hate = hateSpeechError(note);
+  if (hate) return { error: hate };
+  const trophy = await prisma.trophy.findUnique({ where: { id: String(fd.get("trophyId") ?? "") }, select: { id: true, online: true } });
+  if (!trophy) return { error: "That trophy doesn't exist." };
+  const online = fd.get("online") !== "0";
+  if (online === trophy.online) return { ok: online ? "It's already marked as needing online." : "It's already marked as offline." };
+  await prisma.onlineFlag.upsert({
+    where: { trophyId_userId: { trophyId: trophy.id, userId: user.id } },
+    create: { trophyId: trophy.id, userId: user.id, online, note },
+    update: { online, note, status: "PENDING", createdAt: new Date(), reviewedAt: null, reviewedById: null },
+  });
+  revalidatePath("/staff");
+  return { ok: "Thanks. Staff will check it before it shows on the trophy." };
 }

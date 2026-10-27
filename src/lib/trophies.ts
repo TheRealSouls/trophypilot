@@ -64,3 +64,10 @@ export function pointsFor(counts: { platinum: number; gold: number; silver: numb
     counts.bronze * TROPHY_POINTS.BRONZE
   );
 }
+
+/** How a trophy list can be sorted (TrophyList). */
+export type TrophySort = "default" | "rarity" | "common" | "type" | "earned";
+
+/** A ?sort= value from the address, for where a trophy list starts. */
+export const sortParam = (s: string | undefined): TrophySort =>
+  s === "rarity" || s === "common" || s === "type" || s === "earned" ? s : "default";

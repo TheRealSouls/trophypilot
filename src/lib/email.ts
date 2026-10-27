@@ -28,13 +28,19 @@ export async function sendEmail({ to, subject, text, html }: { to: string; subje
   if (!res.ok) throw new Error(`Resend said ${res.status}: ${(await res.text()).slice(0, 200)}`);
 }
 
-type Member = { id: string; email: string; username: string; emailVerifiedAt: Date | null; createdAt: Date };
+type Member = { id: string; email: string; username: string; emailVerifiedAt: Date | null; createdAt: Date; suspendedUntil?: Date | null };
 
 export const needsVerification = (user: Member) =>
   emailEnabled() && !user.emailVerifiedAt && user.createdAt >= VERIFICATION_START && !isDemoAccount(user);
 
-/** Null when the member may post, otherwise what to tell them. */
+/**
+ * Null when the member may post, message or start things, otherwise what to tell them: a staff suspension
+ * (src/actions/staff.ts) or an unconfirmed email address. Every publishing action checks this first.
+ */
 export function verifyFirst(user: Member) {
+  if (user.suspendedUntil && user.suspendedUntil > new Date()) {
+    return `Your account is suspended until ${user.suspendedUntil.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}, so you can read but not post or message.`;
+  }
   return needsVerification(user)
     ? "Confirm your email address first: click the link we emailed you. You can send a new link from Settings."
     : null;

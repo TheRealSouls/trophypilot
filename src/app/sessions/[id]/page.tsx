@@ -1,3 +1,4 @@
+import { isStaff } from "@/lib/roles";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ReportButton } from "@/components/ReportButton";
@@ -152,7 +153,7 @@ export default async function SessionPage({ params }: { params: Promise<Params> 
               <ol className="mb-6 space-y-3">
                 {session.comments.map((c) => {
                   const name = c.author.psn?.onlineId ?? c.author.username;
-                  const canDelete = viewer && (c.authorId === viewer.id || isHost || viewer.role === "ADMIN" || viewer.role === "MODERATOR");
+                  const canDelete = viewer && (c.authorId === viewer.id || isHost || isStaff(viewer));
                   return (
                     <li key={c.id} className="card flex gap-3 p-4">
                       <Avatar name={name} hue={c.author.avatarHue} url={c.author.psn?.avatarUrl} avatar={c.author.avatar} size={36} />

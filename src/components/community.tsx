@@ -1,3 +1,4 @@
+import { isStaff } from "@/lib/roles";
 import Link from "next/link";
 import { RichText } from "./RichText";
 import { ReportButton } from "./ReportButton";
@@ -49,7 +50,7 @@ export function PostList({ posts, viewer, empty }: { posts: FeedPost[]; viewer: 
     <ol className="space-y-3">
       {posts.map((p) => {
         const name = p.author.psn?.onlineId ?? p.author.username;
-        const canDelete = viewer && (viewer.id === p.author.id || viewer.role === "ADMIN" || viewer.role === "MODERATOR");
+        const canDelete = viewer && (viewer.id === p.author.id || isStaff(viewer));
         return (
           // Each update wears its author's profile card theme.
           <li key={p.id} className={clsx("card relative flex gap-3 overflow-hidden p-4", cardClass(p.author.profileCard))}>
@@ -136,7 +137,8 @@ function Reactions({ postId, reactions, viewerId }: { postId: string; reactions:
             </svg>
             React
           </summary>
-          <div className="absolute left-0 top-full z-20 mt-1 flex gap-0.5 rounded-full border border-line bg-surface p-1 shadow-[var(--shadow-raised)]">
+          {/* In the flow rather than floating: the update's card clips anything that spills out (that hid the picker on long posts). */}
+          <div className="mt-1.5 flex flex-wrap gap-0.5 rounded-full border border-line bg-surface p-1">
             {counts.map((c) => button(c, true))}
           </div>
         </details>

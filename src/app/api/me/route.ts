@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { isStaff } from "@/lib/forum";
+import { isAdmin, isStaff } from "@/lib/roles";
 import { unreadConversations } from "@/lib/community";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +18,14 @@ export async function GET() {
   const [pending, unread, reports] = await Promise.all([
     prisma.friendship.count({ where: { addresseeId: user.id, status: "PENDING" } }),
     unreadConversations(user.id),
-    // Staff see how many reports are waiting.
-    admin ? prisma.report.count({ where: { status: "OPEN" } }).then(async (n) => n + (await prisma.guide.count({ where: { status: "PENDING" } }))) : 0,
+    // Staff see how much is waiting for them: reports, guides to review and online flags.
+    admin
+      ? Promise.all([
+          prisma.report.count({ where: { status: "OPEN" } }),
+          prisma.guide.count({ where: { status: "PENDING" } }),
+          prisma.onlineFlag.count({ where: { status: "PENDING" } }),
+        ]).then((n) => n.reduce((a, b) => a + b, 0))
+      : 0,
   ]);
   return NextResponse.json(
     {
@@ -32,6 +38,7 @@ export async function GET() {
         avatarHue: user.avatarHue,
         psnVerified: !!user.psn?.verified,
         admin,
+        siteAdmin: isAdmin(user),
         pending,
         unread,
         reports,

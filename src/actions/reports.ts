@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
+import { logStaff } from "@/lib/staff";
 import { requireUser } from "@/lib/auth";
 import { isStaff } from "@/lib/forum";
 import { plainText } from "@/lib/rich-text";
@@ -112,6 +113,7 @@ export async function resolveReport(fd: FormData) {
     where: { targetType: report.targetType, targetId: report.targetId, status: "OPEN" },
     data: { status: remove ? "REMOVED" : "DISMISSED", resolvedAt: new Date(), resolvedById: me.id },
   });
+  await logStaff(me.id, remove ? "report.remove" : "report.dismiss", { type: report.targetType, id: report.targetId }, report.excerpt?.slice(0, 120));
   revalidatePath("/reports");
   revalidatePath(report.url.split("#")[0]);
 }

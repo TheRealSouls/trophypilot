@@ -12,6 +12,10 @@ import { GameArt } from "@/components/art";
 import { TrophyIcon } from "@/components/TrophyIcon";
 import { RevealButton, Spoiler, SpoilerSwap } from "@/components/client";
 import { Tips } from "@/components/Tips";
+import { SubmitButton } from "@/components/client";
+import { isStaff } from "@/lib/roles";
+import { setTrophyOnline } from "@/actions/staff";
+import { OnlineFlagForm } from "../forms";
 import { Avatar, RarityBadge, Stat, StatGrid } from "@/components/ui";
 
 type Params = { slug: string; trophy: string };
@@ -36,6 +40,12 @@ export default async function TrophyPage({ params }: { params: Promise<Params> }
   const p = await params;
   const t = await load(p.slug, p.trophy);
   const viewerId = await getSessionUserId();
+  const [viewerRole, myFlag] = viewerId
+    ? await Promise.all([
+        prisma.user.findUnique({ where: { id: viewerId }, select: { role: true } }).then((u) => u?.role ?? "USER"),
+        prisma.onlineFlag.findUnique({ where: { trophyId_userId: { trophyId: t.id, userId: viewerId } }, select: { status: true, online: true } }),
+      ])
+    : [null, null];
 
   const [mine, earnerCount, owners, recent, steps] = await Promise.all([
     viewerId ? prisma.userTrophy.findUnique({ where: { userId_trophyId: { userId: viewerId, trophyId: t.id } } }) : null,
@@ -147,6 +157,7 @@ export default async function TrophyPage({ params }: { params: Promise<Params> }
           )}
           <Tips trophyId={t.id} path={trophyHref(t.game.slug, t.slug!)} />
         </div>
+        <div className="space-y-6">
         <aside className="card h-fit p-5">
           <h2 className="mb-3 font-bold">Recently earned by</h2>
           <ul className="space-y-2.5">
@@ -162,6 +173,37 @@ export default async function TrophyPage({ params }: { params: Promise<Params> }
             {recent.length === 0 && <li className="text-sm text-muted">No member has earned this yet.</li>}
           </ul>
         </aside>
+
+        {/* Online play: staff set it; members suggest it and staff approve. */}
+        <section className="card h-fit p-5" aria-labelledby="online-heading">
+          <h2 id="online-heading" className="mb-1 font-bold">
+            Online play
+          </h2>
+          <p className="mb-3 text-sm text-muted">
+            {t.online ? "This trophy needs online play (servers have to be up)." : "Not marked as needing online play."}
+          </p>
+          {isStaff({ role: viewerRole ?? "USER" }) ? (
+            <form action={setTrophyOnline}>
+              <input type="hidden" name="trophyId" value={t.id} />
+              <input type="hidden" name="online" value={t.online ? "0" : "1"} />
+              <SubmitButton className="btn-ghost w-full">{t.online ? "Staff: mark as offline" : "Staff: mark as needing online"}</SubmitButton>
+            </form>
+          ) : viewerId ? (
+            myFlag?.status === "PENDING" ? (
+              <p className="text-sm text-muted">Thanks for your suggestion. Staff haven&apos;t looked at it yet.</p>
+            ) : (
+              <OnlineFlagForm trophyId={t.id} online={t.online} />
+            )
+          ) : (
+            <p className="text-sm text-muted">
+              <Link href={`/login?next=${trophyHref(t.game.slug, t.slug!)}`} className="link">
+                Log in
+              </Link>{" "}
+              to suggest a change.
+            </p>
+          )}
+        </section>
+        </div>
       </div>
     </div>
   );

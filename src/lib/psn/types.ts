@@ -22,6 +22,8 @@ export type PsnTitle = {
   lastUpdated: Date;
   /** Total trophies in the list (base game and DLC), when the listing includes it. */
   definedTrophies?: number;
+  /** The same by type, "platinum,gold,silver,bronze" (see countsString). */
+  definedCounts?: string;
 };
 
 export type PsnGroupDef = { psnGroupId: string; name: string; iconUrl?: string | null };

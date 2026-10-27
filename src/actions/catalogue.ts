@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/forum";
 import { ensureGameTrophies, importTitles } from "@/lib/psn/catalogue";
-import { psnAuth, sumCounts, toPsnError, withTimeout } from "@/lib/psn/real";
+import { countsString, psnAuth, sumCounts, toPsnError, withTimeout } from "@/lib/psn/real";
 import { getProvider, isDemoMode } from "@/lib/psn/sync";
 import type { FormState } from "./auth";
 
@@ -30,7 +30,7 @@ export async function importListById(_: FormState, fd: FormData): Promise<FormSt
   const existing = await prisma.game.findUnique({ where: { npCommunicationId: id }, select: { slug: true } });
   if (existing) redirect(`/games/${existing.slug}`);
 
-  let found: { service: "trophy" | "trophy2"; name: string; icon: string | null; platforms: string[]; defined?: number } | null = null;
+  let found: { service: "trophy" | "trophy2"; name: string; icon: string | null; platforms: string[]; defined?: number; counts?: string } | null = null;
   for (const service of ["trophy2", "trophy"] as const) {
     try {
       const res = await withTimeout(
@@ -42,6 +42,7 @@ export async function importListById(_: FormState, fd: FormData): Promise<FormSt
         icon: res.trophyTitleIconUrl ?? null,
         platforms: String(res.trophyTitlePlatform).split(","),
         defined: sumCounts(res.definedTrophies),
+        counts: countsString(res.definedTrophies),
       };
       break;
     } catch (err) {
@@ -62,6 +63,7 @@ export async function importListById(_: FormState, fd: FormData): Promise<FormSt
         platforms: found.platforms,
         lastUpdated: new Date(),
         definedTrophies: found.defined,
+        definedCounts: found.counts,
       },
     ],
     null,

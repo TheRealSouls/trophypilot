@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { logStaff } from "@/lib/staff";
 import { requireUser } from "@/lib/auth";
 import { verifyFirst } from "@/lib/email";
 import { formText, hateSpeechError } from "@/lib/moderation";
@@ -191,6 +192,7 @@ export async function moderateThread(fd: FormData) {
   const action = String(fd.get("action"));
   const thread = await prisma.forumThread.findUnique({ where: { id }, include: { section: { select: { slug: true } } } });
   if (!thread) return;
+  await logStaff(user.id, "thread.moderate", { type: "THREAD", id }, `${action}: ${thread.title}`);
   if (action === "delete") {
     await prisma.forumThread.delete({ where: { id } });
     revalidatePath("/forums", "layout");

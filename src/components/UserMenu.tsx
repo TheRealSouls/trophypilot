@@ -21,6 +21,7 @@ export function UserMenu({
   pending,
   unread,
   admin,
+  siteAdmin = false,
   reports = 0,
   onLogout,
 }: {
@@ -32,6 +33,7 @@ export function UserMenu({
   /** Conversations with unread messages. */
   unread: number;
   admin: boolean;
+  siteAdmin?: boolean;
   /** Open reports waiting for staff. */
   reports?: number;
   /** Called after signing out, so the navbar updates without a full reload. */
@@ -74,8 +76,9 @@ export function UserMenu({
     ["/settings", "Settings and PSN"],
     ...(admin
       ? ([
+          ["/staff", "Staff dashboard"],
           ["/reports", "Reports", count(reports)],
-          ["/forums/manage", "Manage forums"],
+          ...(siteAdmin ? ([["/forums/manage", "Manage forums"]] as [string, string][]) : []),
         ] as [string, string, React.ReactNode?][])
       : []),
   ];

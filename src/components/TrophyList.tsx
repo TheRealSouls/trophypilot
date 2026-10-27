@@ -1,9 +1,12 @@
+"use client";
+
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { TrophyIcon } from "./TrophyIcon";
 import { RevealButton, Spoiler, SpoilerSwap } from "./client";
 import { ProgressBar, RarityBadge } from "./ui";
-import { TROPHY_ORDER, TROPHY_POINTS, type TrophyType } from "@/lib/trophies";
+import { TROPHY_ORDER, TROPHY_POINTS, type TrophySort, type TrophyType } from "@/lib/trophies";
 import { formatDate, psnImage } from "@/lib/utils";
 import { trophyHref } from "@/lib/trophy-slug";
 import { LocalTime } from "./LocalTime";
@@ -26,13 +29,29 @@ type T = {
 
 type G = { id: string; name: string; isDlc: boolean; releaseDate: Date | null };
 
+export type TrophyShow = "all" | "earned" | "unearned";
+
+const SORTS: [TrophySort, string][] = [
+  ["default", "Default order"],
+  ["rarity", "Rarest first"],
+  ["common", "Most common first"],
+  ["type", "Grade"],
+  ["earned", "Recently earned"],
+];
+
+/**
+ * A game's trophies, grouped into the base game and each DLC pack, with a
+ * filter bar: search, sort, earned/unearned, hidden trophies and DLC. It all
+ * happens in the page, so there's no wait for the server between clicks.
+ */
 export function TrophyList({
   gameSlug,
   groups,
   trophies,
   earned,
   ownerLabel,
-  sort = "default",
+  sort: initialSort = "default",
+  show: initialShow = "all",
 }: {
   /** The list's game, for trophy addresses (/games/<game>/<trophy>). */
   gameSlug: string;
@@ -41,26 +60,139 @@ export function TrophyList({
   /** trophyId → earned date; omit when there's no progress to show. */
   earned?: Map<string, Date>;
   ownerLabel?: string;
-  sort?: "default" | "rarity" | "type";
+  sort?: TrophySort;
+  show?: TrophyShow;
 }) {
-  const sorted = [...trophies].sort((a, b) => {
-    // Unknown rarity sorts last.
-    if (sort === "rarity") return (a.earnedRate ?? 101) - (b.earnedRate ?? 101);
-    if (sort === "type") return TROPHY_ORDER[a.type] - TROPHY_ORDER[b.type] || a.psnTrophyId - b.psnTrophyId;
-    return a.psnTrophyId - b.psnTrophyId;
-  });
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<TrophySort>(initialSort);
+  const [show, setShow] = useState<TrophyShow>(earned ? initialShow : "all");
+  const [unearnedFirst, setUnearnedFirst] = useState(false);
+  const [hideHidden, setHideHidden] = useState(false);
+  const [part, setPart] = useState<"all" | "base" | "dlc">("all");
+  const hasDlc = groups.some((g) => g.isDlc) && trophies.some((t) => groups.find((g) => g.id === t.groupId)?.isDlc);
+  const anyHidden = trophies.some((t) => t.hidden);
+  const earnedCount = earned ? trophies.filter((t) => earned.has(t.id)).length : 0;
+
+  const visible = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const dlcGroups = new Set(groups.filter((g) => g.isDlc).map((g) => g.id));
+    const list = trophies.filter((t) => {
+      const got = earned?.has(t.id) ?? false;
+      if (show === "earned" && !got) return false;
+      if (show === "unearned" && got) return false;
+      if (hideHidden && t.hidden && !got) return false;
+      if (part === "base" && dlcGroups.has(t.groupId)) return false;
+      if (part === "dlc" && !dlcGroups.has(t.groupId)) return false;
+      // A hidden trophy you haven't earned isn't found by its name, so searching can't spoil it.
+      if (needle && (t.hidden && !got ? true : !`${t.name} ${t.description}`.toLowerCase().includes(needle))) return false;
+      return true;
+    });
+    return list.sort((a, b) => {
+      if (unearnedFirst && earned) {
+        const d = Number(earned.has(a.id)) - Number(earned.has(b.id));
+        if (d) return d;
+      }
+      // Unknown rarity sorts last either way.
+      if (sort === "rarity") return (a.earnedRate ?? 101) - (b.earnedRate ?? 101);
+      if (sort === "common") return (b.earnedRate ?? -1) - (a.earnedRate ?? -1);
+      if (sort === "type") return TROPHY_ORDER[a.type] - TROPHY_ORDER[b.type] || a.psnTrophyId - b.psnTrophyId;
+      if (sort === "earned" && earned) return (earned.get(b.id)?.getTime() ?? 0) - (earned.get(a.id)?.getTime() ?? 0);
+      return a.psnTrophyId - b.psnTrophyId;
+    });
+  }, [trophies, groups, earned, q, sort, show, unearnedFirst, hideHidden, part]);
 
   // Base game first ("default" sorts after "001" as a string), then DLC in release order.
   const orderedGroups = [...groups].sort((a, b) => Number(a.isDlc) - Number(b.isDlc));
+  const filtered = visible.length !== trophies.length;
+  const chip = (active: boolean) => clsx("chip min-h-7 cursor-pointer", active && "chip-active");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {trophies.length > 0 && (
+        <div className="card space-y-3 p-3 sm:p-4" role="search" aria-label="Filter trophies">
+          <div className="flex flex-wrap gap-2">
+            <label className="relative min-w-48 flex-1">
+              <span className="sr-only">Search trophies</span>
+              <input
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search trophies…"
+                className="input py-2"
+              />
+            </label>
+            <label>
+              <span className="sr-only">Sort trophies</span>
+              <select value={sort} onChange={(e) => setSort(e.target.value as TrophySort)} className="input w-auto py-2">
+                {SORTS.filter(([k]) => k !== "earned" || earned).map(([k, l]) => (
+                  <option key={k} value={k}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 text-sm">
+            {earned && (
+              <>
+                {(
+                  [
+                    ["all", `All (${trophies.length})`],
+                    ["earned", `Earned (${earnedCount})`],
+                    ["unearned", `Unearned (${trophies.length - earnedCount})`],
+                  ] as [TrophyShow, string][]
+                ).map(([k, l]) => (
+                  <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)} className={chip(show === k)}>
+                    {l}
+                  </button>
+                ))}
+                <button type="button" aria-pressed={unearnedFirst} onClick={() => setUnearnedFirst(!unearnedFirst)} className={chip(unearnedFirst)}>
+                  Unearned first
+                </button>
+                <span className="mx-1 h-4 w-px bg-line" aria-hidden />
+              </>
+            )}
+            {anyHidden && (
+              <button type="button" aria-pressed={hideHidden} onClick={() => setHideHidden(!hideHidden)} className={chip(hideHidden)}>
+                Hide hidden trophies
+              </button>
+            )}
+            {hasDlc &&
+              (
+                [
+                  ["all", "Base game and DLC"],
+                  ["base", "Base game only"],
+                  ["dlc", "DLC only"],
+                ] as ["all" | "base" | "dlc", string][]
+              ).map(([k, l]) => (
+                <button key={k} type="button" aria-pressed={part === k} onClick={() => setPart(k)} className={chip(part === k)}>
+                  {l}
+                </button>
+              ))}
+          </div>
+          {filtered && (
+            <p className="text-xs text-muted" aria-live="polite">
+              Showing {visible.length} of {trophies.length} trophies.
+            </p>
+          )}
+        </div>
+      )}
+
+      {filtered && visible.length === 0 && (
+        <p className="card p-5 text-sm text-muted">
+          {show === "unearned" && earnedCount === trophies.length
+            ? `${ownerLabel ?? "You"} earned every trophy here.`
+            : "No trophies match. Try a different search or filter."}
+        </p>
+      )}
+
       {orderedGroups.map((g) => {
-        const list = sorted.filter((t) => t.groupId === g.id);
+        const all = trophies.filter((t) => t.groupId === g.id);
+        const list = visible.filter((t) => t.groupId === g.id);
         if (!list.length) return null;
-        const count = (type: string) => list.filter((t) => t.type === type).length;
-        const earnedHere = earned ? list.filter((t) => earned.has(t.id)) : [];
-        const total = list.reduce((s, t) => s + TROPHY_POINTS[t.type as TrophyType], 0);
+        const count = (type: string) => all.filter((t) => t.type === type).length;
+        const earnedHere = earned ? all.filter((t) => earned.has(t.id)) : [];
+        const total = all.reduce((s, t) => s + TROPHY_POINTS[t.type as TrophyType], 0);
         const got = earnedHere.reduce((s, t) => s + TROPHY_POINTS[t.type as TrophyType], 0);
         return (
           <section key={g.id} className="card" aria-label={g.name}>
@@ -81,7 +213,7 @@ export function TrophyList({
                 <div className="flex w-full items-center gap-3">
                   <ProgressBar value={total ? (got / total) * 100 : 0} className="flex-1" label={`${g.isDlc ? g.name : "Base game"} completion`} />
                   <span className="text-xs tabular-nums text-muted">
-                    {earnedHere.length}/{list.length}
+                    {earnedHere.length}/{all.length}
                   </span>
                 </div>
               )}

@@ -10,7 +10,7 @@ import { prisma } from "../db";
 import { pointsFor, ULTRA_RARE_MAX } from "../trophies";
 import { importTitles } from "./catalogue";
 import { countryFromNpId } from "./npid";
-import { psnAuth, sumCounts, toPsnError, withTimeout } from "./real";
+import { countsString, psnAuth, sumCounts, toPsnError, withTimeout } from "./real";
 import type { PsnTitle } from "./types";
 
 export { countryFromNpId };
@@ -185,6 +185,7 @@ export async function storePlayerTitles(accountId: string, raw: RawTitle[]) {
     platforms: String(t.trophyTitlePlatform).split(","),
     lastUpdated: new Date(t.lastUpdatedDateTime),
     definedTrophies: sumCounts(t.definedTrophies),
+    definedCounts: countsString(t.definedTrophies),
   }));
   // Only lists that changed since we last stored them need writing.
   const stored = new Map(

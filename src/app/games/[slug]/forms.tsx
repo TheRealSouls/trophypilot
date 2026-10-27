@@ -2,7 +2,7 @@
 
 import { useActionState, useOptimistic, useState, useTransition } from "react";
 import clsx from "clsx";
-import { rateGame, setNowPlaying, setUnobtainable, toggleWishlist } from "@/actions/games";
+import { flagOnline, rateGame, setNowPlaying, setStaffHours, setUnobtainable, toggleWishlist } from "@/actions/games";
 import { SubmitButton } from "@/components/client";
 import { FormMessage } from "@/components/ui";
 
@@ -222,6 +222,50 @@ export function UnobtainableForm({ gameId, unobtainable, reason }: { gameId: str
       <SubmitButton className="btn-ghost w-full" pendingText="Saving…">
         Save
       </SubmitButton>
+    </form>
+  );
+}
+
+/** Staff: hours to platinum for a game no guide covers yet. */
+export function StaffHoursForm({ gameId, hours }: { gameId: string; hours: number | null }) {
+  const [state, action] = useActionState(setStaffHours, null);
+  return (
+    <form action={action} className="space-y-2">
+      <input type="hidden" name="gameId" value={gameId} />
+      <label htmlFor="staff-hours" className="label">
+        Time to platinum (hours)
+      </label>
+      <p className="text-xs text-muted">Shown until a published guide gives its own estimate. 0 clears it.</p>
+      <div className="flex gap-2">
+        <input id="staff-hours" name="hours" type="number" min={0} max={2000} defaultValue={hours ?? ""} className="input w-28" />
+        <SubmitButton className="btn-ghost" pendingText="Saving…">
+          Save
+        </SubmitButton>
+      </div>
+      <FormMessage state={state} />
+    </form>
+  );
+}
+
+/**
+ * Members suggest that a trophy needs online play (or that one marked online doesn't).
+ * Nothing changes until staff approve it.
+ */
+export function OnlineFlagForm({ trophyId, online }: { trophyId: string; online: boolean }) {
+  const [state, action] = useActionState(flagOnline, null);
+  if (state?.ok) return <p className="text-sm text-good" role="status">{state.ok}</p>;
+  return (
+    <form action={action} className="space-y-2">
+      <input type="hidden" name="trophyId" value={trophyId} />
+      <input type="hidden" name="online" value={online ? "0" : "1"} />
+      <label htmlFor="online-note" className="label">
+        {online ? "Doesn't need online?" : "Needs online play?"}
+      </label>
+      <input id="online-note" name="note" maxLength={300} placeholder="Optional: what makes you think so" className="input" />
+      <SubmitButton className="btn-ghost" pendingText="Sending…">
+        {online ? "Suggest it's offline" : "Suggest it needs online"}
+      </SubmitButton>
+      <FormMessage state={state} />
     </form>
   );
 }

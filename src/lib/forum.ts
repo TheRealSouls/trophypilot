@@ -4,16 +4,12 @@ import { prisma } from "./db";
 export const THREADS_PER_PAGE = 25;
 export const POSTS_PER_PAGE = 20;
 
-/**
- * Staff are admins and moderators. Moderators look after what members post:
- * reports, guide approval, deleting, locking and moving threads. Admins also
- * run the site: forum sections, adding trophy lists, trusting guide writers.
- */
-export const isStaff = (user: { role: string } | null | undefined) => user?.role === "ADMIN" || user?.role === "MODERATOR";
-export const isAdmin = (user: { role: string } | null | undefined) => user?.role === "ADMIN";
+// Who counts as staff lives in lib/roles.ts; re-exported here for the many pages that import it from the forum helpers.
+export { isAdmin, isStaff } from "./roles";
+import { STAFF_BADGES } from "./roles";
 
-/** The chip shown next to staff names. */
-export const staffTitle = (role: string | null | undefined) => (role === "ADMIN" ? "Staff" : role === "MODERATOR" ? "Moderator" : null);
+/** The badge text shown next to staff names (Owner, Administrator, Moderator). */
+export const staffTitle = (role: string | null | undefined) => (role ? (STAFF_BADGES[role]?.label ?? null) : null);
 
 /** The tabs across the top of the forum pages. */
 export const FORUM_TABS = [

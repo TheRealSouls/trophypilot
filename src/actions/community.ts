@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { logStaff } from "@/lib/staff";
 import { requireUser } from "@/lib/auth";
 import { verifyFirst } from "@/lib/email";
 import { formText, hateSpeechError } from "@/lib/moderation";
@@ -146,6 +147,7 @@ export async function reviewGuide(fd: FormData) {
     where: { id: guide.id },
     data: approve ? { status: "PUBLISHED", reviewNote: null, createdAt: new Date() } : { status: "REJECTED", reviewNote: note ?? "Staff didn't approve this guide." },
   });
+  await logStaff(user.id, approve ? "guide.approve" : "guide.reject", { type: "GUIDE", id: guide.id }, approve ? null : note);
   if (approve) {
     await refreshEstimates([guide.gameId]);
     revalidatePath("/guides");
@@ -163,6 +165,7 @@ export async function setTrusted(fd: FormData) {
   const target = await prisma.user.findUnique({ where: { id: String(fd.get("userId")) }, select: { id: true, username: true } });
   if (!target) return;
   await prisma.user.update({ where: { id: target.id }, data: { trusted: fd.get("trusted") === "1" } });
+  await logStaff(user.id, "guide.trust", { type: "USER", id: target.id }, fd.get("trusted") === "1" ? "trusted" : "not trusted");
   revalidatePath(`/u/${target.username}`);
 }
 

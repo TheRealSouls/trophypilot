@@ -1,4 +1,5 @@
 import { prisma } from "./db";
+import { parseCounts } from "./psn/real";
 
 /**
  * Home page feeds. Each one merges members' synced history with the tracked
@@ -184,11 +185,17 @@ export async function newTrophyLists(take: number) {
   // The demo catalogue has no PSN ids: newest rows instead.
   if (!games.length) games = onePerGame(await prisma.game.findMany({ orderBy: { createdAt: "desc" }, take: take * 4, select: gameCard })).slice(0, take);
 
-  const rows = await prisma.trophy.groupBy({ by: ["gameId", "type"], where: { gameId: { in: games.map((g) => g.id) } }, _count: { _all: true } });
+  const [rows, defined] = await Promise.all([
+    prisma.trophy.groupBy({ by: ["gameId", "type"], where: { gameId: { in: games.map((g) => g.id) } }, _count: { _all: true } }),
+    prisma.game.findMany({ where: { id: { in: games.map((g) => g.id) } }, select: { id: true, definedCounts: true, definedTrophies: true } }),
+  ]);
   return games.map((g) => {
     const counts: Record<string, number> = {};
     for (const r of rows) if (r.gameId === g.id) counts[r.type] = r._count._all;
-    return { ...g, counts };
+    // Not loaded yet: PSN's own counts from the game listing, so the row still shows what's in the list.
+    const d = defined.find((x) => x.id === g.id);
+    const fallback = Object.keys(counts).length ? counts : parseCounts(d?.definedCounts);
+    return { ...g, counts: fallback as Record<string, number>, total: d?.definedTrophies ?? null };
   });
 }
 

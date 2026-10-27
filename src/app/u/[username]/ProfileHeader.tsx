@@ -1,3 +1,4 @@
+import { isAdmin } from "@/lib/roles";
 import Link from "next/link";
 import { addFriend, removeFriend, respondToRequest } from "@/actions/friends";
 import { toggleFollow } from "@/actions/social";
@@ -7,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { reputationOf } from "@/lib/community";
 import { COUNTRIES, flag } from "@/lib/countries";
 import { staffTitle } from "@/lib/forum";
+import { GuideCreatorBadge, StaffBadge } from "@/components/StaffBadge";
 import clsx from "clsx";
 import { PROFILE_CARDS, bannerImage, cardClass } from "@/lib/profile-themes";
 import { ProfileCardArt } from "@/components/ProfileCardArt";
@@ -37,7 +39,7 @@ export async function ProfileHeader({
   const level = psnLevel?.trophyLevel ?? stats?.level ?? 1;
   const progress = psnLevel?.levelProgress ?? stats?.progress ?? 0;
 
-  const [incoming, followers, following, iFollow, rep, viewer, iBlocked] = await Promise.all([
+  const [incoming, followers, following, iFollow, rep, viewer, iBlocked, publishedGuides] = await Promise.all([
     relation === "INCOMING"
       ? prisma.friendship.findFirst({ where: { requesterId: owner.id, addresseeId: viewerId!, status: "PENDING" } })
       : null,
@@ -51,8 +53,9 @@ export async function ProfileHeader({
     viewerId && relation !== "SELF"
       ? prisma.block.findUnique({ where: { blockerId_blockedId: { blockerId: viewerId, blockedId: owner.id } } })
       : null,
+    prisma.guide.count({ where: { authorId: owner.id, status: "PUBLISHED" } }),
   ]);
-  const staffViewing = viewer?.role === "ADMIN" && relation !== "SELF";
+  const staffViewing = isAdmin(viewer) && relation !== "SELF";
 
   const banner = bannerImage(owner.bannerGame);
   const card = owner.profileCard && owner.profileCard in PROFILE_CARDS ? owner.profileCard : "";
@@ -133,7 +136,8 @@ export async function ProfileHeader({
             {owner.profileVisibility !== "PUBLIC" && (
               <span className="chip">{owner.profileVisibility === "FRIENDS" ? "Friends only" : "Private"}</span>
             )}
-            {staffTitle(owner.role) && <span className="chip border-accent-text/50 text-accent-text">{staffTitle(owner.role)}</span>}
+            <StaffBadge role={owner.role} />
+            {publishedGuides > 0 && <GuideCreatorBadge />}
             {owner.trusted && !staffTitle(owner.role) && (
               <span className="chip" title="Publishes guides without waiting for approval">
                 Trusted guide writer

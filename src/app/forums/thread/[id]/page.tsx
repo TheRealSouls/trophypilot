@@ -6,7 +6,8 @@ import { cache } from "react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { flag } from "@/lib/countries";
-import { DELETED_USER, isStaff, POSTS_PER_PAGE, staffTitle } from "@/lib/forum";
+import { DELETED_USER, isStaff, POSTS_PER_PAGE } from "@/lib/forum";
+import { StaffBadge } from "@/components/StaffBadge";
 import { reputations } from "@/lib/community";
 import { formatDate, timeAgo } from "@/lib/utils";
 import { deletePost, moderateThread } from "@/actions/forum";
@@ -153,7 +154,7 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
                       {rep.get(p.author.id)?.rank} · {rep.get(p.author.id)?.points ?? 0} rep
                     </div>
                   )}
-                  {staffTitle(p.author?.role) && <span className="chip mt-1 border-accent-text/50 text-accent-text">{staffTitle(p.author?.role)}</span>}
+                  <StaffBadge role={p.author?.role} className="mt-1" />
                 </div>
               </aside>
               <div className="min-w-0 p-4">
