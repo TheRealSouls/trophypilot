@@ -15,18 +15,15 @@ import { SpoilerName } from "@/components/client";
 import { Avatar, MoreLink, Panel, RarityBadge } from "@/components/ui";
 import {
   BookIcon,
-  CalendarIcon,
   ChartIcon,
   FlameIcon,
   GamepadIcon,
-  PuzzleIcon,
   SearchIcon,
-  SparkIcon,
   StackIcon,
-  TrophyLineIcon,
   UsersIcon,
 } from "@/components/icons";
 import { SITE } from "@/lib/site";
+import { Tabs } from "@/components/Tabs";
 import {
   gamesNeedingGuides,
   heroCovers,
@@ -49,7 +46,7 @@ const rowLink = "block truncate text-sm font-semibold hover:underline hover:unde
 export default async function Home() {
   const monthAgo = new Date(Date.now() - 30 * 86_400_000);
 
-  const [totals, recentPlats, rareUnlocks, weekly, guides, trending, needGuides, newLists, dlcs, sessions, covers] = await Promise.all([
+  const [totals, recentPlats, rareUnlocks, weekly, guides, trending, needGuides, newLists, dlcs, sessions, covers, weeklyPlats, topCompletion, topRare, threads] = await Promise.all([
     siteTotals(),
     latestPlatinums(6),
     // The newest unlocks of any rarity, from members who share their activity.
@@ -67,6 +64,10 @@ export default async function Home() {
     newDlc(8),
     latestSessions(10),
     heroCovers(24),
+    getLeaderboard({ metric: "platinums", period: "weekly", scope: "global", limit: 5 }),
+    getLeaderboard({ metric: "completion", period: "all", scope: "global", limit: 5 }),
+    getLeaderboard({ metric: "rare", period: "all", scope: "global", limit: 5 }),
+    prisma.forumThread.findMany({ orderBy: { lastPostAt: "desc" }, take: 6, select: { id: true, title: true, postCount: true, lastPostAt: true, game: { select: { title: true } } } }),
   ]);
   const listFamilies = await familiesFor(newLists.map((g) => g.titleKey));
   const { games: gameCount, trophies: trophyCount, platinums: platCount } = totals;
@@ -161,158 +162,78 @@ export default async function Home() {
         </form>
       </section>
 
+      {/* Four tabbed panels instead of eight separate boxes: the same features with far less scrolling. */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <Panel title="New trophy lists" icon={<StackIcon />} action={<MoreLink href="/games">All games</MoreLink>}>
-          <ul className="divide-y divide-line">
-            {newLists.map((g) => {
-              const platforms = listFamilies.get(g.titleKey)?.platforms ?? g.platforms.split(",");
-              const loaded = Object.keys(g.counts).length > 0;
-              return (
-                <li key={g.id} className="flex items-center gap-3 py-3">
-                  <GameArt title={g.title} hue={g.coverHue} iconUrl={g.iconUrl} size="sm" className="w-11 rounded-md" />
-                  <div className="min-w-0 flex-1">
-                    <Link href={`/games/${g.slug}`} className={rowLink}>
-                      {g.title}
-                    </Link>
-                    <div className="truncate text-xs text-muted">{platforms.join(" · ")}</div>
-                  </div>
-                  {loaded ? (
-                    <span className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted">
-                      {(["PLATINUM", "GOLD", "SILVER", "BRONZE"] as const).map((t) =>
-                        g.counts[t] ? (
-                          <span key={t} className="inline-flex items-center gap-0.5">
-                            <TrophyIcon type={t} size={13} />
-                            {g.counts[t]}
-                          </span>
-                        ) : null,
-                      )}
-                    </span>
-                  ) : g.total ? (
-                    <span className="shrink-0 text-xs tabular-nums text-muted">{g.total} trophies</span>
-                  ) : null}
-                </li>
-              );
-            })}
-            {newLists.length === 0 && <li className="py-4 text-sm text-muted">No trophy lists yet.</li>}
-          </ul>
+        <Panel title="Latest trophy lists" icon={<StackIcon />} action={<MoreLink href="/games">All games</MoreLink>}>
+          <Tabs
+            label="Latest trophy lists"
+            tabs={[
+              {
+                key: "games",
+                label: "New games",
+                content: (
+                  <ul className="divide-y divide-line">
+                    {newLists.map((g) => {
+                      const platforms = listFamilies.get(g.titleKey)?.platforms ?? g.platforms.split(",");
+                      const loaded = Object.keys(g.counts).length > 0;
+                      return (
+                        <li key={g.id} className="flex items-center gap-3 py-3">
+                          <GameArt title={g.title} hue={g.coverHue} iconUrl={g.iconUrl} size="sm" className="w-11 rounded-md" />
+                          <div className="min-w-0 flex-1">
+                            <Link href={`/games/${g.slug}`} className={rowLink}>
+                              {g.title}
+                            </Link>
+                            <div className="truncate text-xs text-muted">{platforms.join(" · ")}</div>
+                          </div>
+                          {loaded ? (
+                            <span className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted">
+                              {(["PLATINUM", "GOLD", "SILVER", "BRONZE"] as const).map((t) =>
+                                g.counts[t] ? (
+                                  <span key={t} className="inline-flex items-center gap-0.5">
+                                    <TrophyIcon type={t} size={13} />
+                                    {g.counts[t]}
+                                  </span>
+                                ) : null,
+                              )}
+                            </span>
+                          ) : g.total ? (
+                            <span className="shrink-0 text-xs tabular-nums text-muted">{g.total} trophies</span>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                    {newLists.length === 0 && <li className="py-4 text-sm text-muted">No trophy lists yet.</li>}
+                  </ul>
+                ),
+              },
+              {
+                key: "dlc",
+                label: "New DLC",
+                content: (
+                  <ul className="divide-y divide-line">
+                    {dlcs.map((d) => (
+                      <li key={d.id} className="flex items-center gap-3 py-3">
+                        <GameArt title={d.name} hue={d.game.coverHue} iconUrl={d.iconUrl ?? d.game.iconUrl} size="sm" className="w-11 rounded-md" />
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/games/${d.game.slug}/dlc/${d.psnGroupId}`} className={rowLink}>
+                            {d.name}
+                          </Link>
+                          <div className="truncate text-xs text-muted">
+                            {d.game.title} · {d.game.platforms.split(",").join(" · ")}
+                          </div>
+                        </div>
+                        {d.addedLater && <span className="chip border-accent-text/50 text-accent-text">New</span>}
+                        <span className="shrink-0 text-xs tabular-nums text-muted">{d._count.trophies} trophies</span>
+                      </li>
+                    ))}
+                    {dlcs.length === 0 && <li className="py-4 text-sm text-muted">No DLC trophy packs yet.</li>}
+                  </ul>
+                ),
+              },
+            ]}
+          />
         </Panel>
 
-        <Panel title="New DLC" icon={<PuzzleIcon />}>
-          <ul className="divide-y divide-line">
-            {dlcs.map((d) => (
-              <li key={d.id} className="flex items-center gap-3 py-3">
-                <GameArt title={d.name} hue={d.game.coverHue} iconUrl={d.iconUrl ?? d.game.iconUrl} size="sm" className="w-11 rounded-md" />
-                <div className="min-w-0 flex-1">
-                  <Link href={`/games/${d.game.slug}/dlc/${d.psnGroupId}`} className={rowLink}>
-                    {d.name}
-                  </Link>
-                  <div className="truncate text-xs text-muted">
-                    {d.game.title} · {d.game.platforms.split(",").join(" · ")}
-                  </div>
-                </div>
-                {d.addedLater && <span className="chip border-accent-text/50 text-accent-text">New</span>}
-                <span className="shrink-0 text-xs tabular-nums text-muted">{d._count.trophies} trophies</span>
-              </li>
-            ))}
-            {dlcs.length === 0 && <li className="py-4 text-sm text-muted">No DLC trophy packs yet.</li>}
-          </ul>
-        </Panel>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <Panel
-          title="Latest platinums"
-          icon={<TrophyLineIcon />}
-          action={<MoreLink href="/leaderboards?metric=platinums">Platinum leaders</MoreLink>}
-        >
-          {recentPlats.length === 0 ? (
-            <p className="py-4 text-sm text-muted">No platinums yet. They appear as players link their accounts or get tracked.</p>
-          ) : (
-            <ul className="divide-y divide-line">
-              {recentPlats.map((p) => (
-                <li key={p.key} className="flex items-center gap-3 py-3">
-                  <GameArt title={p.game.title} hue={p.game.coverHue} iconUrl={p.game.iconUrl} size="sm" className="w-12 rounded-md" />
-                  <div className="min-w-0 flex-1">
-                    <Link href={`/games/${p.game.slug}`} className={rowLink}>
-                      {p.game.title}
-                    </Link>
-                    <div className="truncate text-xs text-muted">
-                      <Link href={p.player.href} className="hover:text-text">
-                        {p.player.name}
-                      </Link>{" "}
-                      {flag(p.player.country)} · {timeAgo(p.at)}
-                    </div>
-                  </div>
-                  <TrophyIcon type="PLATINUM" size={24} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-
-        <Panel title="Top this week" icon={<ChartIcon />} action={<MoreLink href="/leaderboards?period=weekly">Full board</MoreLink>}>
-          <ol className="divide-y divide-line">
-            {weekly.map((r) => (
-              <li key={r.key} className="flex items-center gap-3 py-3">
-                <span className="w-6 text-right text-sm font-semibold tabular-nums text-muted">{r.rank}.</span>
-                <Avatar name={r.name} hue={r.avatarHue} url={r.avatarUrl} avatar={r.avatar} size={34} className="rounded-md" />
-                <Link href={r.href} className="min-w-0 flex-1 truncate text-sm font-semibold hover:underline hover:underline-offset-4">
-                  {r.name} <span className="text-xs">{flag(r.country)}</span>
-                </Link>
-                <span className="text-sm tabular-nums text-muted">{formatNumber(r.points)} pts</span>
-              </li>
-            ))}
-            {weekly.length === 0 && <li className="py-4 text-sm text-muted">Nobody has earned a trophy yet this week.</li>}
-          </ol>
-        </Panel>
-      </div>
-
-      {trendingSorted.length > 0 && (
-        <Panel title="Most played this month" icon={<FlameIcon />} action={<MoreLink href="/games">All games</MoreLink>}>
-          <div className="grid grid-cols-2 gap-3 py-5 sm:grid-cols-3 lg:grid-cols-6">
-            {trendingSorted.map((g) => (
-              <GameCard key={g.id} game={{ ...g, platRate: g.trophies[0]?.earnedRate ?? null }} />
-            ))}
-          </div>
-        </Panel>
-      )}
-
-      <Panel title="Gaming sessions" icon={<CalendarIcon />} action={<MoreLink href="/sessions">All sessions</MoreLink>}>
-        {sessions.length === 0 ? (
-          <p className="py-4 text-sm text-muted">
-            No upcoming sessions.{" "}
-            <Link href="/sessions" className="link">
-              Host one
-            </Link>{" "}
-            for the online trophies you still need.
-          </p>
-        ) : (
-          <ul className="grid lg:grid-cols-2 lg:gap-x-10">
-            {sessions.map((s, i) => (
-              <li
-                key={s.id}
-                className={`flex items-center gap-3 py-3 ${i > 0 ? "border-t border-line" : ""} ${i === 1 ? "lg:border-t-0" : ""}`}
-              >
-                <GameArt title={s.game.title} hue={s.game.coverHue} iconUrl={s.game.iconUrl} size="sm" className="w-11 rounded-md" />
-                <div className="min-w-0 flex-1">
-                  <Link href={`/sessions/${s.id}`} className={rowLink}>
-                    {s.title}
-                  </Link>
-                  <div className="truncate text-xs text-muted">
-                    {s.game.title} · {s.platform} ·{" "}
-                    {formatDate(s.startsAt, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                  </div>
-                </div>
-                <span className={`chip shrink-0 ${s._count.members >= s.slots ? "border-bad/40 text-bad" : "border-good/40 text-good"}`}>
-                  {s._count.members}/{s.slots}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-
-      <div className="grid gap-6 lg:grid-cols-2">
         <Panel title="Latest guides" icon={<BookIcon />} action={<MoreLink href="/guides">All guides</MoreLink>}>
           {guides.length > 0 ? (
             <ul className="divide-y divide-line">
@@ -357,31 +278,170 @@ export default async function Home() {
           )}
         </Panel>
 
-        <Panel title="Recent trophies unlocked" icon={<SparkIcon />}>
-          <ul className="divide-y divide-line">
-            {rareUnlocks.map((u) => (
-              <li key={u.id} className="flex items-center gap-3 py-3">
-                <TrophyIcon type={u.trophy.type} size={24} />
-                <div className="min-w-0 flex-1">
-                  <SpoilerName hidden={u.trophy.hidden}>
-                    <Link href={u.trophy.slug ? trophyHref(u.trophy.game.slug, u.trophy.slug) : `/trophies/${u.trophy.id}`} className={rowLink}>
-                      {u.trophy.name}
-                    </Link>
-                  </SpoilerName>
-                  <div className="truncate text-xs text-muted">
-                    <Link href={`/u/${u.user.username}`} className="hover:text-text">
-                      {u.user.psn?.onlineId ?? u.user.username}
-                    </Link>{" "}
-                    · {u.trophy.game.title} · {timeAgo(u.earnedAt)}
-                  </div>
-                </div>
-                <RarityBadge rate={u.trophy.earnedRate} />
-              </li>
-            ))}
-            {rareUnlocks.length === 0 && <li className="py-4 text-sm text-muted">No trophies unlocked by members yet.</li>}
-          </ul>
+        <Panel title="Top players" icon={<ChartIcon />} action={<MoreLink href="/leaderboards">Leaderboards</MoreLink>}>
+          <Tabs
+            label="Top players"
+            tabs={[
+              { key: "points", label: "This week", content: <Board rows={weekly} value={(r) => `${formatNumber(r.points)} pts`} empty="Nobody has earned a trophy yet this week." /> },
+              { key: "plats", label: "Platinums", content: <Board rows={weeklyPlats} value={(r) => `${formatNumber(r.platinums)} plat${r.platinums === 1 ? "" : "s"}`} empty="No platinums yet this week." /> },
+              { key: "completion", label: "Average %", content: <Board rows={topCompletion} value={(r) => (r.completion != null ? `${r.completion}%` : "–")} empty="Not enough players ranked yet." /> },
+              { key: "rare", label: "Ultra rare", content: <Board rows={topRare} value={(r) => (r.rare != null ? formatNumber(r.rare) : "–")} empty="Not enough players ranked yet." /> },
+            ]}
+          />
+        </Panel>
+
+        <Panel title="Community activity" icon={<UsersIcon />} action={<MoreLink href="/community">Community</MoreLink>}>
+          <Tabs
+            label="Community activity"
+            tabs={[
+              {
+                key: "plats",
+                label: "Platinums",
+                content:
+                  recentPlats.length === 0 ? (
+                    <p className="py-4 text-sm text-muted">No platinums yet. They appear as players link their accounts or get tracked.</p>
+                  ) : (
+                    <ul className="divide-y divide-line">
+                      {recentPlats.map((p) => (
+                        <li key={p.key} className="flex items-center gap-3 py-3">
+                          <GameArt title={p.game.title} hue={p.game.coverHue} iconUrl={p.game.iconUrl} size="sm" className="w-11 rounded-md" />
+                          <div className="min-w-0 flex-1">
+                            <Link href={`/games/${p.game.slug}`} className={rowLink}>
+                              {p.game.title}
+                            </Link>
+                            <div className="truncate text-xs text-muted">
+                              <Link href={p.player.href} className="hover:text-text">
+                                {p.player.name}
+                              </Link>{" "}
+                              {flag(p.player.country)} · {timeAgo(p.at)}
+                            </div>
+                          </div>
+                          <TrophyIcon type="PLATINUM" size={22} />
+                        </li>
+                      ))}
+                    </ul>
+                  ),
+              },
+              {
+                key: "trophies",
+                label: "Trophies",
+                content: (
+                  <ul className="divide-y divide-line">
+                    {rareUnlocks.map((u) => (
+                      <li key={u.id} className="flex items-center gap-3 py-3">
+                        <TrophyIcon type={u.trophy.type} size={22} />
+                        <div className="min-w-0 flex-1">
+                          <SpoilerName hidden={u.trophy.hidden}>
+                            <Link href={u.trophy.slug ? trophyHref(u.trophy.game.slug, u.trophy.slug) : `/trophies/${u.trophy.id}`} className={rowLink}>
+                              {u.trophy.name}
+                            </Link>
+                          </SpoilerName>
+                          <div className="truncate text-xs text-muted">
+                            <Link href={`/u/${u.user.username}`} className="hover:text-text">
+                              {u.user.psn?.onlineId ?? u.user.username}
+                            </Link>{" "}
+                            · {u.trophy.game.title} · {timeAgo(u.earnedAt)}
+                          </div>
+                        </div>
+                        <RarityBadge rate={u.trophy.earnedRate} />
+                      </li>
+                    ))}
+                    {rareUnlocks.length === 0 && <li className="py-4 text-sm text-muted">No trophies unlocked by members yet.</li>}
+                  </ul>
+                ),
+              },
+              {
+                key: "threads",
+                label: "Discussions",
+                content: (
+                  <ul className="divide-y divide-line">
+                    {threads.map((t) => (
+                      <li key={t.id} className="py-3">
+                        <Link href={`/forums/thread/${t.id}`} className={rowLink}>
+                          {t.title}
+                        </Link>
+                        <div className="truncate text-xs text-muted">
+                          {t.game ? `${t.game.title} · ` : ""}
+                          {Math.max(0, t.postCount - 1)} repl{t.postCount - 1 === 1 ? "y" : "ies"} · {timeAgo(t.lastPostAt)}
+                        </div>
+                      </li>
+                    ))}
+                    {threads.length === 0 && (
+                      <li className="py-4 text-sm text-muted">
+                        No discussions yet. <Link href="/forums" className="link">Start one</Link>.
+                      </li>
+                    )}
+                  </ul>
+                ),
+              },
+              {
+                key: "sessions",
+                label: "Sessions",
+                content:
+                  sessions.length === 0 ? (
+                    <p className="py-4 text-sm text-muted">
+                      No upcoming sessions.{" "}
+                      <Link href="/sessions" className="link">
+                        Host one
+                      </Link>{" "}
+                      for the online trophies you still need.
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-line">
+                      {sessions.slice(0, 6).map((s) => (
+                        <li key={s.id} className="flex items-center gap-3 py-3">
+                          <GameArt title={s.game.title} hue={s.game.coverHue} iconUrl={s.game.iconUrl} size="sm" className="w-11 rounded-md" />
+                          <div className="min-w-0 flex-1">
+                            <Link href={`/sessions/${s.id}`} className={rowLink}>
+                              {s.title}
+                            </Link>
+                            <div className="truncate text-xs text-muted">
+                              {s.game.title} · {s.platform} ·{" "}
+                              {formatDate(s.startsAt, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                            </div>
+                          </div>
+                          <span className={`chip shrink-0 ${s._count.members >= s.slots ? "border-bad/40 text-bad" : "border-good/40 text-good"}`}>
+                            {s._count.members}/{s.slots}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ),
+              },
+            ]}
+          />
         </Panel>
       </div>
+
+      {trendingSorted.length > 0 && (
+        <Panel title="Most played this month" icon={<FlameIcon />} action={<MoreLink href="/games">All games</MoreLink>}>
+          <div className="grid grid-cols-2 gap-3 py-5 sm:grid-cols-3 lg:grid-cols-6">
+            {trendingSorted.map((g) => (
+              <GameCard key={g.id} game={{ ...g, platRate: g.trophies[0]?.earnedRate ?? null }} />
+            ))}
+          </div>
+        </Panel>
+      )}
     </div>
+  );
+}
+
+type BoardRow = Awaited<ReturnType<typeof getLeaderboard>>[number];
+
+function Board({ rows, value, empty }: { rows: BoardRow[]; value: (r: BoardRow) => string; empty: string }) {
+  return (
+    <ol className="divide-y divide-line">
+      {rows.map((r) => (
+        <li key={r.key} className="flex items-center gap-3 py-2.5">
+          <span className="w-6 text-right text-sm font-semibold tabular-nums text-muted">{r.rank}.</span>
+          <Avatar name={r.name} hue={r.avatarHue} url={r.avatarUrl} avatar={r.avatar} size={32} className="rounded-md" />
+          <Link href={r.href} className="min-w-0 flex-1 truncate text-sm font-semibold hover:underline hover:underline-offset-4">
+            {r.name} <span className="text-xs">{flag(r.country)}</span>
+          </Link>
+          <span className="text-sm tabular-nums text-muted">{value(r)}</span>
+        </li>
+      ))}
+      {rows.length === 0 && <li className="py-4 text-sm text-muted">{empty}</li>}
+    </ol>
   );
 }

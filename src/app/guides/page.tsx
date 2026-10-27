@@ -14,14 +14,16 @@ export default async function GuidesPage({ searchParams }: { searchParams: Promi
   const { q, sort = "new" } = await searchParams;
   // Favourites are the signed-in member's saved guides, newest save first.
   const favourites = sort === "favourites";
-  const viewerId = favourites ? await getSessionUserId() : null;
-  const guides = favourites && !viewerId ? [] : await prisma.guide.findMany({
+  // "My guides": everything the member wrote, drafts and ones waiting for review included.
+  const mine = sort === "mine";
+  const viewerId = favourites || mine ? await getSessionUserId() : null;
+  const guides = (favourites || mine) && !viewerId ? [] : await prisma.guide.findMany({
     where: {
-      status: "PUBLISHED",
+      ...(mine ? { authorId: viewerId! } : { status: "PUBLISHED" }),
       ...(favourites ? { favourites: { some: { userId: viewerId! } } } : {}),
       ...(q ? { OR: [{ title: { contains: q, mode: "insensitive" } }, { game: { title: { contains: q, mode: "insensitive" } } }] } : {}),
     },
-    orderBy: sort === "new" || favourites ? { createdAt: "desc" } : sort === "easy" ? { difficulty: "asc" } : { views: "desc" },
+    orderBy: mine ? { updatedAt: "desc" } : sort === "new" || favourites ? { createdAt: "desc" } : sort === "easy" ? { difficulty: "asc" } : { views: "desc" },
     include: { game: true, author: { include: { psn: true } }, _count: { select: { steps: true, tips: true } } },
   });
 
@@ -40,6 +42,7 @@ export default async function GuidesPage({ searchParams }: { searchParams: Promi
           ["popular", "Popular"],
           ["easy", "Easiest plats"],
           ["favourites", "My favourites"],
+          ["mine", "My guides"],
         ].map(([k, l]) => (
           <Link key={k} href={`/guides?sort=${k}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className={clsx("chip min-h-6", sort === k && "chip-active")}>
             {l}
@@ -48,12 +51,16 @@ export default async function GuidesPage({ searchParams }: { searchParams: Promi
         <Link href="/guides/new" className="btn-primary">Write a guide</Link>
       </div>
 
-      {favourites && !viewerId ? (
-        <EmptyState title="Log in to see your favourites" action={<Link href="/login?next=/guides?sort=favourites" className="btn-primary">Log in</Link>}>
-          Save a guide with Add to favourites and it shows up here.
+      {(favourites || mine) && !viewerId ? (
+        <EmptyState title={mine ? "Log in to see your guides" : "Log in to see your favourites"} action={<Link href={`/login?next=/guides?sort=${sort}`} className="btn-primary">Log in</Link>}>
+          {mine ? "Your guides and drafts show up here." : "Save a guide with Add to favourites and it shows up here."}
         </EmptyState>
       ) : guides.length === 0 ? (
-        favourites ? (
+        mine ? (
+          <EmptyState title="You haven't written a guide yet" action={<Link href="/guides/new" className="btn-primary">Write a guide</Link>}>
+            Drafts save themselves, so you can start one and finish it later.
+          </EmptyState>
+        ) : favourites ? (
           <EmptyState title="No favourites yet">Open a guide and press Add to favourites to keep it here.</EmptyState>
         ) : (
           <EmptyState title="No guides found" />
@@ -61,10 +68,15 @@ export default async function GuidesPage({ searchParams }: { searchParams: Promi
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {guides.map((g) => (
-            <Link key={g.id} href={`/guides/${g.slug}`} className="card flex gap-4 p-4 hover:border-muted">
+            <Link key={g.id} href={g.status === "DRAFT" ? `/guides/${g.slug}/edit` : `/guides/${g.slug}`} className="card flex gap-4 p-4 hover:border-muted">
               <GameArt title={g.game.title} hue={g.game.coverHue} iconUrl={g.game.iconUrl} className="w-20 self-start" />
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-semibold uppercase tracking-wider text-accent-text">{g.game.title}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-accent-text">{g.game.title}</span>
+                  {g.status !== "PUBLISHED" && (
+                    <span className="chip">{g.status === "DRAFT" ? "Draft" : g.status === "PENDING" ? "Waiting for review" : "Sent back"}</span>
+                  )}
+                </div>
                 <h2 className="text-lg font-semibold leading-snug">{g.title}</h2>
                 <p className="mt-1 line-clamp-2 text-sm text-muted">{plainText(g.summary)}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">

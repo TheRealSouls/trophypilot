@@ -19,7 +19,7 @@ import { ProfileHeader } from "./ProfileHeader";
 import { loadProfile } from "./profile-data";
 
 type Params = { username: string };
-type Search = { tab?: string; sort?: string; platform?: string; show?: string; page?: string };
+type Search = { tab?: string; sort?: string; platform?: string; show?: string; page?: string; q?: string };
 
 /** Games per page on the Games tab: big libraries run to thousands. */
 const GAMES_PER_PAGE = 50;
@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 
 export default async function ProfilePage({ params, searchParams }: { params: Promise<Params>; searchParams: Promise<Search> }) {
   const { username } = await params;
-  const { tab = "games", sort = "recent", platform = "", show = "", page = "1" } = await searchParams;
+  const { tab = "games", sort = "recent", platform = "", show = "", page = "1", q = "" } = await searchParams;
   const { owner, viewerId, canView, relation } = await loadProfile(username);
   // The member's chosen accent colour applies to their whole profile page.
   const accent = accentClass(owner.profileAccent);
@@ -70,6 +70,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
       <Suspense fallback={<Skeleton className="mb-8 h-40 w-full" />}>
         <TrophyVault userId={owner.id} isOwner={relation === "SELF"} />
       </Suspense>
+      {relation === "SELF" && <TodaysSessions userId={owner.id} />}
       {!owner.psn?.verified && relation === "SELF" && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-accent/50 bg-accent/10 px-4 py-3">
           <span className="text-sm">Link your PSN account to import your trophies.</span>
@@ -79,7 +80,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
       <div className="mb-6">
         <TabLinks tabs={tabs} active={tab} />
       </div>
-      <Suspense key={[tab, sort, platform, show, page].join(":")} fallback={<SkeletonRows rows={6} />}>
+      <Suspense key={[tab, sort, platform, show, page, q].join(":")} fallback={<SkeletonRows rows={6} />}>
         {tab === "platinums" && <PlatinumTracker userId={owner.id} username={owner.username} />}
         {tab === "log" && <TrophyLog userId={owner.id} isOwner={relation === "SELF"} />}
         {tab === "milestones" && <Milestones userId={owner.id} stats={stats} isOwner={relation === "SELF"} />}
@@ -93,11 +94,43 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
             sort={sort}
             platform={platform}
             show={show}
+            q={q.trim().slice(0, 100)}
             page={Math.max(1, Number.parseInt(page, 10) || 1)}
           />
         )}
       </Suspense>
     </div>
+  );
+}
+
+/** On your own profile: the sessions you're in that start within the next day. */
+async function TodaysSessions({ userId }: { userId: string }) {
+  const now = new Date();
+  const soon = await prisma.sessionMember.findMany({
+    where: { userId, session: { startsAt: { gt: new Date(now.getTime() - 60 * 60_000), lte: new Date(now.getTime() + 24 * 3_600_000) } } },
+    orderBy: { session: { startsAt: "asc" } },
+    take: 5,
+    select: { session: { select: { id: true, title: true, startsAt: true, platform: true, game: { select: { title: true } } } } },
+  });
+  if (!soon.length) return null;
+  return (
+    <section className="card mb-6 border-accent/40 p-4" aria-labelledby="today-sessions">
+      <h2 id="today-sessions" className="mb-2 text-sm font-bold uppercase tracking-wider">
+        Your sessions coming up
+      </h2>
+      <ul className="space-y-1.5 text-sm">
+        {soon.map(({ session: s }) => (
+          <li key={s.id} className="flex flex-wrap items-baseline gap-2">
+            <Link href={`/sessions/${s.id}`} className="font-semibold hover:underline hover:underline-offset-4">
+              {s.title}
+            </Link>
+            <span className="text-muted">
+              {s.game.title} · {s.platform} · <LocalTime date={s.startsAt} />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -301,6 +334,7 @@ async function GamesTab({
   sort,
   platform,
   show,
+  q,
   page,
 }: {
   userId: string;
@@ -308,11 +342,20 @@ async function GamesTab({
   sort: string;
   platform: string;
   show: string;
+  /** Search by game title, on top of the other filters. */
+  q: string;
   page: number;
 }) {
   const where = {
     userId,
-    ...(PLATFORMS.includes(platform) ? { game: { platforms: { contains: platform } } } : {}),
+    ...(PLATFORMS.includes(platform) || q
+      ? {
+          game: {
+            ...(PLATFORMS.includes(platform) ? { platforms: { contains: platform } } : {}),
+            ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}),
+          },
+        }
+      : {}),
     ...(show === "complete"
       ? { completedAt: { not: null } }
       : show === "incomplete"
@@ -358,16 +401,31 @@ async function GamesTab({
     ["progress", "Percent complete"],
   ];
   // Every filter link keeps the other two choices.
-  const href = (o: { sort?: string; platform?: string; show?: string; page?: string }) => {
+  const href = (o: { sort?: string; platform?: string; show?: string; page?: string; q?: string }) => {
     const p = new URLSearchParams(
-      Object.entries({ sort, platform, show, page: undefined, ...o }).filter(([k, v]) => v && !(k === "sort" && v === "recent")) as [string, string][],
+      Object.entries({ sort, platform, show, q, page: undefined, ...o }).filter(([k, v]) => v && !(k === "sort" && v === "recent")) as [string, string][],
     );
-    const q = p.toString();
-    return `/u/${username}${q ? `?${q}` : ""}`;
+    const query = p.toString();
+    return `/u/${username}${query ? `?${query}` : ""}`;
   };
   return (
     <div>
       <div className="card mb-4 space-y-3 p-4 text-sm">
+        <form action={`/u/${username}`} role="search" className="flex gap-2">
+          {sort !== "recent" && <input type="hidden" name="sort" value={sort} />}
+          {platform && <input type="hidden" name="platform" value={platform} />}
+          {show && <input type="hidden" name="show" value={show} />}
+          <label htmlFor="games-q" className="sr-only">
+            Search games
+          </label>
+          <input id="games-q" type="search" name="q" defaultValue={q} placeholder={`Search ${total} games…`} className="input flex-1" />
+          <button className="btn-ghost">Search</button>
+          {q && (
+            <Link href={href({ q: "" })} scroll={false} className="btn-ghost">
+              Clear
+            </Link>
+          )}
+        </form>
         <div className="flex flex-wrap items-center gap-2">
           <span className="w-20 text-xs font-semibold uppercase tracking-wider text-muted">Platform</span>
           <Link href={href({ platform: "" })} scroll={false} className={clsx("chip min-h-6", !PLATFORMS.includes(platform) && "chip-active")}>All</Link>

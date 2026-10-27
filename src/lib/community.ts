@@ -8,6 +8,7 @@ import { blockBetween } from "./blocks";
  */
 
 export const POST_MAX = 1000;
+export const COMMENT_MAX = 500;
 /** The reactions members can put on club and community updates. */
 export const REACTIONS = [
   ["👍", "thumbs up"],

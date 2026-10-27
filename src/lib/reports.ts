@@ -1,5 +1,5 @@
 /** What members can report, and the reasons they can give (actions/reports.ts). */
-export const REPORT_TYPES = ["FORUM_POST", "POST", "SESSION_COMMENT", "TIP", "GUIDE", "MESSAGE", "USER", "CLUB", "SESSION"] as const;
+export const REPORT_TYPES = ["FORUM_POST", "POST", "SESSION_COMMENT", "TIP", "GUIDE", "MESSAGE", "USER", "CLUB", "SESSION", "POST_COMMENT"] as const;
 export type ReportType = (typeof REPORT_TYPES)[number];
 
 export const REPORT_REASONS = {
@@ -21,4 +21,5 @@ export const REPORT_TYPE_NAMES: Record<ReportType, string> = {
   USER: "Profile",
   CLUB: "Club",
   SESSION: "Session",
+  POST_COMMENT: "Comment on an update",
 };

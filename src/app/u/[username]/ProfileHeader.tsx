@@ -9,6 +9,7 @@ import { reputationOf } from "@/lib/community";
 import { COUNTRIES, flag } from "@/lib/countries";
 import { staffTitle } from "@/lib/forum";
 import { GuideCreatorBadge, StaffBadge } from "@/components/StaffBadge";
+import { viewerRanks } from "@/lib/leaderboard";
 import clsx from "clsx";
 import { PROFILE_CARDS, bannerImage, cardClass } from "@/lib/profile-themes";
 import { ProfileCardArt } from "@/components/ProfileCardArt";
@@ -55,6 +56,8 @@ export async function ProfileHeader({
       : null,
     prisma.guide.count({ where: { authorId: owner.id, status: "PUBLISHED" } }),
   ]);
+  // World and country rank by trophy points, for members who appear on the leaderboards.
+  const ranks = owner.showOnLeaderboards ? await viewerRanks({ id: owner.id, country: owner.country, psn: owner.psn ? { accountId: owner.psn.accountId } : null }) : null;
   const staffViewing = isAdmin(viewer) && relation !== "SELF";
 
   const banner = bannerImage(owner.bannerGame);
@@ -273,6 +276,30 @@ export async function ProfileHeader({
               <LevelMeter level={level} progress={progress} detail={`${formatNumber(stats.points)} pts`} className="w-40" />
             </div>
             <TrophyCounts {...stats} size={18} className="flex-wrap" />
+            {ranks && (
+              <div className="flex flex-wrap gap-2 sm:ml-auto" aria-label="Leaderboard ranks">
+                <Link
+                  href={`/leaderboards?scope=global${isOwner ? "#me" : ""}`}
+                  className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 hover:border-line-strong"
+                  title="Rank by trophy points among everyone TrophyPilot tracks"
+                >
+                  <span className="block text-[11px] uppercase tracking-wider text-muted">World rank</span>
+                  <span className="font-bold tabular-nums">#{formatNumber(ranks.global.rank)}</span>
+                </Link>
+                {ranks.country && (
+                  <Link
+                    href={`/leaderboards?scope=country&country=${ranks.country.code}${isOwner ? "#me" : ""}`}
+                    className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 hover:border-line-strong"
+                    title={`Rank by trophy points in ${COUNTRIES[ranks.country.code as keyof typeof COUNTRIES] ?? ranks.country.code}`}
+                  >
+                    <span className="block text-[11px] uppercase tracking-wider text-muted">
+                      {flag(ranks.country.code)} {COUNTRIES[ranks.country.code as keyof typeof COUNTRIES] ?? ranks.country.code} rank
+                    </span>
+                    <span className="font-bold tabular-nums">#{formatNumber(ranks.country.rank)}</span>
+                  </Link>
+                )}
+              </div>
+            )}
           </div>
           <StatGrid className="relative -mx-px -mb-px grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
             <Stat label="Trophies" value={formatNumber(stats.total)} />

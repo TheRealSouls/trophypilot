@@ -19,6 +19,8 @@ import { ConfirmButton, SubmitButton } from "@/components/client";
 import { loadFeed, PostList } from "@/components/community";
 import { PostComposer } from "@/components/community-forms";
 import { Avatar, Notice } from "@/components/ui";
+import { ClubDetailsForm } from "@/components/ClubDetailsForm";
+import { parseJsonArray } from "@/lib/utils";
 import { deletionDate, WARN_AFTER_DAYS } from "@/lib/idle-clubs";
 
 type Params = { slug: string };
@@ -50,6 +52,23 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
   const member = viewer ? !!(await prisma.clubMember.findUnique({ where: { clubId_userId: { clubId: club.id, userId: viewer.id } } })) : false;
   const isOwner = viewer?.id === club.ownerId;
   const posts = await loadFeed({ scope: "everyone", viewerId: viewer?.id ?? null, clubId: club.id });
+  const canManage = isOwner || isStaff(viewer);
+  // Banner choices for the owner: artwork from their recently played games.
+  const artwork = canManage
+    ? (
+        await prisma.userGame.findMany({
+          where: { userId: club.ownerId },
+          orderBy: { lastEarned: { sort: "desc", nulls: "last" } },
+          take: 24,
+          select: { game: { select: { title: true, screenshots: true } } },
+        })
+      )
+        .flatMap(({ game }) => {
+          const url = parseJsonArray(game.screenshots).find((x) => x.startsWith("https://"));
+          return url ? [{ url, title: game.title }] : [];
+        })
+        .slice(0, 11)
+    : [];
 
   return (
     <div>
@@ -59,10 +78,17 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
         <Link href="/clubs" className="hover:text-text">Clubs</Link>
       </nav>
       <section className={clsx("card relative mb-8 overflow-hidden", cardClass(club.theme))}>
-        {club.theme && (
-          <div className="relative h-24 overflow-hidden sm:h-32">
-            <ProfileCardArt card={club.theme} part="banner" />
+        {club.bannerUrl ? (
+          <div className="relative h-28 overflow-hidden sm:h-40" aria-hidden>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={club.bannerUrl} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
           </div>
+        ) : (
+          club.theme && (
+            <div className="relative h-24 overflow-hidden sm:h-32">
+              <ProfileCardArt card={club.theme} part="banner" />
+            </div>
+          )
         )}
         <ProfileCardArt card={club.theme} part="body" />
         <div className="relative flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
@@ -71,7 +97,7 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
           hue={club.name.length * 37}
           avatar={club.avatar}
           size={72}
-          className={club.theme ? "-mt-12 border-4 border-surface" : "border border-line"}
+          className={club.theme || club.bannerUrl ? "-mt-12 border-4 border-surface" : "border border-line"}
         />
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{club.name}</h1>
@@ -107,7 +133,7 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
       )}
       {(isOwner || isStaff(viewer)) && (
         <details className="card mb-8 p-4">
-          <summary className="cursor-pointer text-sm font-semibold">Club picture and theme</summary>
+          <summary className="cursor-pointer text-sm font-semibold">Club picture, theme, banner and rules</summary>
           <form action={setClubTheme} className="mt-4 space-y-5">
             <input type="hidden" name="clubId" value={club.id} />
             <fieldset>
@@ -130,6 +156,9 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
             <CardThemePicker value={club.theme} legend="Pick a theme for the club's header" />
             <SubmitButton className="btn-ghost">Save</SubmitButton>
           </form>
+          <div className="mt-6 border-t border-line pt-5">
+            <ClubDetailsForm clubId={club.id} rules={club.rules} banner={club.bannerUrl} artwork={artwork} />
+          </div>
         </details>
       )}
 
@@ -142,7 +171,23 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
           )}
           <PostList posts={posts} viewer={viewer} empty="No updates in this club yet." />
         </div>
-        <aside>
+        <aside className="space-y-6">
+          <section className="card p-5" aria-labelledby="club-rules">
+            <h2 id="club-rules" className="mb-2 font-bold">
+              Club rules
+            </h2>
+            {club.rules ? (
+              <RichText text={club.rules} className="text-sm" />
+            ) : (
+              <p className="text-sm text-muted">
+                No rules of its own yet; the{" "}
+                <Link href="/forums/rules" className="link">
+                  site rules
+                </Link>{" "}
+                apply.
+              </p>
+            )}
+          </section>
           <section className="card p-5">
             <h2 className="mb-3 font-bold">Members ({club._count.members})</h2>
             <ul className="space-y-2.5">

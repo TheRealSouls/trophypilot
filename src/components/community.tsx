@@ -9,7 +9,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getFriendIds } from "@/lib/social";
 import { timeAgo } from "@/lib/utils";
-import { deletePost, toggleReaction } from "@/actions/social";
+import { deleteComment, deletePost, toggleReaction } from "@/actions/social";
+import { CommentForm } from "./community-forms";
 import { REACTIONS } from "@/lib/community";
 import { ConfirmButton } from "./client";
 import { Avatar } from "./ui";
@@ -22,6 +23,13 @@ const postInclude = {
   author: { select: { id: true, username: true, avatarHue: true, avatar: true, profileCard: true, psn: { select: { onlineId: true, avatarUrl: true } } } },
   club: { select: { name: true, slug: true } },
   reactions: { select: { emoji: true, userId: true } },
+  // The newest replies, shown oldest first under the update.
+  comments: {
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: { id: true, body: true, createdAt: true, author: { select: { id: true, username: true, avatarHue: true, avatar: true, psn: { select: { onlineId: true, avatarUrl: true } } } } },
+  },
+  _count: { select: { comments: true } },
 } satisfies Prisma.PostInclude;
 
 export type FeedScope = "everyone" | "following" | "clubs";
@@ -80,11 +88,58 @@ export function PostList({ posts, viewer, empty }: { posts: FeedPost[]; viewer: 
               </div>
               <RichText text={p.body} className="mt-1" />
               <Reactions postId={p.id} reactions={p.reactions} viewerId={viewer?.id ?? null} />
+              <Comments post={p} viewer={viewer} />
             </div>
           </li>
         );
       })}
     </ol>
+  );
+}
+
+/** Replies under an update, and the box to add one. */
+function Comments({ post, viewer }: { post: FeedPost; viewer: { id: string; role: string } | null }) {
+  const comments = [...post.comments].reverse();
+  if (!comments.length && !viewer) return null;
+  return (
+    <div className="mt-3 border-t border-line pt-2">
+      {post._count.comments > comments.length && (
+        <p className="mb-1 text-xs text-muted">Showing the newest {comments.length} of {post._count.comments} comments.</p>
+      )}
+      {comments.length > 0 && (
+        <ul className="space-y-2" aria-label="Comments">
+          {comments.map((c) => {
+            const name = c.author.psn?.onlineId ?? c.author.username;
+            const canDelete = viewer && (viewer.id === c.author.id || viewer.id === post.author.id || isStaff(viewer));
+            return (
+              <li key={c.id} className="flex gap-2 text-sm">
+                <Avatar name={name} hue={c.author.avatarHue} url={c.author.psn?.avatarUrl} avatar={c.author.avatar} size={24} />
+                <div className="min-w-0 flex-1 rounded-lg bg-surface-2 px-2.5 py-1.5">
+                  <div className="flex flex-wrap items-baseline gap-2 text-xs">
+                    <Link href={`/u/${c.author.username}`} className="font-semibold text-text hover:underline hover:underline-offset-2">
+                      {name}
+                    </Link>
+                    <span className="text-muted">{timeAgo(c.createdAt)}</span>
+                    <span className="ml-auto" />
+                    <ReportButton type="POST_COMMENT" id={c.id} authorId={c.author.id} what={`comment by ${name}`} />
+                    {canDelete && (
+                      <form action={deleteComment}>
+                        <input type="hidden" name="commentId" value={c.id} />
+                        <ConfirmButton message="Delete this comment?" className="text-muted hover:text-bad">
+                          Delete
+                        </ConfirmButton>
+                      </form>
+                    )}
+                  </div>
+                  <p className="whitespace-pre-line break-words">{c.body}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {viewer && <CommentForm postId={post.id} />}
+    </div>
   );
 }
 

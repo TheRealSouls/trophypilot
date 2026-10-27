@@ -83,6 +83,9 @@ export async function storeUpload(userId: string, bytes: Uint8Array, kind: { typ
   return `${base()}/storage/v1/object/public/${BUCKET}/${path}`;
 }
 
+/** True for a picture in our own uploads bucket (so a banner can't point anywhere else). */
+export const isOurUpload = (url: string) => uploadsEnabled() && url.startsWith(`${base()}/storage/v1/object/public/${BUCKET}/`);
+
 /** Deletes everything a member uploaded (when they delete their account). */
 export async function deleteUploadsOf(userId: string) {
   if (!uploadsEnabled()) return;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
-import { createClub, createPost } from "@/actions/social";
+import { addComment, createClub, createPost } from "@/actions/social";
 import { SubmitButton } from "./client";
 import { FormMessage } from "./ui";
 import { RichTextArea } from "./RichTextArea";
@@ -52,6 +52,32 @@ export function PostComposer({ clubs = [], clubId }: { clubs?: { id: string; nam
         <SubmitButton pendingText="Posting…">Post</SubmitButton>
       </div>
       {state?.error && <FormMessage state={state} />}
+    </form>
+  );
+}
+
+/** The reply box under an update. */
+export function CommentForm({ postId }: { postId: string }) {
+  const [state, action] = useActionState(addComment, null);
+  const ref = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (state?.ok) ref.current?.reset();
+  }, [state]);
+  return (
+    <form ref={ref} action={action} className="mt-2 flex flex-wrap items-start gap-2">
+      <input type="hidden" name="postId" value={postId} />
+      <label htmlFor={`comment-${postId}`} className="sr-only">
+        Write a comment
+      </label>
+      <input id={`comment-${postId}`} name="body" required maxLength={500} placeholder="Write a comment…" className="input min-w-48 flex-1 py-1.5 text-sm" />
+      <SubmitButton className="btn-ghost px-3 py-1.5 text-xs" pendingText="Posting…">
+        Comment
+      </SubmitButton>
+      {state?.error && (
+        <div className="w-full">
+          <FormMessage state={state} />
+        </div>
+      )}
     </form>
   );
 }

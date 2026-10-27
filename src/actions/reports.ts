@@ -61,6 +61,10 @@ async function locate(type: ReportType, id: string, reporterId: string): Promise
       const c = await prisma.club.findUnique({ where: { id }, select: { slug: true, name: true, description: true } });
       return c ? { url: `/clubs/${c.slug}`, excerpt: `${c.name}: ${c.description}` } : null;
     }
+    case "POST_COMMENT": {
+      const c = await prisma.postComment.findUnique({ where: { id }, select: { body: true, post: { select: { club: { select: { slug: true } } } } } });
+      return c ? { url: c.post.club ? `/clubs/${c.post.club.slug}` : "/community", excerpt: c.body } : null;
+    }
     case "SESSION": {
       const s = await prisma.session.findUnique({ where: { id }, select: { title: true, description: true } });
       return s ? { url: `/sessions/${id}`, excerpt: s.description ? `${s.title}: ${s.description}` : s.title } : null;
@@ -161,6 +165,10 @@ async function removeTarget(type: ReportType, id: string) {
     case "CLUB":
       await prisma.club.deleteMany({ where: { id } });
       revalidatePath("/clubs");
+      return;
+    case "POST_COMMENT":
+      await prisma.postComment.deleteMany({ where: { id } });
+      revalidatePath("/community");
       return;
     case "SESSION":
       await prisma.session.deleteMany({ where: { id } });

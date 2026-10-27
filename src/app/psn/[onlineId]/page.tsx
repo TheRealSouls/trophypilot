@@ -282,7 +282,14 @@ async function TitleList({
         })),
       );
       await datePlatinums(accountId, 3);
-      await prisma.psnPlayer.updateMany({ where: { accountId }, data: { titlesRefreshedAt: new Date() } });
+      // With the whole list in hand, save games played and completion too (country boards rank by them).
+      // A partial list leaves the player for the players cron, which reads the lot.
+      if (pages <= 1) {
+        await prisma.psnPlayer.updateMany({
+          where: { accountId },
+          data: { titlesRefreshedAt: new Date(), gamesPlayed: titles.length, avgCompletion: titles.length ? Math.round(titles.reduce((s, t) => s + t.progress, 0) / titles.length) : null },
+        });
+      }
     } catch (err) {
       console.error("[players] storing lookup titles failed", err);
     }

@@ -5,6 +5,7 @@ import { toPsnError } from "@/lib/psn/real";
 import { getProvider, isDemoMode } from "@/lib/psn/sync";
 import { keepListsFresh } from "@/lib/psn/catalogue";
 import { cleanUpIdleClubs } from "@/lib/idle-clubs";
+import { sendSessionReminders } from "@/lib/session-reminders";
 
 /**
  * Keeps tracked PSN players fresh: re-reads the stalest few (level, totals,
@@ -33,14 +34,34 @@ export async function GET(req: Request) {
   }
   // Clubs nobody has used for a while: warn their owners, then delete (src/lib/idle-clubs.ts). Not PSN, so demo mode too.
   const clubs = await cleanUpIdleClubs().catch((err) => ({ error: String(err) }));
-  if (isDemoMode()) return NextResponse.json({ skipped: "demo mode", clubs });
+  // "Your session is today" notices for the players of sessions starting soon.
+  const reminders = await sendSessionReminders().catch((err) => ({ error: String(err) }));
+  if (isDemoMode()) return NextResponse.json({ skipped: "demo mode", clubs, reminders });
 
-  const stale = await prisma.psnPlayer.findMany({
-    where: { hidden: false },
-    orderBy: [{ titlesRefreshedAt: { sort: "asc", nulls: "first" } }, { points: "desc" }],
+  // Players with no completion or ultra rare figures yet come first (country boards rank by them), then the stalest.
+  const missing = await prisma.psnPlayer.findMany({
+    where: {
+      hidden: false,
+      trophiesPrivate: false,
+      OR: [{ avgCompletion: null }, { ultraRare: null }],
+      // Not ones done in the last few hours: a player with no games keeps empty figures and mustn't hog every run.
+      AND: [{ OR: [{ titlesRefreshedAt: null }, { titlesRefreshedAt: { lt: new Date(Date.now() - 6 * 3_600_000) } }] }],
+    },
+    orderBy: { points: "desc" },
     take: REFRESH_PER_RUN,
     select: { onlineId: true },
   });
+  const stale = [
+    ...missing,
+    ...(missing.length < REFRESH_PER_RUN
+      ? await prisma.psnPlayer.findMany({
+          where: { hidden: false, onlineId: { notIn: missing.map((p) => p.onlineId) } },
+          orderBy: [{ titlesRefreshedAt: { sort: "asc", nulls: "first" } }, { points: "desc" }],
+          take: REFRESH_PER_RUN - missing.length,
+          select: { onlineId: true },
+        })
+      : []),
+  ];
 
   const refreshed = [];
   for (const p of stale) {
@@ -66,5 +87,5 @@ export async function GET(req: Request) {
     grown: Math.max(0, Number(process.env.PSN_GROWN_LISTS_PER_RUN) || 5),
   }).catch((err) => ({ error: toPsnError(err).message }));
 
-  return NextResponse.json({ refreshed, discovery, lists, clubs });
+  return NextResponse.json({ refreshed, discovery, lists, clubs, reminders });
 }

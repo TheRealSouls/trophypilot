@@ -11,10 +11,11 @@ import { getSessionUserId } from "@/lib/auth";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { GameArt } from "@/components/art";
 import { TrophyIcon } from "@/components/TrophyIcon";
-import { RevealButton, Spoiler, SpoilerSwap, StepCheck, SubmitButton } from "@/components/client";
+import { ConfirmButton, RevealButton, Spoiler, SpoilerSwap, StepCheck, SubmitButton } from "@/components/client";
 import { HeartIcon } from "@/components/icons";
 import { ShareMenu } from "@/components/ShareMenu";
 import { toggleGuideFavourite } from "@/actions/community";
+import { deleteGuide } from "@/actions/guides";
 import { Tips } from "@/components/Tips";
 import { YouTube } from "@/components/YouTube";
 import { Avatar, DifficultyMeter, Notice, RarityBadge } from "@/components/ui";
@@ -93,6 +94,15 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
 
   return (
     <div>
+      {guide.status === "DRAFT" && (
+        <Notice tone="info" className="mb-6">
+          This is your draft: only you can see it.{" "}
+          <Link href={`/guides/${guide.slug}/edit`} className="link">
+            Keep writing
+          </Link>
+          .
+        </Notice>
+      )}
       {guide.status === "PENDING" && (
         <Notice tone="warn" className="mb-6">
           This guide is waiting for staff approval. Only you and staff can see it until it&apos;s published.
@@ -143,6 +153,19 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
               <span className="text-xs text-muted">
                 Saved by {favouriteCount} member{favouriteCount === 1 ? "" : "s"}
               </span>
+            )}
+            {(guide.authorId === viewerId || isStaff({ role: viewerRole ?? "USER" })) && (
+              <>
+                <Link href={`/guides/${guide.slug}/edit`} className="btn-ghost">
+                  Edit
+                </Link>
+                <form action={deleteGuide}>
+                  <input type="hidden" name="guideId" value={guide.id} />
+                  <ConfirmButton message={`Delete "${guide.title}"? Its steps and tips go with it, and it can't be brought back.`} className="btn-ghost text-bad">
+                    Delete
+                  </ConfirmButton>
+                </form>
+              </>
             )}
             <ReportButton type="GUIDE" id={guide.id} authorId={guide.authorId} what="this guide" label="Report guide" className="btn-ghost no-underline hover:no-underline" />
           </div>

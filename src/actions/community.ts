@@ -8,7 +8,6 @@ import { logStaff } from "@/lib/staff";
 import { requireUser } from "@/lib/auth";
 import { verifyFirst } from "@/lib/email";
 import { formText, hateSpeechError } from "@/lib/moderation";
-import { slugify, youtubeId } from "@/lib/utils";
 import { refreshEstimates } from "@/lib/estimates";
 import { isAdmin, isStaff } from "@/lib/forum";
 import type { FormState } from "./auth";
@@ -53,87 +52,7 @@ export async function voteTip(fd: FormData) {
 
 // ─── Guides ──────────────────────────────────────────────────────────────────
 
-const stepSchema = z.object({
-  kind: z.enum(["ROADMAP", "MISSABLE", "COLLECTIBLE", "SPEEDRUN", "TROPHY"]),
-  title: z.string().trim().min(2, "Give this step a title.").max(120, "Step titles must be under 120 characters."),
-  body: z.string().trim().min(2, "Add some details to this step.").max(4000, "Step details must be under 4,000 characters."),
-  trophyId: z.string().optional().nullable(),
-  video: z.string().optional().nullable(),
-});
 
-const guideSchema = z.object({
-  gameId: z.string().min(1, "Pick a game."),
-  title: z.string().trim().min(5, "Title is too short.").max(120),
-  summary: z.string().trim().min(20, "Summary should be at least 20 characters.").max(600),
-  difficulty: z.coerce.number().int().min(1).max(10),
-  hoursEstimate: z.coerce.number().int().min(1).max(2000),
-  playthroughs: z.coerce.number().int().min(1).max(20),
-  video: z.string().optional(),
-  steps: z.array(stepSchema).min(1, "Add at least one step."),
-});
-
-export async function createGuide(_: FormState, fd: FormData): Promise<FormState> {
-  const user = await requireUser();
-  const unverified = verifyFirst(user);
-  if (unverified) return { error: unverified };
-  const hate = hateSpeechError(...formText(fd));
-  if (hate) return { error: hate };
-  let steps: unknown;
-  try {
-    steps = JSON.parse(String(fd.get("steps") ?? "[]"));
-  } catch {
-    return { error: "Couldn't read guide steps." };
-  }
-  const parsed = guideSchema.safeParse({ ...Object.fromEntries(fd), steps });
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    return { error: issue.path[0] === "steps" && issue.path.length > 1 ? `Step ${Number(issue.path[1]) + 1}: ${issue.message}` : issue.message };
-  }
-  const g = parsed.data;
-  const game = await prisma.game.findUnique({ where: { id: g.gameId }, include: { trophies: { select: { id: true, missable: true } } } });
-  if (!game) return { error: "Unknown game." };
-  const validTrophies = new Set(game.trophies.map((t) => t.id));
-
-  const base = slugify(g.title) || "guide";
-  let slug = base;
-  for (let i = 2; await prisma.guide.findUnique({ where: { slug }, select: { id: true } }); i++) slug = `${base}-${i}`;
-
-  // Staff and trusted members publish straight away; other guides wait for staff to approve them.
-  const publish = isStaff(user) || user.trusted;
-  await prisma.guide.create({
-    data: {
-      slug,
-      status: publish ? "PUBLISHED" : "PENDING",
-      gameId: game.id,
-      authorId: user.id,
-      title: g.title,
-      summary: g.summary,
-      difficulty: g.difficulty,
-      hoursEstimate: g.hoursEstimate,
-      playthroughs: g.playthroughs,
-      onlineRequired: fd.get("onlineRequired") === "on",
-      missableCount: g.steps.filter((s) => s.kind === "MISSABLE").length,
-      videoYoutubeId: youtubeId(g.video),
-      steps: {
-        create: g.steps.map((s, order) => ({
-          order,
-          kind: s.kind,
-          title: s.title,
-          body: s.body,
-          trophyId: s.trophyId && validTrophies.has(s.trophyId) ? s.trophyId : null,
-          videoYoutubeId: youtubeId(s.video),
-        })),
-      },
-    },
-  });
-  if (publish) {
-    await refreshEstimates([game.id]);
-    revalidatePath("/guides");
-    revalidatePath("/games", "layout");
-  }
-  revalidatePath("/reports");
-  redirect(`/guides/${slug}`);
-}
 
 /** Staff approve a waiting guide, or send it back to its author with a note. */
 export async function reviewGuide(fd: FormData) {

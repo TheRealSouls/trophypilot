@@ -18,6 +18,8 @@ export const ACTION_NAMES: Record<string, string> = {
   "guide.approve": "Approved a guide",
   "guide.reject": "Sent a guide back",
   "guide.trust": "Changed guide trust",
+  "guide.edit": "Edited a member's guide",
+  "guide.delete": "Deleted a guide",
   "user.warn": "Warned a member",
   "user.suspend": "Suspended a member",
   "user.unsuspend": "Lifted a suspension",
@@ -30,5 +32,6 @@ export const ACTION_NAMES: Record<string, string> = {
   "game.obtainable": "Changed obtainability",
   "game.hours": "Set the time to platinum",
   "club.delete": "Deleted a club",
+  "club.edit": "Edited a club's rules or banner",
   "thread.moderate": "Moderated a thread",
 };

@@ -10,9 +10,10 @@ import { verifyFirst } from "@/lib/email";
 import { formText, hateSpeechError } from "@/lib/moderation";
 import { blockBetween } from "@/lib/blocks";
 import { clubActive } from "@/lib/idle-clubs";
-import { POST_MAX, REACTIONS } from "@/lib/community";
+import { COMMENT_MAX, POST_MAX, REACTIONS } from "@/lib/community";
 import { isStaff } from "@/lib/forum";
 import { rateLimit } from "@/lib/rate-limit";
+import { isOurUpload } from "@/lib/uploads";
 import { slugify } from "@/lib/utils";
 import { PROFILE_CARDS } from "@/lib/profile-themes";
 import { AVATAR_PRESETS } from "@/components/avatars";
@@ -73,6 +74,40 @@ export async function toggleReaction(fd: FormData) {
   revalidatePath("/community");
 }
 
+/** A reply under an update. Anyone signed in can comment, unless the update's author blocked them. */
+export async function addComment(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requireUser("/community");
+  const unverified = verifyFirst(me);
+  if (unverified) return { error: unverified };
+  if (!(await rateLimit("comment", 20, 10 * 60_000, me.id))) return { error: "You've commented a lot just now. Try again in a few minutes." };
+  const body = String(fd.get("body") ?? "").trim();
+  if (body.length < 1) return { error: "Write a comment first." };
+  if (body.length > COMMENT_MAX) return { error: `Keep comments under ${COMMENT_MAX} characters.` };
+  const hate = hateSpeechError(body);
+  if (hate) return { error: hate };
+  const post = await prisma.post.findUnique({ where: { id: String(fd.get("postId") ?? "") }, select: { id: true, authorId: true, clubId: true, club: { select: { slug: true } } } });
+  if (!post) return { error: "That update was deleted." };
+  if (await blockBetween(me.id, post.authorId)) return { error: "You can't comment on this update." };
+  await prisma.postComment.create({ data: { postId: post.id, authorId: me.id, body } });
+  if (post.clubId) await clubActive(post.clubId);
+  if (post.club) revalidatePath(`/clubs/${post.club.slug}`);
+  revalidatePath("/community");
+  return { ok: "Comment posted." };
+}
+
+/** The comment's author, the update's author or staff can delete a comment. */
+export async function deleteComment(fd: FormData) {
+  const me = await requireUser();
+  const c = await prisma.postComment.findUnique({
+    where: { id: String(fd.get("commentId") ?? "") },
+    select: { id: true, authorId: true, post: { select: { authorId: true, club: { select: { slug: true } } } } },
+  });
+  if (!c || (c.authorId !== me.id && c.post.authorId !== me.id && !isStaff(me))) return;
+  await prisma.postComment.delete({ where: { id: c.id } });
+  if (c.post.club) revalidatePath(`/clubs/${c.post.club.slug}`);
+  revalidatePath("/community");
+}
+
 export async function deletePost(fd: FormData) {
   const me = await requireUser();
   const post = await prisma.post.findUnique({ where: { id: String(fd.get("postId")) } });
@@ -125,6 +160,35 @@ export async function setClubTheme(fd: FormData) {
   await prisma.club.update({ where: { id: club.id }, data: { theme: theme in PROFILE_CARDS ? theme : "", avatar } });
   revalidatePath(`/clubs/${club.slug}`);
   revalidatePath("/clubs");
+}
+
+const CLUB_RULES_MAX = 3000;
+
+/**
+ * The owner (or staff) sets the club's rules and banner. The banner is a
+ * game's artwork we already show on the site, or a picture uploaded here;
+ * nothing else, so a club can't hotlink arbitrary images.
+ */
+export async function saveClubDetails(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requireUser("/clubs");
+  const club = await prisma.club.findUnique({ where: { id: String(fd.get("clubId")) }, select: { id: true, slug: true, ownerId: true } });
+  if (!club || (club.ownerId !== me.id && !isStaff(me))) return { error: "Only the club's owner can change this." };
+  const rules = String(fd.get("rules") ?? "").trim();
+  if (rules.length > CLUB_RULES_MAX) return { error: `Keep the rules under ${CLUB_RULES_MAX.toLocaleString("en-GB")} characters.` };
+  const hate = hateSpeechError(rules);
+  if (hate) return { error: hate };
+  const banner = String(fd.get("bannerUrl") ?? "").trim();
+  let bannerUrl: string | null = null;
+  if (banner) {
+    const fromGame = await prisma.game.findFirst({ where: { screenshots: { contains: JSON.stringify(banner).slice(1, -1) } }, select: { id: true } });
+    if (!fromGame && !isOurUpload(banner)) return { error: "Pick one of the game pictures, or upload one." };
+    bannerUrl = banner;
+  }
+  await prisma.club.update({ where: { id: club.id }, data: { rules, bannerUrl } });
+  if (club.ownerId !== me.id) await logStaff(me.id, "club.edit", { type: "CLUB", id: club.id });
+  revalidatePath(`/clubs/${club.slug}`);
+  revalidatePath("/clubs");
+  return { ok: "Saved." };
 }
 
 /** Join or leave. The owner can't leave their own club; they delete it instead. */
