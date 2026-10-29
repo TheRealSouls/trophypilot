@@ -277,7 +277,7 @@ export async function ProfileHeader({
             </div>
             <TrophyCounts {...stats} size={18} className="flex-wrap" />
             {ranks && (
-              <div className="flex flex-wrap gap-2 sm:ml-auto" aria-label="Leaderboard ranks">
+              <div role="group" className="flex flex-wrap gap-2 sm:ml-auto" aria-label="Leaderboard ranks">
                 <Link
                   href={`/leaderboards?scope=global${isOwner ? "#me" : ""}`}
                   className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 hover:border-line-strong"

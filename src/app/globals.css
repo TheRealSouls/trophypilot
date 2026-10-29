@@ -444,3 +444,32 @@ body {
   border-radius: 8px;
   border: 1px solid var(--color-line);
 }
+
+/* Page loading bar (NavigationProgress): shows a click is being worked on. */
+.nav-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 3px;
+  z-index: 60;
+  pointer-events: none;
+  background: var(--color-accent);
+  transform-origin: left;
+  transform: scaleX(0);
+  opacity: 0;
+}
+.nav-progress[data-active] {
+  opacity: 1;
+  animation: nav-progress 8s cubic-bezier(0.1, 0.7, 0.2, 1) forwards;
+}
+@keyframes nav-progress {
+  from { transform: scaleX(0.05); }
+  to { transform: scaleX(0.92); }
+}
+/* The link or form that was clicked, while its page loads. */
+[data-nav-pending] {
+  opacity: 0.6;
+  cursor: progress;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-progress[data-active] { animation: none; transform: scaleX(0.6); }
+}

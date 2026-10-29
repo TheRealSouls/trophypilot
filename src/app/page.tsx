@@ -41,7 +41,8 @@ import { familiesFor } from "@/lib/games";
 export const revalidate = 60;
 
 const publicActivity = { showActivity: true, profileVisibility: "PUBLIC" } as const;
-const rowLink = "block truncate text-sm font-semibold hover:underline hover:underline-offset-4";
+// leading-6 keeps each row link at least 24px tall (WCAG 2.2 target size).
+const rowLink = "block truncate text-sm font-semibold leading-6 hover:underline hover:underline-offset-4";
 
 export default async function Home() {
   const monthAgo = new Date(Date.now() - 30 * 86_400_000);
@@ -435,7 +436,7 @@ function Board({ rows, value, empty }: { rows: BoardRow[]; value: (r: BoardRow) 
         <li key={r.key} className="flex items-center gap-3 py-2.5">
           <span className="w-6 text-right text-sm font-semibold tabular-nums text-muted">{r.rank}.</span>
           <Avatar name={r.name} hue={r.avatarHue} url={r.avatarUrl} avatar={r.avatar} size={32} className="rounded-md" />
-          <Link href={r.href} className="min-w-0 flex-1 truncate text-sm font-semibold hover:underline hover:underline-offset-4">
+          <Link href={r.href} className="min-w-0 flex-1 truncate text-sm font-semibold leading-6 hover:underline hover:underline-offset-4">
             {r.name} <span className="text-xs">{flag(r.country)}</span>
           </Link>
           <span className="text-sm tabular-nums text-muted">{value(r)}</span>

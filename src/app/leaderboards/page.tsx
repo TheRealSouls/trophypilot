@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import clsx from "clsx";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -26,7 +27,7 @@ import { Avatar, EmptyState, PageHeader } from "@/components/ui";
 export const metadata: Metadata = { title: "Leaderboards", description: "Global, country and friends trophy leaderboards." };
 export const dynamic = "force-dynamic";
 
-type Search = { scope?: string; period?: string; metric?: string; country?: string; page?: string };
+type Search = { scope?: string; period?: string; metric?: string; country?: string; page?: string; find?: string };
 
 /** Players per page. Pages beyond the first build on the cached top of the board. */
 const PER_PAGE = 50;
@@ -57,7 +58,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
   const country = requested && /^[A-Z]{2}$/.test(requested) ? requested : (user?.country ?? "GB");
 
   const page = Math.min(MAX_PAGES, Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1));
-  const [board, trackedCount, myRanks, fullBoard] = await Promise.all([
+  const [board, trackedCount, myRanks] = await Promise.all([
     // The top page × 50, cached; this page is the last 50 of it.
     getLeaderboard({ metric, period, scope, country, viewerId: user?.id, limit: page * PER_PAGE }),
     cached(
@@ -66,11 +67,19 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
       { ttlMs: 10 * 60_000, tags: ["boards"] },
     ),
     user ? viewerRanks(user) : null,
-    // Every ranked page of this board (cached), to find where the viewer is for "Go to my rank".
-    user ? getLeaderboard({ metric, period, scope, country, viewerId: user.id, limit: MAX_PAGES * PER_PAGE }) : null,
   ]);
-  const myIndex = user && fullBoard ? fullBoard.findIndex((r) => r.userId === user.id) : -1;
-  const myPage = myIndex >= 0 ? Math.floor(myIndex / PER_PAGE) + 1 : null;
+  // "Go to my rank" (?find=me): only then is every ranked page read, to find the viewer and jump to their row.
+  // Working it out on every visit made each sort or filter click slow for signed-in members.
+  let notRanked = false;
+  if (sp.find === "me" && user) {
+    const all = await getLeaderboard({ metric, period, scope, country, viewerId: user.id, limit: MAX_PAGES * PER_PAGE });
+    const i = all.findIndex((r) => r.userId === user.id);
+    if (i >= 0) {
+      const p = new URLSearchParams({ scope, period, metric, ...(scope === "country" ? { country } : {}), ...(i >= PER_PAGE ? { page: String(Math.floor(i / PER_PAGE) + 1) } : {}) });
+      redirect(`/leaderboards?${p}#me`);
+    }
+    notRanked = true;
+  }
   const psnTotals = usesPsnTotals({ metric, period, scope });
   const rows = board.slice((page - 1) * PER_PAGE, page * PER_PAGE);
   // A full board means there may be more; the tracked count says how many pages to expect.
@@ -83,6 +92,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
   const href = (o: Partial<Record<keyof Search, string>>) => {
     const p = new URLSearchParams({ scope, period, metric, ...(scope === "country" ? { country } : {}), ...o });
     if (p.get("page") === "1" || (!o.page && p.has("page"))) p.delete("page");
+    if (!o.find) p.delete("find");
     return `/leaderboards?${p}`;
   };
 
@@ -163,22 +173,14 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
           )}
           {/* Where the viewer is on the board as it's set now (scope, period and ranking). */}
           <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4 text-sm">
-            {myPage ? (
-              <>
-                <Link href={`${href({ page: String(myPage) })}#me`} className="btn-primary">
-                  Go to my rank
-                </Link>
-                <span className="text-muted">
-                  You&apos;re <strong className="text-text">#{formatNumber(myIndex + 1)}</strong> on this board ({METRICS[metric].toLowerCase()},{" "}
-                  {PERIODS[period].toLowerCase()}
-                  {scope === "country" ? `, ${countryName(country)}` : scope === "friends" ? ", friends" : ", global"}).
-                </span>
-              </>
-            ) : (
-              <span className="text-muted">
-                You&apos;re not in the top {formatNumber(MAX_PAGES * PER_PAGE)} of this board.
-              </span>
-            )}
+            <Link href={href({ find: "me" })} className="btn-primary">
+              Go to my rank
+            </Link>
+            <span className="text-muted" role={notRanked ? "status" : undefined}>
+              {notRanked
+                ? `You're not in the top ${formatNumber(MAX_PAGES * PER_PAGE)} of this board.`
+                : `Jumps to your row on this board (${METRICS[metric].toLowerCase()}, ${PERIODS[period].toLowerCase()}${scope === "country" ? `, ${countryName(country)}` : scope === "friends" ? ", friends" : ", global"}).`}
+            </span>
           </div>
         </section>
       )}

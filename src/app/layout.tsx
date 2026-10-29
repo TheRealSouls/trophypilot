@@ -7,7 +7,9 @@ import { MobileNav } from "@/components/NavLinks";
 import { isDemoMode } from "@/lib/psn/sync";
 import { SITE } from "@/lib/site";
 import { StalePageNotice } from "@/components/StalePageNotice";
+import { NavigationProgress } from "@/components/NavigationProgress";
 import { uploadsEnabled } from "@/lib/uploads";
+import { Suspense } from "react";
 import "./globals.css";
 
 const inter = Inter({
@@ -48,6 +50,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <Nav />
         <StalePageNotice />
+        {/* Reads the address, so it sits in its own Suspense boundary and the layout stays static. */}
+        <Suspense fallback={null}>
+          <NavigationProgress />
+        </Suspense>
         <main id="main" className="mx-auto w-full max-w-7xl px-4 pb-24 pt-8 sm:px-6">
           {children}
         </main>

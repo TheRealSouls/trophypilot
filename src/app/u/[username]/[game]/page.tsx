@@ -78,6 +78,7 @@ export default async function UserGamePage({
       </header>
 
       <SpoilerGroup>
+      <h2 className="sr-only">Trophies</h2>
       {hiddenLeft > 0 && (
         <div className="mb-3 flex justify-end">
           <RevealAllButton count={hiddenLeft} className="chip hover:text-text" />
