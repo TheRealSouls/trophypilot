@@ -8,7 +8,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { flag } from "@/lib/countries";
 import { DELETED_USER, isStaff, POSTS_PER_PAGE } from "@/lib/forum";
 import { StaffBadge } from "@/components/StaffBadge";
+import { ReactionBar } from "@/components/ReactionBar";
+import { reactionCounts } from "@/lib/reactions";
 import { reputations } from "@/lib/community";
+import { GAME_FORUMS_SLUG } from "@/lib/game-forum";
 import { formatDate, timeAgo } from "@/lib/utils";
 import { deletePost, moderateThread } from "@/actions/forum";
 import { GameArt } from "@/components/art";
@@ -62,10 +65,14 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
     }),
     prisma.forumPost.count({ where: { threadId: thread.id } }),
     prisma.forumPost.findFirst({ where: { threadId: thread.id }, orderBy: { createdAt: "asc" }, select: { id: true } }),
-    admin ? prisma.forumSection.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }) : [],
+    // Regular sections only: each game has its own section, and there are thousands of them.
+    admin ? prisma.forumSection.findMany({ where: { gameKey: null, slug: { not: GAME_FORUMS_SLUG } }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : [],
   ]);
   const pages = Math.max(1, Math.ceil(total / POSTS_PER_PAGE));
-  const rep = await reputations(posts.flatMap((p) => (p.author ? [p.author.id] : [])));
+  const [rep, reactions] = await Promise.all([
+    reputations(posts.flatMap((p) => (p.author ? [p.author.id] : []))),
+    reactionCounts("FORUM_POST", posts.map((p) => p.id), user?.id ?? null),
+  ]);
   if (page === 1) await prisma.forumThread.update({ where: { id: thread.id }, data: { views: { increment: 1 } } });
 
   const canReply = !!user && (!thread.locked || admin);
@@ -114,6 +121,7 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
             <input type="hidden" name="threadId" value={thread.id} />
             <input type="hidden" name="action" value="move" />
             <select name="sectionId" defaultValue={thread.sectionId} className="input py-1 text-xs" aria-label="Move to section">
+              {!moveTargets.some((s) => s.id === thread.sectionId) && <option value={thread.sectionId}>{thread.section.name}</option>}
               {moveTargets.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
@@ -176,6 +184,7 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
                   )}
                 </div>
                 <EditablePost postId={p.id} body={p.body} canEdit={mine || admin} />
+                <ReactionBar kind="FORUM_POST" id={p.id} initial={reactions.get(p.id) ?? []} signedIn={!!user} />
               </div>
             </li>
           );

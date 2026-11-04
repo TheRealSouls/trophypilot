@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { login, register } from "@/actions/auth";
+import { login, register, verifySignInCode } from "@/actions/auth";
 import { SubmitButton, useKeepValuesAction } from "@/components/client";
 import { FormMessage } from "@/components/ui";
 import { COUNTRIES } from "@/lib/countries";
@@ -67,6 +67,38 @@ export function RegisterForm() {
       <p className="text-center text-sm text-muted">
         Already have an account? <Link href="/login" className="link">Log in</Link>
       </p>
+    </form>
+  );
+}
+
+/** The second sign-in step: the code from the authenticator app (or a backup code). */
+export function VerifyCodeForm() {
+  const [state, form, pending] = useKeepValuesAction(verifySignInCode, null);
+  return (
+    <form {...form} className="space-y-4">
+      <div>
+        <label htmlFor="code" className="label">
+          Code
+        </label>
+        <input
+          id="code"
+          name="code"
+          required
+          autoFocus
+          autoComplete="one-time-code"
+          inputMode="numeric"
+          maxLength={9}
+          className="input text-center font-mono text-lg tracking-[0.3em]"
+          aria-describedby="code-help"
+        />
+        <p id="code-help" className="mt-1 text-xs text-muted">
+          The 6-digit code from your authenticator app. Lost your phone? Use one of your backup codes instead.
+        </p>
+      </div>
+      <FormMessage state={state} />
+      <SubmitButton className="btn-primary w-full py-2.5" pending={pending} pendingText="Checking…">
+        Continue
+      </SubmitButton>
     </form>
   );
 }

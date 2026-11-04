@@ -7,7 +7,9 @@ import { GAME_PLATFORMS } from "./utils";
 
 export const GAME_SORTS = {
   popular: "Most played",
-  release: "Newest",
+  // Newest trophy lists first: PSN numbers lists in order, so the highest NPWR id is the latest.
+  newest: "Newest first",
+  release: "Release date",
   easiest: "Easiest platinum",
   hardest: "Hardest platinum",
   shortest: "Shortest",
@@ -85,6 +87,7 @@ async function loadPage(f: GameFilters, sort: GameSort, page: number) {
 
   const order = {
     popular: Prisma.sql`r."players" DESC`,
+    newest: Prisma.sql`r."newestList" DESC NULLS LAST`,
     release: Prisma.sql`r."releaseDate" DESC NULLS LAST`,
     easiest: Prisma.sql`r."difficulty" ASC NULLS LAST`,
     hardest: Prisma.sql`r."difficulty" DESC NULLS LAST`,
@@ -96,7 +99,8 @@ async function loadPage(f: GameFilters, sort: GameSort, page: number) {
     prisma.$queryRaw<{ id: string }[]>`
       SELECT r."id" FROM (
         SELECT DISTINCT ON (COALESCE(NULLIF(g."titleKey", ''), g."id"))
-          g."id", g."title", g."releaseDate", g."difficulty", g."hoursToPlatinum", g."players"
+          g."id", g."title", g."releaseDate", g."difficulty", g."hoursToPlatinum", g."players",
+          MAX(g."npCommunicationId") OVER (PARTITION BY COALESCE(NULLIF(g."titleKey", ''), g."id")) AS "newestList"
         FROM "Game" g
         WHERE ${filter}
         ORDER BY COALESCE(NULLIF(g."titleKey", ''), g."id"), g."npServiceName" DESC NULLS LAST, g."title"

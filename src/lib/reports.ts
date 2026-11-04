@@ -1,5 +1,5 @@
 /** What members can report, and the reasons they can give (actions/reports.ts). */
-export const REPORT_TYPES = ["FORUM_POST", "POST", "SESSION_COMMENT", "TIP", "GUIDE", "MESSAGE", "USER", "CLUB", "SESSION", "POST_COMMENT"] as const;
+export const REPORT_TYPES = ["FORUM_POST", "POST", "SESSION_COMMENT", "TIP", "GUIDE", "MESSAGE", "USER", "CLUB", "SESSION", "POST_COMMENT", "TROPHY_LIST"] as const;
 export type ReportType = (typeof REPORT_TYPES)[number];
 
 export const REPORT_REASONS = {
@@ -8,6 +8,7 @@ export const REPORT_REASONS = {
   SPOILERS: "Spoilers that aren't marked",
   INAPPROPRIATE: "Inappropriate or explicit content",
   CHEATING: "Cheating, boosting for money or account selling",
+  HACKED: "Hacked, impossible or cheated trophies",
   OTHER: "Something else",
 } as const;
 
@@ -22,4 +23,8 @@ export const REPORT_TYPE_NAMES: Record<ReportType, string> = {
   CLUB: "Club",
   SESSION: "Session",
   POST_COMMENT: "Comment on an update",
+  TROPHY_LIST: "Trophy list",
 };
+
+/** Reasons that only make sense for trophy lists and profiles. */
+export const TROPHY_REASONS = new Set(["HACKED"]);

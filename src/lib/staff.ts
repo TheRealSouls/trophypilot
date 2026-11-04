@@ -26,6 +26,8 @@ export const ACTION_NAMES: Record<string, string> = {
   "user.delete": "Deleted an account",
   "role.set": "Changed a role",
   "rules.edit": "Edited the forum rules",
+  "rules.guides": "Edited the guide rules",
+  "home.background": "Changed the home page picture",
   "online.approve": "Approved an online flag",
   "online.reject": "Rejected an online flag",
   "online.set": "Set a trophy's online status",

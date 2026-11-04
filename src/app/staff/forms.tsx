@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
-import { deleteMemberAccount, saveForumRules, suspendMember, warnMember } from "@/actions/staff";
+import { useActionState, useEffect, useState } from "react";
+import { deleteMemberAccount, saveForumRules, saveGuideRules, saveHomeBackground, suspendMember, warnMember } from "@/actions/staff";
+import { uploadPicture } from "@/lib/shrink-image";
 import { SubmitButton } from "@/components/client";
 import { FormMessage } from "@/components/ui";
 
@@ -68,19 +69,84 @@ export function DeleteAccountForm({ userId, username }: { userId: string; userna
   );
 }
 
-export function RulesForm({ rules }: { rules: string }) {
-  const [state, action] = useActionState(saveForumRules, null);
+export function RulesForm({ rules, kind = "forum" }: { rules: string; kind?: "forum" | "guide" }) {
+  const [state, action] = useActionState(kind === "forum" ? saveForumRules : saveGuideRules, null);
   return (
     <form action={action} className="space-y-3">
-      <label className="label" htmlFor="forum-rules">
-        Forum rules
+      <label className="label" htmlFor={`${kind}-rules`}>
+        {kind === "forum" ? "Forum rules" : "Guide rules (shown beside the guide editor)"}
       </label>
       <p className="text-xs text-muted">
         One rule per block, with a blank line between rules. The first line of each block is the rule&apos;s title; the rest is its
         explanation (formatting works).
       </p>
-      <textarea id="forum-rules" name="rules" rows={20} defaultValue={rules} className="input font-mono text-xs" />
+      <textarea id={`${kind}-rules`} name="rules" rows={kind === "forum" ? 20 : 14} defaultValue={rules} className="input font-mono text-xs" />
       <SubmitButton>Save rules</SubmitButton>
+      <FormMessage state={state} />
+    </form>
+  );
+}
+
+/** The home page picture for an occasion: an https address, or an upload when uploads are switched on. */
+export function HomeBackgroundForm({ url }: { url: string | null }) {
+  const [state, action] = useActionState(saveHomeBackground, null);
+  const [value, setValue] = useState(url ?? "");
+  const [canUpload, setCanUpload] = useState(false);
+  const [note, setNote] = useState("");
+  useEffect(() => setCanUpload(document.body.dataset.uploads === "1"), []);
+  return (
+    <form action={action} className="space-y-4">
+      <div>
+        <label htmlFor="home-bg" className="label">
+          Picture address
+        </label>
+        <input id="home-bg" name="url" value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://…" className="input" />
+        <p className="mt-1 text-xs text-muted">
+          A wide picture works best (about 1600 by 900). It sits on the right of the home page and fades into it, so the headline stays readable. Leave it
+          empty to show the game covers again.
+        </p>
+      </div>
+      {canUpload && (
+        <label className="btn-ghost cursor-pointer">
+          Upload a picture
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file) return;
+              setNote("Uploading…");
+              try {
+                setValue(await uploadPicture(file));
+                setNote("Uploaded. Press Save to use it.");
+              } catch (err) {
+                setNote(err instanceof Error ? err.message : "The upload didn't work.");
+              }
+            }}
+          />
+        </label>
+      )}
+      {note && (
+        <p className="text-xs text-muted" aria-live="polite">
+          {note}
+        </p>
+      )}
+      {/^https:\/\//.test(value) && (
+        <div className="overflow-hidden rounded-lg border border-line">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={value} alt="Preview of the home page picture" referrerPolicy="no-referrer" className="aspect-[16/7] w-full object-cover" />
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <SubmitButton>Save</SubmitButton>
+        {url && (
+          <button type="submit" name="clear" value="1" className="btn-ghost">
+            Back to the game covers
+          </button>
+        )}
+      </div>
       <FormMessage state={state} />
     </form>
   );

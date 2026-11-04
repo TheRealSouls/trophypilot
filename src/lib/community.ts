@@ -9,15 +9,8 @@ import { blockBetween } from "./blocks";
 
 export const POST_MAX = 1000;
 export const COMMENT_MAX = 500;
-/** The reactions members can put on club and community updates. */
-export const REACTIONS = [
-  ["👍", "thumbs up"],
-  ["❤️", "heart"],
-  ["😂", "laughing"],
-  ["🏆", "trophy"],
-  ["🔥", "fire"],
-  ["😮", "wow"],
-] as const;
+// The emoji list is in its own file so the browser can use it without pulling in database code.
+export { REACTIONS } from "./reaction-emojis";
 export const MESSAGE_MAX = 2000;
 /** Most people a group chat can hold, the starter included. */
 export const GROUP_MAX = 20;

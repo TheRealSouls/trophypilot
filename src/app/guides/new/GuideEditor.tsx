@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import clsx from "clsx";
 import { publishGuide, saveGuideDraft, type GuideInput } from "@/actions/guides";
@@ -49,8 +48,19 @@ type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; at: Da
  * time), or the error with a Retry. Published guides save only when you press
  * Save changes, so half-finished edits never go live.
  */
-export function GuideEditor({ initialGame, draft, trusted }: { initialGame?: PickedGame | null; draft?: GuideDraft | null; trusted: boolean }) {
-  const router = useRouter();
+export function GuideEditor({
+  initialGame,
+  draft,
+  trusted,
+  rules = [],
+}: {
+  initialGame?: PickedGame | null;
+  draft?: GuideDraft | null;
+  trusted: boolean;
+  /** The guide rules staff set (staff dashboard, Rules tab). */
+  rules?: { title: string; text: string }[];
+}) {
+  const [opening, setOpening] = useState<string | null>(null);
   const [id, setId] = useState<string | null>(draft?.id ?? null);
   const [slug, setSlug] = useState<string | null>(draft?.slug ?? null);
   const status = draft?.status ?? "DRAFT";
@@ -165,7 +175,10 @@ export function GuideEditor({ initialGame, draft, trusted }: { initialGame?: Pic
         return;
       }
       savedContent.current = content;
-      router.push(`/guides/${res.slug}`);
+      setOpening(res.status === "PUBLISHED" ? "Published. Opening your guide…" : "Sent for review. Opening your guide…");
+      // A full page load rather than a client-side move: that waited, silently, for the whole new page inside
+      // this transition, so on a slow server the button just said "Saving…" until people refreshed.
+      window.location.assign(`/guides/${res.slug}`);
     });
   };
 
@@ -210,10 +223,15 @@ export function GuideEditor({ initialGame, draft, trusted }: { initialGame?: Pic
               Preview
             </Link>
           )}
-          <button type="button" onClick={publish} disabled={publishing} className="btn-primary px-3 py-1.5 text-xs">
-            {publishing ? "Saving…" : live ? "Save changes" : trusted ? "Publish" : "Submit for review"}
+          <button type="button" onClick={publish} disabled={publishing || !!opening} className="btn-primary px-3 py-1.5 text-xs">
+            {opening ? "Opening…" : publishing ? "Saving…" : live ? "Save changes" : trusted ? "Publish" : "Submit for review"}
           </button>
         </div>
+        {opening && (
+          <p role="status" className="border border-good/50 px-3 py-2 text-sm text-good">
+            {opening}
+          </p>
+        )}
         {error && (
           <p role="alert" className="border border-bad/50 px-3 py-2 text-sm text-bad">
             {error}
@@ -391,6 +409,21 @@ export function GuideEditor({ initialGame, draft, trusted }: { initialGame?: Pic
             ))}
           </ul>
         </section>
+        {rules.length > 0 && (
+          <section className="card p-5 text-sm" aria-labelledby="guide-rules-heading">
+            <h2 id="guide-rules-heading" className="mb-2 font-bold">
+              Guide rules
+            </h2>
+            <ol className="list-decimal space-y-2 pl-4">
+              {rules.map((r) => (
+                <li key={r.title}>
+                  <span className="font-semibold">{r.title}</span>
+                  {r.text && <span className="block text-muted">{r.text}</span>}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
         <section className="card p-5 text-sm">
           <h2 className="mb-1 font-bold">Tips for a great guide</h2>
           <p className="text-muted">

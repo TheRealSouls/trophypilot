@@ -12,6 +12,11 @@ import { unlinkPsn } from "@/actions/account";
 import { Avatar, Notice, PageHeader, ProgressBar } from "@/components/ui";
 import { ConfirmButton, SubmitButton } from "@/components/client";
 import { toggleBlock } from "@/actions/blocks";
+import { beginTwoStep } from "@/actions/twostep";
+import { ConfirmTwoStepForm, ManageTwoStepForms } from "./TwoStepForms";
+import { groupedSecret, otpauthUri } from "@/lib/totp";
+import { isStaff } from "@/lib/roles";
+import QRCode from "qrcode";
 import { DeleteAccountForm, LinkPsnForm, PrivacyForm, ProfileForm, ResendVerificationForm, SyncButton, ThemeForm, VaultForm, VerifyPsnButton } from "./forms";
 import { needsVerification } from "@/lib/email";
 import { LookForm } from "./LookForm";
@@ -281,6 +286,47 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             showOnLeaderboards={user.showOnLeaderboards}
             showActivity={user.showActivity}
           />
+        </Section>
+
+        <Section id="two-step" title="Two-step sign-in">
+          {user.totpEnabledAt ? (
+            <div className="space-y-5">
+              <p className="text-sm">
+                <span className="font-semibold text-good">On</span> since {formatDate(user.totpEnabledAt)}. Logging in asks for a code from your authenticator
+                app after your password.
+              </p>
+              <ManageTwoStepForms staff={isStaff(user)} />
+            </div>
+          ) : user.totpSecret ? (
+            <div className="space-y-4">
+              <p className="text-sm">
+                Scan this with an authenticator app (Google Authenticator, Microsoft Authenticator, Authy, 1Password), then enter the code it shows.
+              </p>
+              <div className="flex flex-wrap items-start gap-6">
+                <div
+                  className="w-44 rounded-lg border border-line bg-white p-2"
+                  role="img"
+                  aria-label="QR code for setting up two-step sign-in"
+                  dangerouslySetInnerHTML={{ __html: await QRCode.toString(otpauthUri(user.username, user.totpSecret), { type: "svg", margin: 1 }) }}
+                />
+                <div className="min-w-0 space-y-2 text-sm">
+                  <p className="text-muted">Can&apos;t scan it? Add this key by hand:</p>
+                  <code className="block break-all rounded bg-surface-2 px-2 py-1 font-mono text-sm">{groupedSecret(user.totpSecret)}</code>
+                </div>
+              </div>
+              <ConfirmTwoStepForm />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-muted">
+                Protect your account with a code from an authenticator app as well as your password.
+                {isStaff(user) && " Staff tools need it switched on."}
+              </p>
+              <form action={beginTwoStep}>
+                <SubmitButton>Set up two-step sign-in</SubmitButton>
+              </form>
+            </div>
+          )}
         </Section>
 
         <Section id="blocked" title="Blocked members">

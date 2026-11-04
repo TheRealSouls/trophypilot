@@ -31,3 +31,21 @@ export function HeroCovers({ covers }: { covers: { id: string; title: string; ic
     </div>
   );
 }
+
+/**
+ * A picture staff chose for the home page (Halloween, Christmas, a big
+ * release), in the same place as the covers and fading the same way, so the
+ * hero text stays readable. Set on the staff dashboard (Home page tab).
+ */
+export function HeroBackground({ url }: { url: string }) {
+  return (
+    <div
+      aria-hidden
+      className="hero-fade pointer-events-none absolute inset-y-0 hidden overflow-hidden lg:block"
+      style={{ left: "42%", right: "calc((100% - 100vw) / 2)" }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt="" referrerPolicy="no-referrer" fetchPriority="high" className="h-full w-full object-cover" />
+    </div>
+  );
+}

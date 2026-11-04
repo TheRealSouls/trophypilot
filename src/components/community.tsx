@@ -9,9 +9,13 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getFriendIds } from "@/lib/social";
 import { timeAgo } from "@/lib/utils";
-import { deleteComment, deletePost, toggleReaction } from "@/actions/social";
+import { deleteComment, deletePost } from "@/actions/social";
 import { CommentForm } from "./community-forms";
-import { REACTIONS } from "@/lib/community";
+import { REACTIONS } from "@/lib/reaction-emojis";
+import { reactionCounts, type ReactionCount } from "@/lib/reactions";
+import { ReactionBar } from "./ReactionBar";
+import { GameArt } from "./art";
+import { TrophyIcon } from "./TrophyIcon";
 import { ConfirmButton } from "./client";
 import { Avatar } from "./ui";
 
@@ -22,6 +26,8 @@ import { Avatar } from "./ui";
 const postInclude = {
   author: { select: { id: true, username: true, avatarHue: true, avatar: true, profileCard: true, psn: { select: { onlineId: true, avatarUrl: true } } } },
   club: { select: { name: true, slug: true } },
+  // The game of an automatic platinum post.
+  game: { select: { slug: true, title: true, iconUrl: true, coverHue: true } },
   reactions: { select: { emoji: true, userId: true } },
   // The newest replies, shown oldest first under the update.
   comments: {
@@ -52,8 +58,17 @@ export async function loadFeed({ scope, viewerId, clubId, take = 40 }: { scope: 
 
 type FeedPost = Awaited<ReturnType<typeof loadFeed>>[number];
 
-export function PostList({ posts, viewer, empty }: { posts: FeedPost[]; viewer: { id: string; role: string } | null; empty: string }) {
+/** An update's reactions as counts per emoji, for ReactionBar. */
+const postCounts = (p: FeedPost, viewerId: string | null): ReactionCount[] =>
+  REACTIONS.map(([emoji]) => ({
+    emoji,
+    n: p.reactions.filter((r) => r.emoji === emoji).length,
+    mine: !!viewerId && p.reactions.some((r) => r.emoji === emoji && r.userId === viewerId),
+  }));
+
+export async function PostList({ posts, viewer, empty }: { posts: FeedPost[]; viewer: { id: string; role: string } | null; empty: string }) {
   if (!posts.length) return <p className="card p-5 text-sm text-muted">{empty}</p>;
+  const commentReactions = await reactionCounts("COMMENT", posts.flatMap((p) => p.comments.map((c) => c.id)), viewer?.id ?? null);
   return (
     <ol className="space-y-3">
       {posts.map((p) => {
@@ -86,9 +101,19 @@ export function PostList({ posts, viewer, empty }: { posts: FeedPost[]; viewer: 
                   </form>
                 )}
               </div>
-              <RichText text={p.body} className="mt-1" />
-              <Reactions postId={p.id} reactions={p.reactions} viewerId={viewer?.id ?? null} />
-              <Comments post={p} viewer={viewer} />
+              {p.kind === "PLATINUM" && p.game && (
+                <Link href={`/games/${p.game.slug}`} className="mt-2 flex items-center gap-3 rounded-lg border border-plat/40 bg-plat/5 p-2.5 hover:border-plat">
+                  <GameArt title={p.game.title} hue={p.game.coverHue} iconUrl={p.game.iconUrl} size="sm" className="w-12" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold uppercase tracking-wider text-plat">Platinum earned</span>
+                    <span className="block truncate font-semibold">{p.game.title}</span>
+                  </span>
+                  <TrophyIcon type="PLATINUM" size={28} />
+                </Link>
+              )}
+              {p.kind !== "PLATINUM" && <RichText text={p.body} className="mt-1" />}
+              <ReactionBar kind="POST" id={p.id} initial={postCounts(p, viewer?.id ?? null)} signedIn={!!viewer} />
+              <Comments post={p} viewer={viewer} reactions={commentReactions} />
             </div>
           </li>
         );
@@ -98,7 +123,7 @@ export function PostList({ posts, viewer, empty }: { posts: FeedPost[]; viewer: 
 }
 
 /** Replies under an update, and the box to add one. */
-function Comments({ post, viewer }: { post: FeedPost; viewer: { id: string; role: string } | null }) {
+function Comments({ post, viewer, reactions }: { post: FeedPost; viewer: { id: string; role: string } | null; reactions: Map<string, ReactionCount[]> }) {
   const comments = [...post.comments].reverse();
   if (!comments.length && !viewer) return null;
   return (
@@ -132,6 +157,7 @@ function Comments({ post, viewer }: { post: FeedPost; viewer: { id: string; role
                     )}
                   </div>
                   <p className="whitespace-pre-line break-words">{c.body}</p>
+                  <ReactionBar kind="COMMENT" id={c.id} initial={reactions.get(c.id) ?? []} signedIn={!!viewer} small />
                 </div>
               </li>
             );
@@ -139,65 +165,6 @@ function Comments({ post, viewer }: { post: FeedPost; viewer: { id: string; role
         </ul>
       )}
       {viewer && <CommentForm postId={post.id} />}
-    </div>
-  );
-}
-
-/**
- * Emoji reactions under an update: the ones used so far with their counts
- * (yours highlighted, click to take it back), and a React menu with the rest.
- * Plain forms, so they work before the page's scripts load.
- */
-function Reactions({ postId, reactions, viewerId }: { postId: string; reactions: { emoji: string; userId: string }[]; viewerId: string | null }) {
-  const counts = REACTIONS.map(([emoji, name]) => ({
-    emoji,
-    name,
-    n: reactions.filter((r) => r.emoji === emoji).length,
-    mine: !!viewerId && reactions.some((r) => r.emoji === emoji && r.userId === viewerId),
-  }));
-  const used = counts.filter((c) => c.n > 0);
-  if (!viewerId && !used.length) return null;
-  const button = (c: (typeof counts)[number], compact: boolean) => (
-    <form key={c.emoji} action={toggleReaction}>
-      <input type="hidden" name="postId" value={postId} />
-      <input type="hidden" name="emoji" value={c.emoji} />
-      <button
-        type="submit"
-        disabled={!viewerId}
-        aria-pressed={c.mine}
-        aria-label={`${c.name}, ${c.n} reaction${c.n === 1 ? "" : "s"}${c.mine ? ", including yours" : ""}`}
-        title={c.name}
-        className={clsx(
-          "inline-flex items-center gap-1 rounded-full border text-sm disabled:cursor-default",
-          compact ? "h-9 w-9 justify-center border-transparent hover:bg-surface-2" : "h-7 px-2",
-          !compact && (c.mine ? "border-accent-text/60 bg-accent/10" : "border-line bg-surface-2 hover:border-line-strong"),
-        )}
-      >
-        <span aria-hidden>{c.emoji}</span>
-        {!compact && <span className="text-xs font-semibold tabular-nums">{c.n}</span>}
-      </button>
-    </form>
-  );
-  return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      {used.map((c) => button(c, false))}
-      {viewerId && (
-        <details className="relative">
-          <summary className="flex h-7 cursor-pointer list-none items-center gap-1 rounded-full border border-line px-2 text-xs text-muted hover:text-text [&::-webkit-details-marker]:hidden">
-            <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden>
-              <circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-              <circle cx="7.5" cy="8.5" r="1" fill="currentColor" />
-              <circle cx="12.5" cy="8.5" r="1" fill="currentColor" />
-              <path d="M6.8 12a3.6 3.6 0 0 0 6.4 0" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-            React
-          </summary>
-          {/* In the flow rather than floating: the update's card clips anything that spills out (that hid the picker on long posts). */}
-          <div className="mt-1.5 flex flex-wrap gap-0.5 rounded-full border border-line bg-surface p-1">
-            {counts.map((c) => button(c, true))}
-          </div>
-        </details>
-      )}
     </div>
   );
 }

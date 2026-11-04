@@ -279,7 +279,7 @@ export async function ProfileHeader({
             {ranks && (
               <div role="group" className="flex flex-wrap gap-2 sm:ml-auto" aria-label="Leaderboard ranks">
                 <Link
-                  href={`/leaderboards?scope=global${isOwner ? "#me" : ""}`}
+                  href={`/leaderboards?scope=global&find=${owner.username}`}
                   className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 hover:border-line-strong"
                   title="Rank by trophy points among everyone TrophyPilot tracks"
                 >
@@ -288,7 +288,7 @@ export async function ProfileHeader({
                 </Link>
                 {ranks.country && (
                   <Link
-                    href={`/leaderboards?scope=country&country=${ranks.country.code}${isOwner ? "#me" : ""}`}
+                    href={`/leaderboards?scope=country&country=${ranks.country.code}&find=${owner.username}`}
                     className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 hover:border-line-strong"
                     title={`Rank by trophy points in ${COUNTRIES[ranks.country.code as keyof typeof COUNTRIES] ?? ranks.country.code}`}
                   >

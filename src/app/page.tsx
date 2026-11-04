@@ -10,7 +10,8 @@ import { flag } from "@/lib/countries";
 import { GameArt } from "@/components/art";
 import { GameCard } from "@/components/GameCard";
 import { TrophyIcon } from "@/components/TrophyIcon";
-import { HeroCovers } from "@/components/HeroCovers";
+import { HeroBackground, HeroCovers } from "@/components/HeroCovers";
+import { getSetting, HOME_BACKGROUND_KEY } from "@/lib/site-settings";
 import { SpoilerName } from "@/components/client";
 import { Avatar, MoreLink, Panel, RarityBadge } from "@/components/ui";
 import {
@@ -47,7 +48,7 @@ const rowLink = "block truncate text-sm font-semibold leading-6 hover:underline 
 export default async function Home() {
   const monthAgo = new Date(Date.now() - 30 * 86_400_000);
 
-  const [totals, recentPlats, rareUnlocks, weekly, guides, trending, needGuides, newLists, dlcs, sessions, covers, weeklyPlats, topCompletion, topRare, threads] = await Promise.all([
+  const [totals, recentPlats, rareUnlocks, weekly, guides, trending, needGuides, newLists, dlcs, sessions, covers, heroImage, weeklyPlats, topCompletion, topRare, threads] = await Promise.all([
     siteTotals(),
     latestPlatinums(6),
     // The newest unlocks of any rarity, from members who share their activity.
@@ -57,17 +58,23 @@ export default async function Home() {
       take: 6,
       include: { user: { include: { psn: true } }, trophy: { include: { game: true } } },
     }),
-    getLeaderboard({ metric: "points", period: "weekly", scope: "global", limit: 5 }),
-    prisma.guide.findMany({ where: { status: "PUBLISHED" }, orderBy: { createdAt: "desc" }, take: 4, include: { game: true, author: true } }),
+    getLeaderboard({ metric: "points", period: "weekly", scope: "global", limit: 8 }),
+    prisma.guide.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      select: { id: true, slug: true, title: true, summary: true, createdAt: true, game: { select: { title: true, coverHue: true, iconUrl: true } }, author: { select: { username: true } } },
+    }),
     trendingGameIds(monthAgo, 24),
     gamesNeedingGuides(5),
     newTrophyLists(8),
     newDlc(8),
     latestSessions(10),
     heroCovers(24),
-    getLeaderboard({ metric: "platinums", period: "weekly", scope: "global", limit: 5 }),
-    getLeaderboard({ metric: "completion", period: "all", scope: "global", limit: 5 }),
-    getLeaderboard({ metric: "rare", period: "all", scope: "global", limit: 5 }),
+    getSetting(HOME_BACKGROUND_KEY),
+    getLeaderboard({ metric: "platinums", period: "weekly", scope: "global", limit: 8 }),
+    getLeaderboard({ metric: "completion", period: "all", scope: "global", limit: 8 }),
+    getLeaderboard({ metric: "rare", period: "all", scope: "global", limit: 8 }),
     prisma.forumThread.findMany({ orderBy: { lastPostAt: "desc" }, take: 6, select: { id: true, title: true, postCount: true, lastPostAt: true, game: { select: { title: true } } } }),
   ]);
   const listFamilies = await familiesFor(newLists.map((g) => g.titleKey));
@@ -98,7 +105,7 @@ export default async function Home() {
 
       {/* Hero: text on the left, real game art behind the lookup card on the right. */}
       <section className="relative -mt-8 grid gap-10 pb-6 pt-10 lg:min-h-[470px] lg:grid-cols-[1.1fr_1fr] lg:items-end">
-        <HeroCovers covers={covers} />
+        {heroImage ? <HeroBackground url={heroImage} /> : <HeroCovers covers={covers} />}
         <div className="relative lg:self-center">
           <p className="mb-5 flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.16em] text-accent-text">
             For PlayStation trophy hunters
@@ -235,62 +242,6 @@ export default async function Home() {
           />
         </Panel>
 
-        <Panel title="Latest guides" icon={<BookIcon />} action={<MoreLink href="/guides">All guides</MoreLink>}>
-          {guides.length > 0 ? (
-            <ul className="divide-y divide-line">
-              {guides.map((g) => (
-                <li key={g.id}>
-                  <Link href={`/guides/${g.slug}`} className="group flex gap-4 py-3">
-                    <GameArt title={g.game.title} hue={g.game.coverHue} iconUrl={g.game.iconUrl} size="sm" className="w-12 rounded-md" />
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold group-hover:underline group-hover:underline-offset-4">{g.title}</div>
-                      <div className="line-clamp-2 text-xs text-muted">{plainText(g.summary)}</div>
-                      <div className="mt-1 text-xs text-faint">
-                        by {g.author.username} · {timeAgo(g.createdAt)}
-                      </div>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="py-4 text-sm">
-              <p className="text-muted">
-                No guides yet. Guides are written by members, so the first ones are up for grabs.
-                {needGuides.length > 0 && " These games have the most players and no guide:"}
-              </p>
-              {needGuides.length > 0 && (
-                <ul className="mt-3 space-y-2">
-                  {needGuides.map(({ game, players }) => (
-                    <li key={game.id} className="flex items-center gap-3">
-                      <GameArt title={game.title} hue={game.coverHue} iconUrl={game.iconUrl} size="sm" className="w-8 rounded-md" />
-                      <Link href={`/games/${game.slug}`} className="min-w-0 flex-1 truncate hover:underline hover:underline-offset-4">
-                        {game.title}
-                      </Link>
-                      <span className="text-xs text-faint">{players} players</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <Link href="/guides/new" className="btn-ghost mt-4">
-                Write a guide
-              </Link>
-            </div>
-          )}
-        </Panel>
-
-        <Panel title="Top players" icon={<ChartIcon />} action={<MoreLink href="/leaderboards">Leaderboards</MoreLink>}>
-          <Tabs
-            label="Top players"
-            tabs={[
-              { key: "points", label: "This week", content: <Board rows={weekly} value={(r) => `${formatNumber(r.points)} pts`} empty="Nobody has earned a trophy yet this week." /> },
-              { key: "plats", label: "Platinums", content: <Board rows={weeklyPlats} value={(r) => `${formatNumber(r.platinums)} plat${r.platinums === 1 ? "" : "s"}`} empty="No platinums yet this week." /> },
-              { key: "completion", label: "Average %", content: <Board rows={topCompletion} value={(r) => (r.completion != null ? `${r.completion}%` : "–")} empty="Not enough players ranked yet." /> },
-              { key: "rare", label: "Ultra rare", content: <Board rows={topRare} value={(r) => (r.rare != null ? formatNumber(r.rare) : "–")} empty="Not enough players ranked yet." /> },
-            ]}
-          />
-        </Panel>
-
         <Panel title="Community activity" icon={<UsersIcon />} action={<MoreLink href="/community">Community</MoreLink>}>
           <Tabs
             label="Community activity"
@@ -411,6 +362,62 @@ export default async function Home() {
               },
             ]}
           />
+        </Panel>
+
+        <Panel title="Top players" icon={<ChartIcon />} action={<MoreLink href="/leaderboards">Leaderboards</MoreLink>}>
+          <Tabs
+            label="Top players"
+            tabs={[
+              { key: "points", label: "This week", content: <Board rows={weekly} value={(r) => `${formatNumber(r.points)} pts`} empty="Nobody has earned a trophy yet this week." /> },
+              { key: "plats", label: "Platinums", content: <Board rows={weeklyPlats} value={(r) => `${formatNumber(r.platinums)} plat${r.platinums === 1 ? "" : "s"}`} empty="No platinums yet this week." /> },
+              { key: "completion", label: "Average %", content: <Board rows={topCompletion} value={(r) => (r.completion != null ? `${r.completion}%` : "–")} empty="Not enough players ranked yet." /> },
+              { key: "rare", label: "Ultra rare", content: <Board rows={topRare} value={(r) => (r.rare != null ? formatNumber(r.rare) : "–")} empty="Not enough players ranked yet." /> },
+            ]}
+          />
+        </Panel>
+
+        <Panel title="Latest guides" icon={<BookIcon />} action={<MoreLink href="/guides">All guides</MoreLink>}>
+          {guides.length > 0 ? (
+            <ul className="divide-y divide-line">
+              {guides.map((g) => (
+                <li key={g.id}>
+                  <Link href={`/guides/${g.slug}`} className="group flex gap-4 py-3">
+                    <GameArt title={g.game.title} hue={g.game.coverHue} iconUrl={g.game.iconUrl} size="sm" className="w-12 rounded-md" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold group-hover:underline group-hover:underline-offset-4">{g.title}</div>
+                      <div className="line-clamp-2 text-xs text-muted">{plainText(g.summary)}</div>
+                      <div className="mt-1 text-xs text-faint">
+                        by {g.author.username} · {timeAgo(g.createdAt)}
+                      </div>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="py-4 text-sm">
+              <p className="text-muted">
+                No guides yet. Guides are written by members, so the first ones are up for grabs.
+                {needGuides.length > 0 && " These games have the most players and no guide:"}
+              </p>
+              {needGuides.length > 0 && (
+                <ul className="mt-3 space-y-2">
+                  {needGuides.map(({ game, players }) => (
+                    <li key={game.id} className="flex items-center gap-3">
+                      <GameArt title={game.title} hue={game.coverHue} iconUrl={game.iconUrl} size="sm" className="w-8 rounded-md" />
+                      <Link href={`/games/${game.slug}`} className="min-w-0 flex-1 truncate hover:underline hover:underline-offset-4">
+                        {game.title}
+                      </Link>
+                      <span className="text-xs text-faint">{players} players</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link href="/guides/new" className="btn-ghost mt-4">
+                Write a guide
+              </Link>
+            </div>
+          )}
         </Panel>
       </div>
 

@@ -10,7 +10,7 @@ import { verifyFirst } from "@/lib/email";
 import { formText, hateSpeechError } from "@/lib/moderation";
 import { blockBetween } from "@/lib/blocks";
 import { clubActive } from "@/lib/idle-clubs";
-import { COMMENT_MAX, POST_MAX, REACTIONS } from "@/lib/community";
+import { COMMENT_MAX, POST_MAX } from "@/lib/community";
 import { isStaff } from "@/lib/forum";
 import { rateLimit } from "@/lib/rate-limit";
 import { isOurUpload } from "@/lib/uploads";
@@ -56,23 +56,6 @@ export async function createPost(_: FormState, fd: FormData): Promise<FormState>
   return { ok: "Posted." };
 }
 
-/** Adds the member's reaction to an update, or takes it off again. */
-export async function toggleReaction(fd: FormData) {
-  const me = await requireUser();
-  const emoji = String(fd.get("emoji") ?? "");
-  if (!REACTIONS.some(([e]) => e === emoji)) return;
-  if (!(await rateLimit("reaction", 60, 60_000, me.id))) return;
-  const post = await prisma.post.findUnique({ where: { id: String(fd.get("postId")) }, select: { id: true, clubId: true, club: { select: { slug: true } } } });
-  if (!post) return;
-  const key = { postId_userId_emoji: { postId: post.id, userId: me.id, emoji } };
-  if (await prisma.postReaction.findUnique({ where: key })) await prisma.postReaction.delete({ where: key });
-  else {
-    await prisma.postReaction.create({ data: key.postId_userId_emoji });
-    if (post.clubId) await clubActive(post.clubId);
-  }
-  if (post.club) revalidatePath(`/clubs/${post.club.slug}`);
-  revalidatePath("/community");
-}
 
 /** A reply under an update. Anyone signed in can comment, unless the update's author blocked them. */
 export async function addComment(_: FormState, fd: FormData): Promise<FormState> {
@@ -154,10 +137,11 @@ export async function setClubTheme(fd: FormData) {
   const club = await prisma.club.findUnique({ where: { id: String(fd.get("clubId")) }, select: { id: true, slug: true, ownerId: true } });
   if (!club || (club.ownerId !== me.id && !isStaff(me))) return;
   const theme = String(fd.get("theme") ?? "");
-  // Club picture: one of the built-in pictures, or none (its initial).
-  const pick = String(fd.get("avatar") ?? "");
-  const avatar = pick.startsWith("preset:") && pick.slice(7) in AVATAR_PRESETS ? pick : null;
-  await prisma.club.update({ where: { id: club.id }, data: { theme: theme in PROFILE_CARDS ? theme : "", avatar } });
+  // Club picture: one of the built-in pictures, or none (its initial). With nothing picked (the club uses an
+  // uploaded picture, which isn't one of the choices) the picture stays as it is.
+  const pick = fd.get("avatar");
+  const avatar = pick === null ? undefined : String(pick).startsWith("preset:") && String(pick).slice(7) in AVATAR_PRESETS ? String(pick) : null;
+  await prisma.club.update({ where: { id: club.id }, data: { theme: theme in PROFILE_CARDS ? theme : "", ...(avatar !== undefined ? { avatar } : {}) } });
   revalidatePath(`/clubs/${club.slug}`);
   revalidatePath("/clubs");
 }
@@ -184,7 +168,10 @@ export async function saveClubDetails(_: FormState, fd: FormData): Promise<FormS
     if (!fromGame && !isOurUpload(banner)) return { error: "Pick one of the game pictures, or upload one." };
     bannerUrl = banner;
   }
-  await prisma.club.update({ where: { id: club.id }, data: { rules, bannerUrl } });
+  // An uploaded club picture (the built-in ones are set with the theme form).
+  const picture = String(fd.get("pictureUrl") ?? "").trim();
+  if (picture && !isOurUpload(picture)) return { error: "Upload the club picture here." };
+  await prisma.club.update({ where: { id: club.id }, data: { rules, bannerUrl, ...(picture ? { avatar: picture } : {}) } });
   if (club.ownerId !== me.id) await logStaff(me.id, "club.edit", { type: "CLUB", id: club.id });
   revalidatePath(`/clubs/${club.slug}`);
   revalidatePath("/clubs");

@@ -118,8 +118,8 @@ export async function siteTotals() {
       _sum: { platinum: true, gold: true, silver: true, bronze: true },
     }),
     prisma.user.findMany({ select: { id: true, psn: { select: { accountId: true } } } }),
-    // One game per title: its PS4, PS5 and regional lists count once. Counted in the database, not by loading every game.
-    prisma.$queryRaw<{ n: number }[]>`SELECT CAST(COUNT(DISTINCT "titleKey") AS INTEGER) AS n FROM "Game"`.then((r) => Number(r[0]?.n ?? 0)),
+    // Every trophy list counts: a game with PS4, PS5 and regional stacks counts once per stack.
+    prisma.game.count(),
   ]);
   // Members without a PSN summary (not linked, not synced yet, or demo mode) count from their synced trophies.
   const summarised = new Set(

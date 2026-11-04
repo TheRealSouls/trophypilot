@@ -31,6 +31,11 @@ model User {
   role                    String    @default("USER")
   // Staff can suspend a member: until then they can read but not post, message or start anything.
   suspendedUntil          DateTime?
+  // Two-step sign-in (authenticator app). Required for staff tools; optional for everyone else.
+  totpSecret              String?
+  totpEnabledAt           DateTime?
+  // One-time backup codes, stored as SHA-256 hashes (JSON array), for a lost phone.
+  totpBackupCodes         String    @default("[]")
   suspendReason           String?
   // Trusted members publish guides straight away; everyone else's wait for staff approval.
   trusted                 Boolean   @default(false)
@@ -92,6 +97,9 @@ model User {
   favouritePlatinumGame Game?                @relation("favouritePlatinum", fields: [favouritePlatinumGameId], references: [id], onDelete: SetNull)
   reportsResolved       Report[]             @relation("reportsResolved")
   postComments          PostComment[]
+  reactionsGiven        Reaction[]
+  guideRequests         GuideRequest[]
+  guideRatings          GuideRating[]
   onlineFlags           OnlineFlag[]         @relation("onlineFlagger")
   staffActions          StaffAction[]        @relation("staffActor")
   blocking              Block[]              @relation("blocker")
@@ -334,18 +342,20 @@ model Game {
   igdbId             Int?
   igdbCheckedAt      DateTime?
 
-  groups       TrophyGroup[]
-  trophies     Trophy[]
-  userGames    UserGame[]
-  playerTitles PsnPlayerTitle[]
-  guides       Guide[]
-  sessions     Session[]
-  forumThreads ForumThread[]
-  ratings      GameRating[]
-  bannerOf     User[]           @relation("banner")
-  playingNow   User[]           @relation("nowPlaying")
-  favouriteOf  User[]           @relation("favouritePlatinum")
-  wishlistedBy WishlistGame[]
+  groups        TrophyGroup[]
+  trophies      Trophy[]
+  userGames     UserGame[]
+  playerTitles  PsnPlayerTitle[]
+  guides        Guide[]
+  sessions      Session[]
+  forumThreads  ForumThread[]
+  ratings       GameRating[]
+  bannerOf      User[]           @relation("banner")
+  platinumPosts Post[]           @relation("platinumPosts")
+  guideRequests GuideRequest[]
+  playingNow    User[]           @relation("nowPlaying")
+  favouriteOf   User[]           @relation("favouritePlatinum")
+  wishlistedBy  WishlistGame[]
 
   @@index([title])
   @@index([titleKey])
@@ -461,6 +471,9 @@ model Guide {
   status         String   @default("PUBLISHED")
   // Why staff sent it back, shown to the author.
   reviewNote     String?
+  // Members' star ratings (GuideRating), kept here for lists.
+  ratingAvg      Float?
+  ratingCount    Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -469,6 +482,7 @@ model Guide {
   steps      GuideStep[]
   tips       Tip[]
   favourites GuideFavourite[]
+  ratings    GuideRating[]
 
   @@index([gameId])
   @@index([status, createdAt])
@@ -605,6 +619,9 @@ model ForumSection {
   parentId    String?
   // Only admins can start threads here (announcements, rules).
   adminOnly   Boolean  @default(false)
+  // Set on a game's own forum: the game's titleKey (all its stacks share one). Threads about that game go here.
+  // One per game, kept so in code (lib/game-forum.ts): a unique key added to a live table stops db push.
+  gameKey     String?
   createdAt   DateTime @default(now())
 
   parent   ForumSection?  @relation("SubSections", fields: [parentId], references: [id], onDelete: Cascade)
@@ -612,6 +629,7 @@ model ForumSection {
   threads  ForumThread[]
 
   @@index([parentId, order])
+  @@index([gameKey])
 }
 
 model ForumThread {
@@ -713,13 +731,20 @@ model Post {
   authorId  String
   clubId    String?
   body      String
+  // UPDATE (written by the member) | PLATINUM (posted automatically when a sync finds a new platinum).
+  kind      String   @default("UPDATE")
+  // The game a PLATINUM post is about.
+  gameId    String?
   createdAt DateTime @default(now())
 
   author    User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
   club      Club?          @relation(fields: [clubId], references: [id], onDelete: Cascade)
   reactions PostReaction[]
   comments  PostComment[]
+  game      Game?          @relation("platinumPosts", fields: [gameId], references: [id], onDelete: SetNull)
 
+  // One automatic platinum post per member and game (checked in lib/progress.ts).
+  @@index([authorId, kind, gameId])
   @@index([createdAt])
   @@index([authorId, createdAt])
   @@index([clubId, createdAt])
@@ -925,4 +950,46 @@ model WishlistGame {
 
   @@id([userId, gameId])
   @@index([gameId])
+}
+
+// A reaction on a comment under an update, or on a forum reply. (Updates themselves use PostReaction.)
+model Reaction {
+  // COMMENT | FORUM_POST
+  targetType String
+  targetId   String
+  userId     String
+  emoji      String
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([targetType, targetId, userId, emoji])
+  @@index([targetType, targetId])
+}
+
+// A member asking for a guide for a game that has none. Staff see them on the dashboard.
+model GuideRequest {
+  gameId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([gameId, userId])
+  @@index([createdAt])
+}
+
+// A member's 1 to 5 star rating of a guide.
+model GuideRating {
+  guideId   String
+  userId    String
+  stars     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  guide Guide @relation(fields: [guideId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([guideId, userId])
 }

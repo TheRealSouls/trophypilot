@@ -71,12 +71,19 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
   // "Go to my rank" (?find=me): only then is every ranked page read, to find the viewer and jump to their row.
   // Working it out on every visit made each sort or filter click slow for signed-in members.
   let notRanked = false;
-  if (sp.find === "me" && user) {
-    const all = await getLeaderboard({ metric, period, scope, country, viewerId: user.id, limit: MAX_PAGES * PER_PAGE });
-    const i = all.findIndex((r) => r.userId === user.id);
+  // ?find=me, or ?find=<username> (the rank badges on a profile): jump to that member's row.
+  const findId =
+    sp.find === "me"
+      ? (user?.id ?? null)
+      : sp.find
+        ? ((await prisma.user.findUnique({ where: { username: sp.find.toLowerCase() }, select: { id: true } }))?.id ?? null)
+        : null;
+  if (sp.find && findId) {
+    const all = await getLeaderboard({ metric, period, scope, country, viewerId: user?.id ?? null, limit: MAX_PAGES * PER_PAGE });
+    const i = all.findIndex((r) => r.userId === findId);
     if (i >= 0) {
       const p = new URLSearchParams({ scope, period, metric, ...(scope === "country" ? { country } : {}), ...(i >= PER_PAGE ? { page: String(Math.floor(i / PER_PAGE) + 1) } : {}) });
-      redirect(`/leaderboards?${p}#me`);
+      redirect(`/leaderboards?${p}#rank-${all[i].key}`);
     }
     notRanked = true;
   }
@@ -178,7 +185,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
             </Link>
             <span className="text-muted" role={notRanked ? "status" : undefined}>
               {notRanked
-                ? `You're not in the top ${formatNumber(MAX_PAGES * PER_PAGE)} of this board.`
+                ? `${sp.find === "me" ? "You're not" : `${sp.find} isn't`} in the top ${formatNumber(MAX_PAGES * PER_PAGE)} of this board.`
                 : `Jumps to your row on this board (${METRICS[metric].toLowerCase()}, ${PERIODS[period].toLowerCase()}${scope === "country" ? `, ${countryName(country)}` : scope === "friends" ? ", friends" : ", global"}).`}
             </span>
           </div>
@@ -300,7 +307,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
               </thead>
               <tbody className="divide-y divide-line">
                 {rows.map((r) => (
-                  <tr key={r.key} id={r.userId && r.userId === user?.id ? "me" : undefined} className={clsx("scroll-mt-24", r.userId && r.userId === user?.id && "bg-surface-3")}>
+                  <tr key={r.key} id={`rank-${r.key}`} className={clsx("scroll-mt-24 target:bg-accent/10", r.userId && r.userId === user?.id && "bg-surface-3")}>
                     <td className="px-4 py-2.5 tabular-nums text-muted">{r.rank}</td>
                     <td className="px-4 py-2.5">
                       <Link

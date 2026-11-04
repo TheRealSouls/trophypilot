@@ -23,6 +23,8 @@ import { Avatar, DifficultyMeter, Notice, ProgressBar, SectionTitle, Stat, StatG
 import { loadGame } from "./data";
 import { PlayingNowButton, RateGameForm, StaffHoursForm, UnobtainableForm, WishlistButton } from "./forms";
 import { listRegions, REGION_NAMES, type Region } from "@/lib/regions";
+import { requestGuide } from "@/actions/guides";
+import { SubmitButton } from "@/components/client";
 import { ListLoader } from "./ListLoader";
 
 type Params = { slug: string };
@@ -99,6 +101,14 @@ export default async function GamePage({ params, searchParams }: { params: Promi
   const shots = parseJsonArray(game.screenshots);
   const dlcs = game.groups.filter((g) => g.isDlc);
   const iAmPlaying = playingNow.some((u) => u.id === viewerId);
+  // Members asking for a guide, on any of this game's stacks (only while it has none).
+  const [requests, myRequest] =
+    guides.length === 0
+      ? await Promise.all([
+          prisma.guideRequest.count({ where: { gameId: { in: familyIds } } }),
+          viewerId ? prisma.guideRequest.findFirst({ where: { gameId: { in: familyIds }, userId: viewerId }, select: { gameId: true } }) : null,
+        ])
+      : [0, null];
   const onWishlist = viewerId
     ? !!(await prisma.wishlistGame.findUnique({ where: { userId_gameId: { userId: viewerId, gameId: game.id } }, select: { gameId: true } }))
     : false;
@@ -210,11 +220,11 @@ export default async function GamePage({ params, searchParams }: { params: Promi
                   <Link
                     key={l.id}
                     href={`/games/${l.slug}`}
-                    aria-current={l.current ? "page" : undefined}
+                    aria-current={l.id === game.id ? "page" : undefined}
                     title={regions.get(l.id) ? `${REGION_NAMES[regions.get(l.id)!]} list` : undefined}
                     className={clsx(
                       "rounded-lg border px-3 py-1.5 text-xs",
-                      l.current ? "border-accent-text bg-accent/5 text-text" : "border-line text-muted hover:border-muted hover:text-text",
+                      l.id === game.id ? "border-accent-text bg-accent/5 text-text" : "border-line text-muted hover:border-muted hover:text-text",
                     )}
                   >
                     <span className="font-semibold">{label}</span>
@@ -337,9 +347,20 @@ export default async function GamePage({ params, searchParams }: { params: Promi
                   </Link>
                 </li>
               ))}
-              {guides.length === 0 && <li className="text-sm text-muted">No guide yet.</li>}
+              {guides.length === 0 && (
+                <li className="text-sm text-muted">
+                  No guide yet.{requests > 0 && ` ${requests} member${requests === 1 ? " has" : "s have"} asked for one.`}
+                </li>
+              )}
             </ul>
-            <Link href={`/guides/new?game=${game.id}`} className="btn-ghost mt-4 w-full">Write a guide</Link>
+            {guides.length === 0 && viewerId && (
+              <form action={requestGuide} className="mt-4">
+                <input type="hidden" name="gameId" value={myRequest?.gameId ?? game.id} />
+                {myRequest && <input type="hidden" name="cancel" value="1" />}
+                <SubmitButton className={myRequest ? "btn-ghost w-full" : "btn-primary w-full"}>{myRequest ? "Requested: take it back" : "Request a guide"}</SubmitButton>
+              </form>
+            )}
+            <Link href={`/guides/new?game=${game.id}`} className="btn-ghost mt-2 w-full">Write a guide</Link>
           </section>
 
           <section className="card p-5">
@@ -390,6 +411,9 @@ export default async function GamePage({ params, searchParams }: { params: Promi
               {threads.length === 0 && <li className="text-sm text-muted">No threads about this game yet.</li>}
             </ul>
             <Link href={`/forums/new?game=${game.id}`} className="btn-ghost mt-4 w-full">Start a discussion</Link>
+            <Link href={`/forums/for/${game.id}`} className="mt-2 block text-center text-sm text-muted hover:text-text hover:underline">
+              Open the {game.title} forum
+            </Link>
           </section>
 
           {dlcs.length > 0 && (

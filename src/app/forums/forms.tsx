@@ -12,28 +12,45 @@ export function ThreadForm({
   sections,
   sectionId,
   initialGame,
+  fixedGame = false,
 }: {
   sections: { id: string; label: string }[];
   sectionId: string;
   initialGame: PickedGame | null;
+  /** Started from a game (or its forum): the thread can only go in that game's forum. */
+  fixedGame?: boolean;
 }) {
   const [state, form] = useKeepValuesAction(createThread, null);
+  const [game, setGame] = useState<PickedGame | null>(initialGame);
   return (
     <form {...form} className="card space-y-4 p-5">
-      <div>
-        <label htmlFor="t-section" className="label">Section</label>
-        <select id="t-section" name="sectionId" defaultValue={sectionId} required className="input">
-          <option value="" disabled>Choose a section</option>
-          {sections.map((s) => (
-            <option key={s.id} value={s.id}>{s.label}</option>
-          ))}
-        </select>
-      </div>
+      {fixedGame && initialGame ? (
+        <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm">
+          <input type="hidden" name="gameId" value={initialGame.id} />
+          Posting in the <strong>{initialGame.title}</strong> forum.
+        </p>
+      ) : (
+        <>
+          <GamePicker name="gameId" label="Game (if it's about one)" initial={initialGame} onChange={setGame} />
+          {game ? (
+            <p className="-mt-2 text-xs text-muted">It goes in the {game.title} forum, so there&apos;s no section to pick.</p>
+          ) : (
+            <div>
+              <label htmlFor="t-section" className="label">Section</label>
+              <select id="t-section" name="sectionId" defaultValue={sectionId} className="input">
+                <option value="" disabled>Choose a section</option>
+                {sections.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </>
+      )}
       <div>
         <label htmlFor="t-title" className="label">Title</label>
         <input id="t-title" name="title" required minLength={4} maxLength={120} className="input" />
       </div>
-      <GamePicker name="gameId" label="Game (optional)" initial={initialGame} />
       <div>
         <label htmlFor="t-body" className="label">Post</label>
         <RichTextArea id="t-body" name="body" required minLength={2} maxLength={10_000} rows={10} className="input" />

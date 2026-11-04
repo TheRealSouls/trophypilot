@@ -21,7 +21,9 @@ export default async function ManageForumsPage() {
     );
   }
 
+  // Each game's own forum is made automatically, so it isn't managed here.
   const sections = await prisma.forumSection.findMany({
+    where: { gameKey: null },
     orderBy: [{ order: "asc" }, { name: "asc" }],
     include: { _count: { select: { threads: true, children: true } } },
   });

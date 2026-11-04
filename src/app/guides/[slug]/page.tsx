@@ -14,6 +14,7 @@ import { TrophyIcon } from "@/components/TrophyIcon";
 import { ConfirmButton, RevealButton, Spoiler, SpoilerSwap, StepCheck, SubmitButton } from "@/components/client";
 import { HeartIcon } from "@/components/icons";
 import { ShareMenu } from "@/components/ShareMenu";
+import { GuideRating } from "@/components/GuideRating";
 import { toggleGuideFavourite } from "@/actions/community";
 import { deleteGuide } from "@/actions/guides";
 import { Tips } from "@/components/Tips";
@@ -71,7 +72,7 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
     .filter((s) => s.kind === "TROPHY" && s.trophy)
     .sort((a, b) => a.trophy!.psnTrophyId - b.trophy!.psnTrophyId);
 
-  const [favourite, favouriteCount, shareWith] = await Promise.all([
+  const [favourite, favouriteCount, shareWith, myRating] = await Promise.all([
     viewerId ? prisma.guideFavourite.findUnique({ where: { userId_guideId: { userId: viewerId, guideId: guide.id } } }) : null,
     prisma.guideFavourite.count({ where: { guideId: guide.id } }),
     // People the viewer can send the guide to: friends and people they follow.
@@ -90,6 +91,7 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
           select: { id: true, username: true, psn: { select: { onlineId: true } } },
         })
       : [],
+    viewerId ? prisma.guideRating.findUnique({ where: { guideId_userId: { guideId: guide.id, userId: viewerId } }, select: { stars: true } }) : null,
   ]);
 
   return (
@@ -129,7 +131,22 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
             </Link>
             · updated {formatDate(guide.updatedAt)} · {formatNumber(guide.views)} views
           </div>
+          {guide.status === "PUBLISHED" && (
+            <div className="mt-4">
+              <GuideRating
+                guideId={guide.id}
+                mine={myRating?.stars ?? 0}
+                avg={guide.ratingAvg}
+                count={guide.ratingCount}
+                canRate={!!viewerId && viewerId !== guide.authorId}
+              />
+            </div>
+          )}
           <div className="mt-5 flex flex-wrap items-center gap-2">
+            <Link href={`/games/${guide.game.slug}`} className="btn-ghost">
+              <TrophyIcon type="PLATINUM" size={16} />
+              Trophy list
+            </Link>
             {viewerId ? (
               <form action={toggleGuideFavourite}>
                 <input type="hidden" name="guideId" value={guide.id} />

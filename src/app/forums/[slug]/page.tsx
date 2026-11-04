@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { DELETED_USER, isStaff, THREADS_PER_PAGE } from "@/lib/forum";
 import { formatNumber, timeAgo } from "@/lib/utils";
 import { EmptyState, PageHeader } from "@/components/ui";
+import { GAME_FORUMS_SLUG, gameOfSection } from "@/lib/game-forum";
 
 type Params = { slug: string };
 
@@ -16,7 +17,13 @@ const loadSection = cache((slug: string) =>
     where: { slug },
     include: {
       parent: { select: { slug: true, name: true } },
-      children: { orderBy: [{ order: "asc" }, { name: "asc" }], include: { _count: { select: { threads: true } } } },
+      // Game forums list only the games that have threads (every game has a forum, most still empty).
+      children: {
+        where: { OR: [{ gameKey: null }, { threads: { some: {} } }] },
+        orderBy: [{ order: "asc" }, { name: "asc" }],
+        take: 500,
+        include: { _count: { select: { threads: true } } },
+      },
     },
   }),
 );
@@ -47,7 +54,10 @@ export default async function SectionPage({ params, searchParams }: { params: Pr
     prisma.forumThread.count({ where: { sectionId: section.id } }),
   ]);
   const pages = Math.max(1, Math.ceil(total / THREADS_PER_PAGE));
-  const canPost = !!user && (!section.adminOnly || isStaff(user));
+  // Threads can't go straight into "Game forums"; they go into a game's own forum.
+  const canPost = !!user && (!section.adminOnly || isStaff(user)) && section.slug !== GAME_FORUMS_SLUG;
+  const game = section.gameKey ? await gameOfSection(section.gameKey) : null;
+  const newThread = game ? `/forums/new?game=${game.id}` : `/forums/new?section=${section.slug}`;
 
   return (
     <div>
@@ -60,13 +70,26 @@ export default async function SectionPage({ params, searchParams }: { params: Pr
           </>
         )}
       </nav>
-      <PageHeader title={section.name}>{section.description}</PageHeader>
+      <PageHeader title={section.name}>
+        {section.description}
+        {game && (
+          <>
+            {" "}
+            <Link href={`/games/${game.slug}`} className="link">
+              See the trophy list
+            </Link>
+            .
+          </>
+        )}
+      </PageHeader>
 
       <div className="mb-6 flex flex-wrap gap-2">
         {canPost ? (
-          <Link href={`/forums/new?section=${section.slug}`} className="btn-primary">New thread</Link>
+          <Link href={newThread} className="btn-primary">New thread</Link>
         ) : !user ? (
           <Link href={`/login?next=/forums/${section.slug}`} className="btn-ghost">Log in to post</Link>
+        ) : section.slug === GAME_FORUMS_SLUG ? (
+          <span className="text-sm text-muted">To start a thread about a game, open the game and press Start a discussion.</span>
         ) : (
           <span className="text-sm text-muted">Only admins can start threads here.</span>
         )}

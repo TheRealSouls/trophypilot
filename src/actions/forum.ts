@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth";
 import { verifyFirst } from "@/lib/email";
 import { formText, hateSpeechError } from "@/lib/moderation";
 import { isAdmin, isStaff, POSTS_PER_PAGE, uniqueSectionSlug } from "@/lib/forum";
+import { ensureGameSection, GAME_FORUMS_SLUG } from "@/lib/game-forum";
 import { rateLimit } from "@/lib/rate-limit";
 import { slugify } from "@/lib/utils";
 import type { FormState } from "./auth";
@@ -82,7 +83,8 @@ export async function deleteSection(fd: FormData) {
 // ─── Threads and posts ───────────────────────────────────────────────────────
 
 const threadSchema = z.object({
-  sectionId: z.string().min(1, "Pick a section."),
+  // Not needed when a game is picked: the thread goes into the game's own forum.
+  sectionId: z.string().optional().transform((v) => v || null),
   title: z.string().trim().min(4, "Give the thread a title of at least 4 characters.").max(120, "Keep titles under 120 characters."),
   body,
   gameId: z.string().optional().transform((v) => v || null),
@@ -101,12 +103,16 @@ export async function createThread(_: FormState, fd: FormData): Promise<FormStat
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const t = parsed.data;
 
-  const section = await prisma.forumSection.findUnique({ where: { id: t.sectionId } });
+  // A thread about a game always goes in that game's own forum, wherever it was started from.
+  const game = t.gameId ? await prisma.game.findUnique({ where: { id: t.gameId }, select: { id: true, title: true, titleKey: true } }) : null;
+  if (t.gameId && !game) return { error: "Unknown game." };
+  if (!game && !t.sectionId) return { error: "Pick a section, or the game the thread is about." };
+  const section = game
+    ? await ensureGameSection(game).then((s) => prisma.forumSection.findUniqueOrThrow({ where: { id: s.id } }))
+    : await prisma.forumSection.findUnique({ where: { id: t.sectionId! } });
   if (!section) return { error: "That section doesn't exist any more." };
   if (section.adminOnly && !isStaff(user)) return { error: "Only admins can start threads in this section." };
-  if (t.gameId && !(await prisma.game.findUnique({ where: { id: t.gameId }, select: { id: true } }))) {
-    return { error: "Unknown game." };
-  }
+  if (section.slug === GAME_FORUMS_SLUG) return { error: "Pick the game the thread is about: each game has its own forum." };
 
   const thread = await prisma.forumThread.create({
     data: {
@@ -205,6 +211,11 @@ export async function moderateThread(fd: FormData) {
     : action === "unlock" ? { locked: false }
     : action === "move" && fd.get("sectionId") ? { sectionId: String(fd.get("sectionId")) }
     : null;
+  // Threads go in a game's own section, never loose in the game forums list itself.
+  if (data && "sectionId" in data) {
+    const to = await prisma.forumSection.findUnique({ where: { id: data.sectionId }, select: { slug: true } });
+    if (!to || to.slug === GAME_FORUMS_SLUG) return;
+  }
   if (data) await prisma.forumThread.update({ where: { id }, data });
   revalidatePath("/forums", "layout");
 }

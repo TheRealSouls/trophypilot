@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { enrichPending, igdbEnabled } from "@/lib/igdb";
 import { bust } from "@/lib/cache";
 import { refreshGamePopularity, warmGamesList } from "@/lib/games-list";
@@ -21,10 +21,19 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  // "Most played" counts, then the common games list pages, so they're ready before anyone asks.
-  const popularity = await refreshGamePopularity().catch((err) => ({ error: String(err) }));
-  const igdb = igdbEnabled() ? await enrichPending(PER_RUN) : { skipped: "IGDB_CLIENT_ID and IGDB_CLIENT_SECRET are not set" };
-  bust("games");
-  await warmGamesList().catch((err) => console.error("[games] warm failed", err));
-  return NextResponse.json({ igdb, popularityUpdated: popularity });
+  // Answered straight away and done after the response: a hundred IGDB look-ups take longer than
+  // schedulers and Cloudflare wait, and cut-off runs never got to refreshing the lists.
+  after(async () => {
+    try {
+      // "Most played" counts, then the common games list pages, so they're ready before anyone asks.
+      const popularity = await refreshGamePopularity().catch((err) => ({ error: String(err) }));
+      const igdb = igdbEnabled() ? await enrichPending(PER_RUN) : { skipped: "IGDB_CLIENT_ID and IGDB_CLIENT_SECRET are not set" };
+      bust("games");
+      await warmGamesList().catch((err) => console.error("[games] warm failed", err));
+      console.log("[cron/games]", JSON.stringify({ igdb, popularityUpdated: popularity }).slice(0, 1000));
+    } catch (err) {
+      console.error("[cron/games] failed", err);
+    }
+  });
+  return NextResponse.json({ started: true });
 }

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { GameArt } from "@/components/art";
 import { TrophyList } from "@/components/TrophyList";
+import { ReportButton } from "@/components/ReportButton";
 import { sortParam } from "@/lib/trophies";
 import { RevealAllButton, SpoilerGroup } from "@/components/client";
 import { TrophyIcon } from "@/components/TrophyIcon";
@@ -74,6 +75,15 @@ export default async function UserGamePage({
             </span>
           )}
           <Link href={`/games/${game.slug}`} className="btn-ghost">Game page & guides</Link>
+          {ug && (
+            <ReportButton
+              type="TROPHY_LIST"
+              id={`${owner.id}:${game.id}`}
+              authorId={owner.id}
+              what={`${display}'s ${game.title} trophy list`}
+              label="Report as hacked or cheated"
+            />
+          )}
         </div>
       </header>
 

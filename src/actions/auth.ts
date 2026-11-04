@@ -4,7 +4,8 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { createSession, destroySession } from "@/lib/auth";
+import { createSession, destroySession, endPendingSignIn, pendingSignIn, startPendingSignIn } from "@/lib/auth";
+import { redeemBackupCode, verifyTotp } from "@/lib/totp";
 import { COUNTRIES } from "@/lib/countries";
 import { rateLimit } from "@/lib/rate-limit";
 import { emailEnabled, sendVerificationEmail } from "@/lib/email";
@@ -73,8 +74,31 @@ export async function login(_: FormState, fd: FormData): Promise<FormState> {
   const ok = await bcrypt.compare(password, user?.passwordHash ?? dummyHash);
   if (!user || !ok) return { error: "Incorrect email/username or password." };
 
+  // Two-step sign-in: the password was right, now the code from their authenticator app.
+  if (user.totpEnabledAt && user.totpSecret) {
+    await startPendingSignIn(user.id, safeNext(fd.get("next")));
+    redirect("/login/verify");
+  }
   await createSession(user.id);
   redirect(safeNext(fd.get("next")) ?? `/u/${user.username}`);
+}
+
+/** The second step: a 6-digit code from the authenticator app, or one of the backup codes. */
+export async function verifySignInCode(_: FormState, fd: FormData): Promise<FormState> {
+  const pending = await pendingSignIn();
+  if (!pending) return { error: "That took too long. Log in again." };
+  if (!(await rateLimit("2fa", 8, 15 * 60_000, pending.userId))) return { error: "Too many tries. Wait a few minutes and log in again." };
+  const user = await prisma.user.findUnique({ where: { id: pending.userId }, select: { id: true, username: true, totpSecret: true, totpBackupCodes: true } });
+  if (!user?.totpSecret) return { error: "That took too long. Log in again." };
+  const code = String(fd.get("code") ?? "").trim();
+  if (!verifyTotp(user.totpSecret, code)) {
+    const left = redeemBackupCode(user.totpBackupCodes, code);
+    if (left === null) return { error: "That code isn't right. Use the 6-digit code your authenticator app shows now, or a backup code." };
+    await prisma.user.update({ where: { id: user.id }, data: { totpBackupCodes: left } });
+  }
+  await endPendingSignIn();
+  await createSession(user.id);
+  redirect(pending.next ?? `/u/${user.username}`);
 }
 
 export async function logout() {

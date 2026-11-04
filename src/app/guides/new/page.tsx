@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isStaff } from "@/lib/roles";
+import { parseRules } from "@/lib/forum-rules";
+import { DEFAULT_GUIDE_RULES } from "@/lib/guide-rules";
+import { getSetting, GUIDE_RULES_KEY } from "@/lib/site-settings";
 import { PageHeader } from "@/components/ui";
 import { GuideEditor } from "./GuideEditor";
 
@@ -19,7 +22,7 @@ export default async function NewGuidePage({ searchParams }: { searchParams: Pro
       <PageHeader kicker="Contribute" title="Write a trophy guide">
         Share your route to the platinum. Split it into roadmap stages, flag missables, and list collectibles. Your draft saves itself as you write.
       </PageHeader>
-      <GuideEditor initialGame={initialGame} trusted={isStaff(user) || user.trusted} />
+      <GuideEditor initialGame={initialGame} trusted={isStaff(user) || user.trusted} rules={parseRules((await getSetting(GUIDE_RULES_KEY)) ?? DEFAULT_GUIDE_RULES)} />
     </div>
   );
 }

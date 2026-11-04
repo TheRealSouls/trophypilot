@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import clsx from "clsx";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { canSetRole, isAdmin, isOwner, MODERATOR_MAX_SUSPEND_DAYS, outranks, STAFF_BADGES, type Role } from "@/lib/roles";
+import { canSetRole, hasStaffRole, isAdmin, isOwner, needsTwoStep, MODERATOR_MAX_SUSPEND_DAYS, outranks, STAFF_BADGES, type Role } from "@/lib/roles";
 import { ACTION_NAMES } from "@/lib/staff";
 import { DEFAULT_FORUM_RULES } from "@/lib/forum-rules";
 import { FORUM_RULES_KEY, getSetting } from "@/lib/site-settings";
@@ -15,11 +15,14 @@ import { SubmitButton } from "@/components/client";
 import { LocalTime } from "@/components/LocalTime";
 import { StaffBadge } from "@/components/StaffBadge";
 import { Avatar, EmptyState, PageHeader } from "@/components/ui";
-import { DeleteAccountForm, RulesForm, SuspendForm, WarnForm } from "./forms";
+import { DeleteAccountForm, HomeBackgroundForm, RulesForm, SuspendForm, WarnForm } from "./forms";
+import { DEFAULT_GUIDE_RULES } from "@/lib/guide-rules";
+import { GUIDE_RULES_KEY, HOME_BACKGROUND_KEY } from "@/lib/site-settings";
+import { GameArt } from "@/components/art";
 
 export const metadata: Metadata = { title: "Staff dashboard", robots: { index: false } };
 
-type Tab = "overview" | "online" | "members" | "staff" | "rules" | "log";
+type Tab = "overview" | "online" | "requests" | "members" | "staff" | "rules" | "home" | "log";
 
 /**
  * The staff dashboard. Moderators see the community tools (reports, online
@@ -28,13 +31,15 @@ type Tab = "overview" | "online" | "members" | "staff" | "rules" | "log";
  */
 export default async function StaffPage({ searchParams }: { searchParams: Promise<{ tab?: string; q?: string }> }) {
   const me = await requireUser("/staff");
-  if (!(me.role === "MODERATOR" || isAdmin(me))) notFound();
+  if (!hasStaffRole(me)) notFound();
+  if (needsTwoStep(me)) return <TwoStepFirst />;
   const sp = await searchParams;
   const tabs: [Tab, string][] = [
     ["overview", "Overview"],
     ["online", "Online flags"],
+    ["requests", "Guide requests"],
     ["members", "Members"],
-    ...(isAdmin(me) ? ([["staff", "Staff"], ["rules", "Forum rules"]] as [Tab, string][]) : []),
+    ...(isAdmin(me) ? ([["staff", "Staff"], ["rules", "Rules"], ["home", "Home page"]] as [Tab, string][]) : []),
     ["log", "Audit log"],
   ];
   const tab = (tabs.find(([k]) => k === sp.tab)?.[0] ?? "overview") as Tab;
@@ -64,15 +69,35 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
       {tab === "online" && <OnlineFlags />}
       {tab === "members" && <Members me={me} q={sp.q ?? ""} />}
       {tab === "staff" && isAdmin(me) && <StaffList me={me} />}
-      {tab === "rules" && isAdmin(me) && <RulesForm rules={(await getSetting(FORUM_RULES_KEY)) ?? DEFAULT_FORUM_RULES} />}
+      {tab === "requests" && <GuideRequests />}
+      {tab === "rules" && isAdmin(me) && (
+        <div className="space-y-10">
+          <RulesForm rules={(await getSetting(FORUM_RULES_KEY)) ?? DEFAULT_FORUM_RULES} />
+          <RulesForm kind="guide" rules={(await getSetting(GUIDE_RULES_KEY)) ?? DEFAULT_GUIDE_RULES} />
+        </div>
+      )}
+      {tab === "home" && isAdmin(me) && <HomeBackgroundForm url={await getSetting(HOME_BACKGROUND_KEY)} />}
       {tab === "log" && <AuditLog />}
+    </div>
+  );
+}
+
+function TwoStepFirst() {
+  return (
+    <div className="mx-auto max-w-xl py-10">
+      <PageHeader kicker="Staff" title="Switch on two-step sign-in first">
+        Staff tools need two-step sign-in, so a stolen password alone can't be used to moderate the site.
+      </PageHeader>
+      <Link href="/settings#two-step" className="btn-primary">
+        Set it up in Settings
+      </Link>
     </div>
   );
 }
 
 async function Overview() {
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
-  const [reports, guides, flags, members, newMembers, posts, suspended] = await Promise.all([
+  const [reports, guides, flags, members, newMembers, posts, suspended, requests] = await Promise.all([
     prisma.report.count({ where: { status: "OPEN" } }),
     prisma.guide.count({ where: { status: "PENDING" } }),
     prisma.onlineFlag.count({ where: { status: "PENDING" } }),
@@ -80,11 +105,13 @@ async function Overview() {
     prisma.user.count({ where: { createdAt: { gt: weekAgo } } }),
     prisma.post.count({ where: { createdAt: { gt: weekAgo } } }),
     prisma.user.count({ where: { suspendedUntil: { gt: new Date() } } }),
+    prisma.guideRequest.count(),
   ]);
   const cards: [string, number, string?][] = [
     ["Open reports", reports, "/reports"],
     ["Guides waiting", guides, "/reports"],
     ["Online flags waiting", flags, "/staff?tab=online"],
+    ["Guide requests", requests, "/staff?tab=requests"],
     ["Members", members, "/staff?tab=members"],
     ["New members this week", newMembers],
     ["Updates this week", posts],
@@ -118,6 +145,46 @@ async function Overview() {
         <AuditLog take={10} />
       </section>
     </div>
+  );
+}
+
+/** Games members asked a guide for, most asked first (a game's stacks count together). */
+async function GuideRequests() {
+  const rows = await prisma.guideRequest.groupBy({ by: ["gameId"], _count: { _all: true }, _max: { createdAt: true } });
+  const games = await prisma.game.findMany({
+    where: { id: { in: rows.map((r) => r.gameId) } },
+    select: { id: true, slug: true, title: true, titleKey: true, platforms: true, iconUrl: true, coverHue: true, _count: { select: { guides: { where: { status: "PUBLISHED" } } } } },
+  });
+  const byKey = new Map<string, { game: (typeof games)[number]; n: number; last: Date }>();
+  for (const r of rows) {
+    const g = games.find((x) => x.id === r.gameId);
+    if (!g) continue;
+    const key = g.titleKey || g.id;
+    const cur = byKey.get(key);
+    byKey.set(key, { game: cur?.game ?? g, n: (cur?.n ?? 0) + r._count._all, last: cur && cur.last > r._max.createdAt! ? cur.last : r._max.createdAt! });
+  }
+  const list = [...byKey.values()].sort((a, b) => b.n - a.n || b.last.getTime() - a.last.getTime());
+  if (!list.length) return <EmptyState title="No guide requests yet">Members can ask for a guide on any game that doesn&apos;t have one.</EmptyState>;
+  return (
+    <ul className="card divide-y divide-line">
+      {list.map(({ game, n, last }) => (
+        <li key={game.id} className="flex items-center gap-3 px-4 py-3">
+          <GameArt title={game.title} hue={game.coverHue} iconUrl={game.iconUrl} size="sm" className="w-10" />
+          <div className="min-w-0 flex-1">
+            <Link href={`/games/${game.slug}`} className="font-semibold hover:underline hover:underline-offset-4">
+              {game.title}
+            </Link>
+            <div className="text-xs text-muted">
+              {game.platforms.split(",").join(" · ")} · last asked {timeAgo(last)}
+              {game._count.guides > 0 && " · now has a guide"}
+            </div>
+          </div>
+          <span className="chip tabular-nums">
+            {n} request{n === 1 ? "" : "s"}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

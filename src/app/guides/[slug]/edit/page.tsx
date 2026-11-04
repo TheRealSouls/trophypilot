@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isStaff } from "@/lib/roles";
+import { parseRules } from "@/lib/forum-rules";
+import { DEFAULT_GUIDE_RULES } from "@/lib/guide-rules";
+import { getSetting, GUIDE_RULES_KEY } from "@/lib/site-settings";
 import { Notice, PageHeader } from "@/components/ui";
 import { GuideEditor, type GuideDraft } from "../../new/GuideEditor";
 
@@ -55,7 +58,7 @@ export default async function EditGuidePage({ params }: { params: Promise<{ slug
           You&apos;re editing someone else&apos;s guide as staff. The change is logged.
         </Notice>
       )}
-      <GuideEditor draft={draft} trusted={isStaff(user) || user.trusted} />
+      <GuideEditor draft={draft} trusted={isStaff(user) || user.trusted} rules={parseRules((await getSetting(GUIDE_RULES_KEY)) ?? DEFAULT_GUIDE_RULES)} />
     </div>
   );
 }

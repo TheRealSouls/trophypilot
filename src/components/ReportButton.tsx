@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useId, useRef } from "react";
 import clsx from "clsx";
 import { reportContent } from "@/actions/reports";
-import { REPORT_REASONS, type ReportType } from "@/lib/reports";
+import { REPORT_REASONS, TROPHY_REASONS, type ReportType } from "@/lib/reports";
 import { useMe } from "./session";
 import { SubmitButton } from "./client";
 import { FormMessage } from "./ui";
@@ -69,9 +69,11 @@ export function ReportButton({
           </h2>
           <fieldset className="space-y-1.5">
             <legend className="label">What&apos;s wrong?</legend>
-            {Object.entries(REPORT_REASONS).map(([key, label], i) => (
+            {Object.entries(REPORT_REASONS)
+              .filter(([key]) => !TROPHY_REASONS.has(key) || type === "TROPHY_LIST" || type === "USER")
+              .map(([key, label], i) => (
               <label key={key} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-surface-2">
-                <input type="radio" name="reason" value={key} required defaultChecked={i === 0} className="accent-[var(--color-accent)]" />
+                <input type="radio" name="reason" value={key} required defaultChecked={type === "TROPHY_LIST" ? key === "HACKED" : i === 0} className="accent-[var(--color-accent)]" />
                 {label}
               </label>
             ))}

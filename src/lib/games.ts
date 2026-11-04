@@ -51,6 +51,11 @@ export async function siblingLists(game: { id: string; titleKey: string }) {
   });
   if (rows.length < 2) return [];
   return rows
-    .map((r) => ({ ...r, current: r.id === game.id, platform: sortPlatforms(r.platforms.split(","))[0] ?? "" }))
+    .map((r) => ({
+      ...r,
+      // Only right for the game that filled the cache: pages compare ids themselves (lists are shared between stacks).
+      current: r.id === game.id,
+      platform: sortPlatforms(r.platforms.split(","))[0] ?? "",
+    }))
     .sort((a, b) => PLATFORM_ORDER.indexOf(a.platform) - PLATFORM_ORDER.indexOf(b.platform));
 }

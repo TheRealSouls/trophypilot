@@ -28,6 +28,8 @@ export function ClubDetailsForm({
   const [picked, setPicked] = useState(banner ?? "");
   const [canUpload, setCanUpload] = useState(false);
   const [note, setNote] = useState("");
+  const [picture, setPicture] = useState("");
+  const [pictureNote, setPictureNote] = useState("");
   useEffect(() => setCanUpload(document.body.dataset.uploads === "1"), []);
   const options = [...(banner && !artwork.some((a) => a.url === banner) ? [{ url: banner, title: "Current banner" }] : []), ...artwork];
 
@@ -35,6 +37,7 @@ export function ClubDetailsForm({
     <form action={action} className="space-y-5">
       <input type="hidden" name="clubId" value={clubId} />
       <input type="hidden" name="bannerUrl" value={picked} />
+      <input type="hidden" name="pictureUrl" value={picture} />
       <fieldset>
         <legend className="label">Banner</legend>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -89,13 +92,47 @@ export function ClubDetailsForm({
           </p>
         )}
       </fieldset>
+      {canUpload && (
+        <fieldset>
+          <legend className="label">Club picture</legend>
+          <div className="flex flex-wrap items-center gap-3">
+            {picture && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={picture} alt="The uploaded club picture" className="h-14 w-14 rounded-md border border-line object-cover" />
+            )}
+            <label className="btn-ghost cursor-pointer">
+              Upload a club picture
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  setPictureNote("Uploading…");
+                  try {
+                    setPicture(await uploadPicture(file));
+                    setPictureNote("Uploaded. Press Save to use it.");
+                  } catch (err) {
+                    setPictureNote(err instanceof Error ? err.message : "The upload didn't work.");
+                  }
+                }}
+              />
+            </label>
+          </div>
+          <p className="mt-1 text-xs text-muted" aria-live="polite">
+            {pictureNote || "A square picture works best. Or pick one of the built-in pictures above."}
+          </p>
+        </fieldset>
+      )}
       <div>
         <label htmlFor={`rules-${clubId}`} className="label">
           Club rules
         </label>
         <RichTextArea id={`rules-${clubId}`} name="rules" defaultValue={rules} rows={6} maxLength={3000} className="input" placeholder="What the club is for, what's welcome, what isn't." />
       </div>
-      <SubmitButton className="btn-ghost">Save rules and banner</SubmitButton>
+      <SubmitButton className="btn-ghost">Save</SubmitButton>
       <FormMessage state={state} />
     </form>
   );

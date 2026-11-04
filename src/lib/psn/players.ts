@@ -118,6 +118,23 @@ async function allTitles(accountId: string) {
 }
 
 /**
+ * Re-reads only a player's summary (level and trophy totals): one PSN request.
+ * Keeps weekly and monthly boards moving between the fortnightly full
+ * refreshes. False if PSN has no such player.
+ */
+export async function refreshSummary(onlineId: string) {
+  try {
+    const { profile } = await withTimeout(getProfileFromUserName(await psnAuth(), onlineId));
+    await recordPlayer(snapshotFromProfile(profile));
+    return true;
+  } catch (err) {
+    const e = toPsnError(err);
+    if (e.kind === "not_found") return false;
+    throw e;
+  }
+}
+
+/**
  * Re-reads a player's summary and their full games list (for games played and
  * average completion), dates a few new platinums and counts ultra rares in a
  * few more lists. Each part is capped per run to stay polite to PSN. Returns

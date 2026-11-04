@@ -26,8 +26,14 @@ export const DELETED_USER = "deleted user";
  * counts and the most recent thread, for the forum index.
  */
 export async function forumIndex() {
+  // Not every game's own forum (there can be thousands): those show as the most active few under "Game forums".
   const sections = await prisma.forumSection.findMany({
+    where: { gameKey: null },
     orderBy: [{ order: "asc" }, { name: "asc" }],
+    select: { id: true, slug: true, name: true, description: true, parentId: true, adminOnly: true },
+  });
+  const gameSections = await prisma.forumSection.findMany({
+    where: { gameKey: { not: null }, threads: { some: {} } },
     select: { id: true, slug: true, name: true, description: true, parentId: true, adminOnly: true },
   });
   const [counts, latest] = await Promise.all([
@@ -42,7 +48,7 @@ export async function forumIndex() {
   const stats = new Map(counts.map((c) => [c.sectionId, { threads: c._count._all, posts: c._sum.postCount ?? 0 }]));
   const last = new Map(latest.map((t) => [t.sectionId, t]));
 
-  const withStats = sections.map((s) => ({
+  const withStats = [...sections, ...gameSections].map((s) => ({
     ...s,
     threads: stats.get(s.id)?.threads ?? 0,
     posts: stats.get(s.id)?.posts ?? 0,
@@ -63,15 +69,20 @@ export async function forumIndex() {
   return withStats
     .filter((s) => !s.parentId)
     .map((s) => {
-      const children = withStats.filter((c) => c.parentId === s.id);
-      return { ...s, children, total: rollUp(s, children) };
+      const all = withStats.filter((c) => c.parentId === s.id);
+      // Game forums: the totals cover every game, but only the 8 most recently active are listed.
+      const children =
+        s.slug === "game-forums"
+          ? [...all].sort((a, b) => (b.latest?.lastPostAt.getTime() ?? 0) - (a.latest?.lastPostAt.getTime() ?? 0)).slice(0, 8)
+          : all;
+      return { ...s, children, total: rollUp(s, all) };
     });
 }
 
 /** "general-discussion", or "general-discussion-2" if taken. */
 export async function uniqueSectionSlug(base: string, exceptId?: string) {
   // These are pages of their own under /forums.
-  if (!base || ["new", "manage", "thread", "rules", "staff", "user", "search"].includes(base)) base = `${base || "section"}-forum`;
+  if (!base || ["new", "manage", "thread", "rules", "staff", "user", "search", "for"].includes(base)) base = `${base || "section"}-forum`;
   let slug = base;
   for (let i = 2; ; i++) {
     const hit = await prisma.forumSection.findUnique({ where: { slug }, select: { id: true } });

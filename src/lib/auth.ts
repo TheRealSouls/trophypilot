@@ -41,6 +41,41 @@ export async function createSession(userId: string) {
   });
 }
 
+/**
+ * Two-step sign-in: after the right password, members with an authenticator
+ * get this short-lived cookie instead of a session, and the session starts
+ * once /login/verify accepts their code.
+ */
+const PENDING = "trophypilot_2fa";
+const PENDING_SECONDS = 10 * 60;
+
+export async function startPendingSignIn(userId: string, next: string | null) {
+  const token = await new SignJWT({ purpose: "2fa", next: next ?? "" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(userId)
+    .setIssuedAt()
+    .setExpirationTime(`${PENDING_SECONDS}s`)
+    .sign(secret());
+  (await cookies()).set(PENDING, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: PENDING_SECONDS });
+}
+
+/** Who is half-way through signing in, and where they were going. */
+export async function pendingSignIn(): Promise<{ userId: string; next: string | null } | null> {
+  const token = (await cookies()).get(PENDING)?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    if (payload.purpose !== "2fa" || !payload.sub) return null;
+    return { userId: payload.sub, next: typeof payload.next === "string" && payload.next ? payload.next : null };
+  } catch {
+    return null;
+  }
+}
+
+export async function endPendingSignIn() {
+  (await cookies()).delete(PENDING);
+}
+
 export async function destroySession() {
   const jar = await cookies();
   jar.delete(COOKIE);

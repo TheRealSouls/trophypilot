@@ -8,7 +8,7 @@ import { sendNotice } from "@/lib/community";
 import { canSetRole, isAdmin, isOwner, isStaff, MODERATOR_MAX_SUSPEND_DAYS, outranks, STAFF_BADGES, type Role } from "@/lib/roles";
 import { logStaff } from "@/lib/staff";
 import { deleteUploadsOf } from "@/lib/uploads";
-import { FORUM_RULES_KEY } from "@/lib/site-settings";
+import { FORUM_RULES_KEY, GUIDE_RULES_KEY, HOME_BACKGROUND_KEY } from "@/lib/site-settings";
 import type { FormState } from "./auth";
 
 /**
@@ -156,4 +156,35 @@ export async function setTrophyOnline(fd: FormData) {
 async function refreshOnlineFlagOnGame(gameId: string) {
   const any = await prisma.trophy.count({ where: { gameId, online: true } });
   await prisma.game.update({ where: { id: gameId }, data: { hasOnlineTrophies: any > 0 } });
+}
+
+/**
+ * Owners and admins set the home page picture for an occasion (Halloween,
+ * Christmas, a big release): any https image, or nothing for the game covers.
+ */
+export async function saveHomeBackground(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requireUser("/staff");
+  if (!isAdmin(me)) return { error: "Only admins can change the home page." };
+  const url = fd.get("clear") ? "" : String(fd.get("url") ?? "").trim();
+  if (url && !/^https:\/\/[^\s"<>]+$/i.test(url)) return { error: "Use a picture address starting with https://." };
+  if (url) await prisma.siteSetting.upsert({ where: { key: HOME_BACKGROUND_KEY }, create: { key: HOME_BACKGROUND_KEY, value: url, updatedById: me.id }, update: { value: url, updatedById: me.id } });
+  else await prisma.siteSetting.deleteMany({ where: { key: HOME_BACKGROUND_KEY } });
+  await logStaff(me.id, "home.background", null, url || "back to the game covers");
+  revalidatePath("/");
+  revalidatePath("/staff");
+  return { ok: url ? "Saved. The home page shows it within a minute." : "Removed. The home page shows the game covers again." };
+}
+
+/** Owners and admins edit the rules shown beside the guide editor. */
+export async function saveGuideRules(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requireUser("/staff");
+  if (!isAdmin(me)) return { error: "Only admins can change the guide rules." };
+  const value = String(fd.get("rules") ?? "").trim();
+  if (value.length < 20) return { error: "The rules need a little more than that." };
+  if (value.length > 10_000) return { error: "Keep the rules under 10,000 characters." };
+  await prisma.siteSetting.upsert({ where: { key: GUIDE_RULES_KEY }, create: { key: GUIDE_RULES_KEY, value, updatedById: me.id }, update: { value, updatedById: me.id } });
+  await logStaff(me.id, "rules.guides", null, `${value.length} characters`);
+  revalidatePath("/guides/new");
+  revalidatePath("/staff");
+  return { ok: "Guide rules saved." };
 }

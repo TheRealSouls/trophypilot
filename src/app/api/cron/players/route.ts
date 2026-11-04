@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { discoverPlayers, refreshPlayer } from "@/lib/psn/players";
+import { discoverPlayers, refreshPlayer, refreshSummary } from "@/lib/psn/players";
 import { toPsnError } from "@/lib/psn/real";
 import { getProvider, isDemoMode } from "@/lib/psn/sync";
 import { keepListsFresh } from "@/lib/psn/catalogue";
@@ -26,17 +26,43 @@ export const maxDuration = 300;
 
 const REFRESH_PER_RUN = Math.max(1, Number(process.env.PSN_REFRESH_PER_RUN) || 10);
 const DISCOVER_PER_RUN = Math.max(0, Number(process.env.PSN_DISCOVER_PER_RUN) || 20);
+/** Tracked players get a full refresh (whole games list, ultra rares) every two weeks; members sync weekly themselves. */
+const FULL_REFRESH_EVERY_MS = 14 * 86_400_000;
+/** Between those, a one-request summary refresh (level, totals) at most daily keeps the weekly and monthly boards moving. */
+const SUMMARY_EVERY_MS = 86_400_000;
+const SUMMARIES_PER_RUN = Math.max(0, Number(process.env.PSN_SUMMARIES_PER_RUN) || 15);
+
+/** One run at a time: a slow run (PSN rate limits) mustn't overlap the next hour's. */
+let running = false;
 
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (running) return NextResponse.json({ skipped: "the previous run is still going" });
+  // Answer straight away and work after the response. The work takes minutes, and schedulers (about 30
+  // seconds) and Cloudflare (100 seconds) gave up and cut runs off part-way, so most never finished.
+  running = true;
+  after(async () => {
+    try {
+      const result = await runPlayersJob();
+      console.log("[cron/players]", JSON.stringify(result).slice(0, 1500));
+    } catch (err) {
+      console.error("[cron/players] failed", err);
+    } finally {
+      running = false;
+    }
+  });
+  return NextResponse.json({ started: true });
+}
+
+async function runPlayersJob() {
   // Clubs nobody has used for a while: warn their owners, then delete (src/lib/idle-clubs.ts). Not PSN, so demo mode too.
   const clubs = await cleanUpIdleClubs().catch((err) => ({ error: String(err) }));
   // "Your session is today" notices for the players of sessions starting soon.
   const reminders = await sendSessionReminders().catch((err) => ({ error: String(err) }));
-  if (isDemoMode()) return NextResponse.json({ skipped: "demo mode", clubs, reminders });
+  if (isDemoMode()) return { skipped: "demo mode", clubs, reminders };
 
   // Players with no completion or ultra rare figures yet come first (country boards rank by them), then the stalest.
   const missing = await prisma.psnPlayer.findMany({
@@ -55,7 +81,12 @@ export async function GET(req: Request) {
     ...missing,
     ...(missing.length < REFRESH_PER_RUN
       ? await prisma.psnPlayer.findMany({
-          where: { hidden: false, onlineId: { notIn: missing.map((p) => p.onlineId) } },
+          where: {
+            hidden: false,
+            onlineId: { notIn: missing.map((p) => p.onlineId) },
+            // Only players due their fortnightly full refresh.
+            OR: [{ titlesRefreshedAt: null }, { titlesRefreshedAt: { lt: new Date(Date.now() - FULL_REFRESH_EVERY_MS) } }],
+          },
           orderBy: [{ titlesRefreshedAt: { sort: "asc", nulls: "first" } }, { points: "desc" }],
           take: REFRESH_PER_RUN - missing.length,
           select: { onlineId: true },
@@ -76,6 +107,30 @@ export async function GET(req: Request) {
     }
   }
 
+  // Quick summary refreshes (one request each) for players whose totals are a day old.
+  const summarised: string[] = [];
+  if (!refreshed.some((r) => "error" in r && /rate|sign/i.test(String(r.error)))) {
+    const due = await prisma.psnPlayer.findMany({
+      where: {
+        hidden: false,
+        trophiesPrivate: false,
+        updatedAt: { lt: new Date(Date.now() - SUMMARY_EVERY_MS) },
+        onlineId: { notIn: stale.map((p) => p.onlineId) },
+      },
+      orderBy: { updatedAt: "asc" },
+      take: SUMMARIES_PER_RUN,
+      select: { onlineId: true },
+    });
+    for (const p of due) {
+      try {
+        if (await refreshSummary(p.onlineId)) summarised.push(p.onlineId);
+      } catch (err) {
+        const e = toPsnError(err);
+        if (e.kind === "rate_limited" || e.kind === "auth") break;
+      }
+    }
+  }
+
   const discovery =
     process.env.PSN_DISCOVERY === "on" && DISCOVER_PER_RUN > 0
       ? await discoverPlayers({ maxNew: DISCOVER_PER_RUN }).catch((err) => ({ error: toPsnError(err).message }))
@@ -87,5 +142,5 @@ export async function GET(req: Request) {
     grown: Math.max(0, Number(process.env.PSN_GROWN_LISTS_PER_RUN) || 5),
   }).catch((err) => ({ error: toPsnError(err).message }));
 
-  return NextResponse.json({ refreshed, discovery, lists, clubs, reminders });
+  return { refreshed, summarised: summarised.length, discovery, lists, clubs, reminders };
 }

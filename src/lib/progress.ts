@@ -48,4 +48,23 @@ export async function recomputeUserGame(db: typeof prisma, userId: string, gameI
     create: { userId, gameId, ...data },
     update: data,
   });
+  if (platinumAt && Date.now() - platinumAt.getTime() < PLATINUM_POST_WITHIN_MS) await postPlatinum(db, userId, gameId, platinumAt);
+}
+
+/** Only platinums from the last week get a post, so a member's first import doesn't flood the feed with old ones. */
+const PLATINUM_POST_WITHIN_MS = 7 * 86_400_000;
+
+/**
+ * The automatic "earned the platinum" update on the community feed. One per
+ * member and game (repeat syncs don't add more), and only
+ * for members who share their activity publicly.
+ */
+async function postPlatinum(db: typeof prisma, userId: string, gameId: string, at: Date) {
+  const [user, game] = await Promise.all([
+    db.user.findUnique({ where: { id: userId }, select: { showActivity: true, profileVisibility: true } }),
+    db.game.findUnique({ where: { id: gameId }, select: { title: true } }),
+  ]);
+  if (!user?.showActivity || user.profileVisibility !== "PUBLIC" || !game) return;
+  if (await db.post.findFirst({ where: { authorId: userId, kind: "PLATINUM", gameId }, select: { id: true } })) return;
+  await db.post.create({ data: { authorId: userId, kind: "PLATINUM", gameId, body: `Earned the platinum in ${game.title}! 🏆`, createdAt: at } });
 }

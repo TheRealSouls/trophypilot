@@ -61,6 +61,16 @@ async function locate(type: ReportType, id: string, reporterId: string): Promise
       const c = await prisma.club.findUnique({ where: { id }, select: { slug: true, name: true, description: true } });
       return c ? { url: `/clubs/${c.slug}`, excerpt: `${c.name}: ${c.description}` } : null;
     }
+    case "TROPHY_LIST": {
+      // "<member id>:<game id>": a member's progress on one game, flagged as hacked or cheated.
+      const [userId, gameId] = id.split(":");
+      const [u, g, earned] = await Promise.all([
+        prisma.user.findUnique({ where: { id: userId }, select: { username: true } }),
+        prisma.game.findUnique({ where: { id: gameId }, select: { slug: true, title: true } }),
+        prisma.userGame.findUnique({ where: { userId_gameId: { userId, gameId } }, select: { progress: true, earnedCount: true } }),
+      ]);
+      return u && g ? { url: `/u/${u.username}/${g.slug}`, excerpt: `${u.username}'s ${g.title} trophies: ${earned?.earnedCount ?? 0} earned, ${earned?.progress ?? 0}%` } : null;
+    }
     case "POST_COMMENT": {
       const c = await prisma.postComment.findUnique({ where: { id }, select: { body: true, post: { select: { club: { select: { slug: true } } } } } });
       return c ? { url: c.post.club ? `/clubs/${c.post.club.slug}` : "/community", excerpt: c.body } : null;
@@ -175,6 +185,8 @@ async function removeTarget(type: ReportType, id: string) {
       revalidatePath("/sessions");
       return;
     case "USER":
+    case "TROPHY_LIST":
+      // Staff look into these and act by hand (warn, suspend); nothing is deleted from here.
       return;
   }
 }

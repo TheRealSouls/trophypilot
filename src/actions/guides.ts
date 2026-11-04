@@ -217,3 +217,43 @@ export async function deleteGuide(fd: FormData) {
   revalidatePath("/games", "layout");
   redirect("/guides?sort=mine&deleted=1");
 }
+
+/**
+ * A member asks for a guide for a game that has none (or takes the request
+ * back). Staff see the most asked-for games on the dashboard.
+ */
+export async function requestGuide(fd: FormData) {
+  const user = await requireUser();
+  if (verifyFirst(user)) return;
+  if (!(await rateLimit("guide-request", 30, 60 * 60_000, user.id))) return;
+  const game = await prisma.game.findUnique({ where: { id: String(fd.get("gameId") ?? "") }, select: { id: true, slug: true } });
+  if (!game) return;
+  const key = { gameId: game.id, userId: user.id };
+  if (fd.get("cancel") === "1") await prisma.guideRequest.deleteMany({ where: key });
+  else await prisma.guideRequest.upsert({ where: { gameId_userId: key }, create: key, update: {} });
+  revalidatePath(`/games/${game.slug}`);
+  revalidatePath("/staff");
+}
+
+/**
+ * A member's 1 to 5 star rating of a guide (0 removes it). Authors can't rate
+ * their own. The guide keeps the average and count for lists.
+ */
+export async function rateGuide(guideId: string, stars: number): Promise<{ ok: true; avg: number | null; count: number } | { ok: false; error: string }> {
+  const user = await requireUser();
+  const blocked = verifyFirst(user);
+  if (blocked) return { ok: false, error: blocked };
+  const guide = await prisma.guide.findUnique({ where: { id: guideId }, select: { id: true, slug: true, authorId: true, status: true } });
+  if (!guide || guide.status !== "PUBLISHED") return { ok: false, error: "That guide isn't published." };
+  if (guide.authorId === user.id) return { ok: false, error: "You can't rate your own guide." };
+  const n = Math.round(Number(stars));
+  if (!(n >= 0 && n <= 5)) return { ok: false, error: "Pick 1 to 5 stars." };
+  const key = { guideId: guide.id, userId: user.id };
+  if (n === 0) await prisma.guideRating.deleteMany({ where: key });
+  else await prisma.guideRating.upsert({ where: { guideId_userId: key }, create: { ...key, stars: n }, update: { stars: n } });
+  const agg = await prisma.guideRating.aggregate({ where: { guideId: guide.id }, _avg: { stars: true }, _count: { _all: true } });
+  const avg = agg._avg.stars != null ? Math.round(agg._avg.stars * 10) / 10 : null;
+  await prisma.guide.update({ where: { id: guide.id }, data: { ratingAvg: avg, ratingCount: agg._count._all } });
+  revalidatePath("/guides");
+  return { ok: true, avg, count: agg._count._all };
+}

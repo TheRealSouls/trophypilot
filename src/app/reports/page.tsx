@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { isStaff } from "@/lib/forum";
+import { hasStaffRole, needsTwoStep } from "@/lib/roles";
 import { REPORT_REASONS, REPORT_TYPE_NAMES, type ReportType } from "@/lib/reports";
 import { resolveReport } from "@/actions/reports";
 import { reviewGuide } from "@/actions/community";
@@ -21,7 +21,19 @@ export const metadata: Metadata = { title: "Reports", robots: { index: false } }
  */
 export default async function ReportsPage() {
   const me = await requireUser("/reports");
-  if (!isStaff(me)) notFound();
+  if (!hasStaffRole(me)) notFound();
+  if (needsTwoStep(me)) {
+    return (
+      <div className="mx-auto max-w-xl py-10">
+        <PageHeader kicker="Staff" title="Switch on two-step sign-in first">
+          Staff tools need two-step sign-in, so a stolen password alone can't be used to moderate the site.
+        </PageHeader>
+        <Link href="/settings#two-step" className="btn-primary">
+          Set it up in Settings
+        </Link>
+      </div>
+    );
+  }
   const [open, recent] = await Promise.all([
     prisma.report.findMany({
       where: { status: "OPEN" },
@@ -120,7 +132,7 @@ export default async function ReportsPage() {
                   ) : (
                     <span className="text-xs text-muted">A private message: the text above is what was reported.</span>
                   )}
-                  {r.targetType !== "USER" && (
+                  {r.targetType !== "USER" && r.targetType !== "TROPHY_LIST" && (
                     <form action={resolveReport}>
                       <input type="hidden" name="reportId" value={r.id} />
                       <input type="hidden" name="decision" value="remove" />
@@ -132,7 +144,7 @@ export default async function ReportsPage() {
                   <form action={resolveReport}>
                     <input type="hidden" name="reportId" value={r.id} />
                     <input type="hidden" name="decision" value="dismiss" />
-                    <SubmitButton className="btn-ghost px-3 py-1.5 text-xs">{r.targetType === "USER" ? "Mark handled" : "Dismiss"}</SubmitButton>
+                    <SubmitButton className="btn-ghost px-3 py-1.5 text-xs">{r.targetType === "USER" || r.targetType === "TROPHY_LIST" ? "Mark handled" : "Dismiss"}</SubmitButton>
                   </form>
                 </div>
               </li>

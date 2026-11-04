@@ -5,15 +5,18 @@ import { requireUser } from "@/lib/auth";
 import { isStaff } from "@/lib/forum";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { ThreadForm } from "../forms";
+import { GAME_FORUMS_SLUG } from "@/lib/game-forum";
 
 export const metadata: Metadata = { title: "New thread · Forums", robots: { index: false } };
 
 export default async function NewThreadPage({ searchParams }: { searchParams: Promise<{ section?: string; game?: string }> }) {
   const sp = await searchParams;
-  const user = await requireUser(`/forums/new${sp.section ? `?section=${sp.section}` : ""}`);
+  const back = sp.game ? `?game=${encodeURIComponent(sp.game)}` : sp.section ? `?section=${encodeURIComponent(sp.section)}` : "";
+  const user = await requireUser(`/forums/new${back}`);
   const [sections, game] = await Promise.all([
     prisma.forumSection.findMany({
-      where: isStaff(user) ? {} : { adminOnly: false },
+      // Game forums aren't picked from the list: choosing the game files the thread there.
+      where: { gameKey: null, slug: { not: GAME_FORUMS_SLUG }, ...(isStaff(user) ? {} : { adminOnly: false }) },
       orderBy: [{ order: "asc" }, { name: "asc" }],
       select: { id: true, slug: true, name: true, parentId: true },
     }),
@@ -32,11 +35,15 @@ export default async function NewThreadPage({ searchParams }: { searchParams: Pr
       <nav className="mb-4 text-sm text-muted">
         <Link href="/forums" className="hover:text-text">Forums</Link>
       </nav>
-      <PageHeader title="New thread">Pick a section, give it a clear title, and tag the game if it&apos;s about one.</PageHeader>
-      {options.length === 0 ? (
+      <PageHeader title="New thread">
+        {game
+          ? `It goes in the ${game.title} forum, with everything else about the game.`
+          : "Pick a section and give it a clear title. If it's about a game, pick the game instead: it goes in that game's own forum."}
+      </PageHeader>
+      {options.length === 0 && !game ? (
         <EmptyState title="No sections to post in yet">An admin needs to create the forum sections first.</EmptyState>
       ) : (
-        <ThreadForm sections={options} sectionId={preselected} initialGame={game} />
+        <ThreadForm sections={options} sectionId={preselected} initialGame={game} fixedGame={!!game} />
       )}
     </div>
   );
