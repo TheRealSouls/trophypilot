@@ -12,6 +12,7 @@ import { GuideCreatorBadge, StaffBadge } from "@/components/StaffBadge";
 import { viewerRanks } from "@/lib/leaderboard";
 import clsx from "clsx";
 import { PROFILE_CARDS, bannerImage, cardClass } from "@/lib/profile-themes";
+import { BrandIcon } from "@/components/BrandIcon";
 import { ProfileCardArt } from "@/components/ProfileCardArt";
 import type { FriendState } from "@/lib/social";
 import type { UserStats } from "@/lib/stats";
@@ -61,16 +62,18 @@ export async function ProfileHeader({
   const staffViewing = isAdmin(viewer) && relation !== "SELF";
 
   const banner = bannerImage(owner.bannerGame);
-  const card = owner.profileCard && owner.profileCard in PROFILE_CARDS ? owner.profileCard : "";
+  const card = owner.profileCard && Object.hasOwn(PROFILE_CARDS, owner.profileCard) ? owner.profileCard : "";
   // A game banner wins; otherwise a card brings its own art.
   const hasBanner = !!owner.bannerGame || !!card;
   const isOwner = relation === "SELF";
   const playing = owner.nowPlayingGame && owner.nowPlayingUntil && owner.nowPlayingUntil > new Date() ? owner.nowPlayingGame : null;
-  const links = [
-    ["YouTube", owner.youtubeUrl],
-    ["Twitch", owner.twitchUrl],
-    ["Stream", owner.streamUrl],
-  ].filter((l): l is [string, string] => !!l[1]);
+  const links = (
+    [
+      ["YouTube", owner.youtubeUrl, "youtube"],
+      ["Twitch", owner.twitchUrl, "twitch"],
+      ["Stream", owner.streamUrl, null],
+    ] as const
+  ).filter((l): l is typeof l & { 1: string } => !!l[1]);
 
   return (
     <section className={clsx("card relative mb-8 overflow-hidden", cardClass(card))}>
@@ -185,8 +188,9 @@ export async function ProfileHeader({
             <Link href={`/forums/user/${owner.username}`} className="chip hover:text-text" title="Community reputation">
               {rep.rank} · {formatNumber(rep.points)} rep · forum profile
             </Link>
-            {links.map(([label, href]) => (
-              <a key={label} href={href} target="_blank" rel="noopener noreferrer nofollow ugc" className="chip hover:text-text">
+            {links.map(([label, href, brand]) => (
+              <a key={label} href={href} target="_blank" rel="noopener noreferrer nofollow ugc" className="chip gap-1.5 hover:text-text">
+                {brand && <BrandIcon brand={brand} className={brand === "youtube" ? "h-3.5 w-3.5 text-[#ff0000]" : "h-3.5 w-3.5 text-[#9146ff]"} />}
                 {label}
               </a>
             ))}

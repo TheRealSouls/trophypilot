@@ -108,7 +108,7 @@ const clubSchema = z.object({
   theme: z
     .string()
     .default("")
-    .transform((t) => (t in PROFILE_CARDS ? t : "")),
+    .transform((t) => (Object.hasOwn(PROFILE_CARDS, t) ? t : "")),
 });
 
 export async function createClub(_: FormState, fd: FormData): Promise<FormState> {
@@ -140,8 +140,8 @@ export async function setClubTheme(fd: FormData) {
   // Club picture: one of the built-in pictures, or none (its initial). With nothing picked (the club uses an
   // uploaded picture, which isn't one of the choices) the picture stays as it is.
   const pick = fd.get("avatar");
-  const avatar = pick === null ? undefined : String(pick).startsWith("preset:") && String(pick).slice(7) in AVATAR_PRESETS ? String(pick) : null;
-  await prisma.club.update({ where: { id: club.id }, data: { theme: theme in PROFILE_CARDS ? theme : "", ...(avatar !== undefined ? { avatar } : {}) } });
+  const avatar = pick === null ? undefined : String(pick).startsWith("preset:") && Object.hasOwn(AVATAR_PRESETS, String(pick).slice(7)) ? String(pick) : null;
+  await prisma.club.update({ where: { id: club.id }, data: { theme: Object.hasOwn(PROFILE_CARDS, theme) ? theme : "", ...(avatar !== undefined ? { avatar } : {}) } });
   revalidatePath(`/clubs/${club.slug}`);
   revalidatePath("/clubs");
 }

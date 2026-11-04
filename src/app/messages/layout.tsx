@@ -7,6 +7,7 @@ import { plainText } from "@/lib/rich-text";
 import { timeAgo } from "@/lib/utils";
 import { Avatar } from "@/components/ui";
 import { ConversationLink, ListOnPhones } from "./ConversationLink";
+import { LiveRefresh } from "./forms";
 
 /**
  * Direct messages, laid out like a chat app: your conversations on the left,
@@ -35,8 +36,12 @@ export default async function MessagesLayout({ children }: { children: React.Rea
     },
   });
 
+  // The list is newest first, so its first conversation has the newest message.
+  const newest = memberships[0]?.conversation.lastMessageAt.getTime() ?? 0;
+
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+      <LiveRefresh since={newest} />
       <aside className="min-w-0">
         <ListOnPhones>
         <div className="mb-3 flex items-center justify-between gap-2">

@@ -114,7 +114,7 @@ export function LookForm({
           </div>
         </div>
         <p className="mt-2 text-sm text-muted">
-          Card: <strong className="text-text">{PROFILE_CARDS[card as keyof typeof PROFILE_CARDS]?.name ?? "Plain"}</strong>. Banner:{" "}
+          Card: <strong className="text-text">{PROFILE_CARDS[card] ?? "Plain"}</strong>. Banner:{" "}
           <strong className="text-text">{bannerTitle ?? (card ? "the card's own art" : "none")}</strong>. Colour:{" "}
           <strong className="text-text">{PROFILE_ACCENTS[accent as keyof typeof PROFILE_ACCENTS] ?? "Red"}</strong>.
         </p>
@@ -122,15 +122,12 @@ export function LookForm({
 
       <Picker legend="Profile card" hint="Recolours your profile header and brings its own animated banner.">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {Object.entries(PROFILE_CARDS).map(([key, c]) => (
-            <Choice key={key || "plain"} name="cardChoice" checked={card === key} onPick={() => setCard(key)} label={`${c.name}: ${c.blurb}`}>
+          {Object.entries(PROFILE_CARDS).map(([key, name]) => (
+            <Choice key={key || "plain"} name="cardChoice" checked={card === key} onPick={() => setCard(key)} label={name}>
               <span className={clsx("relative block h-16 overflow-hidden rounded-t-[7px] bg-surface-3", cardClass(key))}>
                 <ProfileCardArt card={key} part="banner" />
               </span>
-              <span className="block px-2.5 py-2">
-                <span className="block text-sm font-semibold">{c.name}</span>
-                <span className="block text-xs leading-snug text-muted">{c.blurb}</span>
-              </span>
+              <span className="block px-2.5 py-2 text-sm font-semibold">{name}</span>
             </Choice>
           ))}
         </div>

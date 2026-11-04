@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
-import { LiveRefresh, NewConversationForm } from "./forms";
+import { NewConversationForm } from "./forms";
 
 export const metadata: Metadata = { title: "Messages", robots: { index: false } };
 
@@ -10,8 +10,6 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
   await requireUser("/messages");
   return (
     <section className="card p-5 sm:p-6" aria-labelledby="new-message">
-      {/* Keeps the conversation list's unread markers current. */}
-      <LiveRefresh seconds={20} />
       <h2 id="new-message" className="mb-1 text-lg font-bold">
         New message
       </h2>

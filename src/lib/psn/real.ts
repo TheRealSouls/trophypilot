@@ -47,13 +47,26 @@ export function toPsnError(err: unknown): PsnError {
   return new PsnError("unknown", raw.trim().slice(0, 300) || "Unexpected PSN error.");
 }
 
-/** psn-api has no request timeout, so a stalled Sony endpoint would hang the page. */
+/**
+ * psn-api returns PSN's error replies as ordinary results ({ error: { code, message } }) instead of
+ * throwing: a private trophy list comes back as "Not permitted by access control" (2240526), and code
+ * then reads fields that aren't there. Raise them as errors so toPsnError can name them.
+ */
+function raisePsnError<T>(value: T): T {
+  for (const v of Array.isArray(value) ? value : [value]) {
+    const e = v && typeof v === "object" && "error" in v ? (v as { error?: { code?: number; message?: string } }).error : undefined;
+    if (e && typeof e === "object") throw toPsnError(new Error(`${e.message ?? "PSN error"} (${e.code ?? "no code"})`));
+  }
+  return value;
+}
+
+/** psn-api has no request timeout, so a stalled Sony endpoint would hang the page. Also raises PSN's error replies. */
 export function withTimeout<T>(p: Promise<T>, ms = 15_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new PsnError("unknown", "PlayStation Network took too long to respond.")), ms);
   });
-  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+  return Promise.race([p.then(raisePsnError), timeout]).finally(() => clearTimeout(timer));
 }
 
 type TokenState = { accessToken: string; refreshToken: string; expiresAt: number; refreshExpiresAt: number };

@@ -95,7 +95,7 @@ export async function updateLook(_: FormState, fd: FormData): Promise<FormState>
   const pick = given("avatar");
   let avatar: string | null = null;
   if (pick === "letter") avatar = "letter";
-  else if (pick.startsWith("preset:") && pick.slice(7) in AVATAR_PRESETS) avatar = pick;
+  else if (pick.startsWith("preset:") && Object.hasOwn(AVATAR_PRESETS, pick.slice(7))) avatar = pick;
   else if (pick.startsWith("game:")) {
     const owned = await prisma.userGame.findUnique({
       where: { userId_gameId: { userId: user.id, gameId: pick.slice(5) } },
@@ -116,7 +116,7 @@ export async function updateLook(_: FormState, fd: FormData): Promise<FormState>
     where: { id: user.id },
     data: {
       favouritePlatinumGameId: fav?.gameId ?? null,
-      profileCard: card in PROFILE_CARDS ? card : "",
+      profileCard: Object.hasOwn(PROFILE_CARDS, card) ? card : "",
       profileAccent: accent in PROFILE_ACCENTS ? accent : "",
       bannerGameId: banner?.gameId ?? null,
       avatar,

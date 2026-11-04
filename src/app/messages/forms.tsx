@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { sendMessage, startConversation } from "@/actions/messages";
 import { SubmitButton } from "@/components/client";
@@ -71,12 +71,11 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
         }}
       />
       {state?.error && <FormMessage state={state} />}
-      <div className="flex items-center gap-3">
-        <SubmitButton pendingText="Sending…">Send</SubmitButton>
-        <span id="reply-hint" className="text-xs text-muted">
-          Enter sends · Shift + Enter for a new line
-        </span>
-      </div>
+      <SubmitButton pendingText="Sending…">Send</SubmitButton>
+      {/* For screen readers only: how the keyboard shortcut works. */}
+      <span id="reply-hint" className="sr-only">
+        Enter sends. Shift and Enter starts a new line.
+      </span>
     </form>
   );
 }
@@ -153,14 +152,58 @@ export function ScrollToEnd({ count, className, children }: { count: number; cla
   );
 }
 
-/** Checks for new messages every few seconds while the conversation is open. */
-export function LiveRefresh({ seconds = 6 }: { seconds?: number }) {
+/**
+ * Live updates for Messages. It asks one tiny question (when did the newest message arrive?) and only
+ * re-renders the page when the answer changes, so an open chat costs one small query per check
+ * rather than reloading every conversation and message. Checks every 6 seconds in a conversation and
+ * every 20 on the list, only while the tab is visible, and slows to once a minute after 5 quiet minutes.
+ */
+export function LiveRefresh({ since }: { since: number }) {
   const router = useRouter();
+  const inConversation = usePathname() !== "/messages";
+  const seen = useRef(since);
+  const changedAt = useRef(Date.now());
   useEffect(() => {
-    const t = setInterval(() => {
-      if (document.visibilityState === "visible") router.refresh();
-    }, seconds * 1000);
-    return () => clearInterval(t);
-  }, [router, seconds]);
+    if (since > seen.current) seen.current = since;
+  }, [since]);
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const next = () => {
+      const quiet = Date.now() - changedAt.current > 5 * 60_000;
+      timer = setTimeout(check, quiet ? 60_000 : inConversation ? 6_000 : 20_000);
+    };
+    const check = async () => {
+      if (document.visibilityState === "visible") {
+        try {
+          const r = await fetch("/api/messages/latest", { cache: "no-store" });
+          const { at } = (await r.json()) as { at: number | null };
+          if (!stopped && at && at > seen.current) {
+            seen.current = at;
+            changedAt.current = Date.now();
+            router.refresh();
+          }
+        } catch {
+          // Offline or the server is busy: try again next time.
+        }
+      }
+      if (!stopped) next();
+    };
+    // Coming back to the tab checks straight away.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        changedAt.current = Date.now();
+        clearTimeout(timer);
+        void check();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    next();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [router, inConversation]);
   return null;
 }

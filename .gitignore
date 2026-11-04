@@ -9,3 +9,8 @@ next-env.d.ts
 *.tsbuildinfo
 .next-*
 .claude/
+# Guide backups hold members' writing: keep them out of git (npm run guides:backup)
+backups/
+# Playwright output
+test-results/
+playwright-report/

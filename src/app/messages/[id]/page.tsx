@@ -13,7 +13,7 @@ import { toggleBlock } from "@/actions/blocks";
 import { ConfirmButton, SubmitButton } from "@/components/client";
 import { LocalTime } from "@/components/LocalTime";
 import { Avatar } from "@/components/ui";
-import { LiveRefresh, ReplyBox, ScrollToEnd } from "../forms";
+import { ReplyBox, ScrollToEnd } from "../forms";
 
 export const metadata: Metadata = { title: "Conversation", robots: { index: false } };
 
@@ -52,15 +52,16 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     other ? blockBetween(user.id, other.id) : null,
     c.isGroup ? blockedByMe(user.id) : new Set<string>(),
   ]);
-  // Opening the conversation marks it read.
-  await prisma.conversationMember.update({
-    where: { conversationId_userId: { conversationId: id, userId: user.id } },
-    data: { lastReadAt: new Date() },
-  });
+  // Opening the conversation marks it read (a write only when there's something new to mark).
+  if (membership.lastReadAt < c.lastMessageAt) {
+    await prisma.conversationMember.update({
+      where: { conversationId_userId: { conversationId: id, userId: user.id } },
+      data: { lastReadAt: new Date() },
+    });
+  }
 
   return (
     <section className="card flex flex-col" aria-label="Conversation">
-      <LiveRefresh />
       <nav className="border-b border-line px-4 py-2 text-sm lg:hidden">
         <Link href="/messages" className="text-muted hover:text-text">
           ← All conversations

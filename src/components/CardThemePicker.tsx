@@ -15,7 +15,7 @@ export function CardThemePicker({ name = "theme", value = "", legend = "Theme", 
     <fieldset>
       <legend className="label">{legend}</legend>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {Object.entries(PROFILE_CARDS).map(([key, c]) => (
+        {Object.entries(PROFILE_CARDS).map(([key, cardName]) => (
           <label key={key || "plain"} className="relative block cursor-pointer">
             <input
               type="radio"
@@ -38,7 +38,7 @@ export function CardThemePicker({ name = "theme", value = "", legend = "Theme", 
               <span className={clsx("relative block h-10 bg-surface-3", cardClass(key))} aria-hidden>
                 <ProfileCardArt card={key} part="banner" />
               </span>
-              <span className="block px-2 py-1 text-xs font-semibold">{c.name}</span>
+              <span className="block px-2 py-1 text-xs font-semibold">{cardName}</span>
             </span>
           </label>
         ))}

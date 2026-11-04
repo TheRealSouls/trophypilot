@@ -41,10 +41,13 @@ export async function startConversation(_: FormState, fd: FormData): Promise<For
   if (!handles.length) return { error: "Say who it's for: a username or PSN ID." };
   if (handles.length > GROUP_MAX - 1) return { error: `A group chat can have up to ${GROUP_MAX} people.` };
 
-  const recipients = [];
+  const recipients: NonNullable<Awaited<ReturnType<typeof findMember>>>[] = [];
   for (const h of handles) {
     const u = await findMember(h);
     if (!u) return { error: `No member called "${h}".` };
+    // The same person by two names (username and PSN ID, or different capitals) counts once:
+    // adding them to a conversation twice is refused by the database.
+    if (recipients.some((r) => r.id === u.id)) continue;
     const blocked = await whyCantMessage(me.id, u);
     if (blocked) return { error: blocked };
     recipients.push(u);
