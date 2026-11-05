@@ -98,15 +98,18 @@ export function usesPsnTotals(opts: Pick<Opts, "metric" | "period" | "scope">) {
 }
 
 /**
- * Global and country boards are the same for everyone, so they are cached for
- * two minutes (served instantly, refreshed in the background). Friends boards
- * depend on the viewer and are always worked out fresh.
+ * Global and country boards are the same for everyone, so they are cached
+ * (served instantly, refreshed in the background): two minutes for this week
+ * and month, 15 minutes all time, which only moves when someone syncs and
+ * costs the most to work out. Friends boards depend on the viewer and are
+ * always worked out fresh.
  */
 export async function getLeaderboard(opts: Opts): Promise<LeaderboardRow[]> {
   if (opts.scope === "friends") return buildLeaderboard(opts);
   const country = opts.scope === "country" ? (opts.country ?? "") : "";
   const key = `board:${opts.metric}:${opts.period}:${opts.scope}:${country}:${opts.limit ?? 100}`;
-  return cached(key, () => buildLeaderboard({ ...opts, viewerId: null }), { ttlMs: 2 * 60_000, tags: ["boards"] });
+  const ttlMs = opts.period === "all" ? 15 * 60_000 : 2 * 60_000;
+  return cached(key, () => buildLeaderboard({ ...opts, viewerId: null }), { ttlMs, maxStaleMs: 2 * 60 * 60_000, tags: ["boards"] });
 }
 
 async function buildLeaderboard(opts: Opts): Promise<LeaderboardRow[]> {
@@ -330,6 +333,66 @@ async function playerGains(opts: Opts, country: string | null, excluded: string[
   return rows.map((r) => ({ ...r, points: Number(r.points), platinum: Number(r.platinum), trophies: Number(r.trophies) }));
 }
 
+const memberOrder: Record<Metric, Prisma.Sql> = {
+  points: Prisma.sql`points DESC, platinums DESC`,
+  platinums: Prisma.sql`platinums DESC, points DESC`,
+  golds: Prisma.sql`golds DESC, points DESC`,
+  silvers: Prisma.sql`silvers DESC, points DESC`,
+  bronzes: Prisma.sql`bronzes DESC, points DESC`,
+  rare: Prisma.sql`rare DESC, points DESC`,
+  completion: Prisma.sql`completion DESC, games DESC`,
+};
+
+/**
+ * All-time totals for members, from their per-game rows (UserGame: earned counts per grade,
+ * platinum, progress) rather than adding up every trophy they've earned: a few thousand rows
+ * instead of hundreds of thousands, with the same numbers. Ultra rares come from one pass over
+ * the rare trophies only (Trophy.earnedRate is indexed).
+ */
+async function memberTotalsBoard(filters: Prisma.Sql[], metric: Metric, limit: number): Promise<MemberRaw[]> {
+  const where = filters.length ? Prisma.sql`WHERE ${Prisma.join(filters, " AND ")}` : Prisma.empty;
+  const minGames = metric === "completion" ? Prisma.sql` AND COUNT(*) >= ${COMPLETION_MIN_GAMES}` : Prisma.empty;
+  const rows = await prisma.$queryRaw<MemberRaw[]>`
+    SELECT
+      u."id" AS "userId", u."username", u."country", u."avatarHue", u."avatar",
+      p."onlineId", p."avatarUrl", p."accountId",
+      CAST(SUM((CASE WHEN ug."hasPlatinum" THEN 300 ELSE 0 END) + ug."earnedGold" * 90 + ug."earnedSilver" * 30 + ug."earnedBronze" * 15) AS INTEGER) AS points,
+      CAST(SUM(CASE WHEN ug."hasPlatinum" THEN 1 ELSE 0 END) AS INTEGER) AS platinums,
+      CAST(SUM(ug."earnedGold") AS INTEGER) AS golds,
+      CAST(SUM(ug."earnedSilver") AS INTEGER) AS silvers,
+      CAST(SUM(ug."earnedBronze") AS INTEGER) AS bronzes,
+      CAST(COALESCE(MAX(r."rare"), 0) AS INTEGER) AS rare,
+      CAST(SUM(ug."earnedCount") AS INTEGER) AS trophies,
+      CAST(ROUND(AVG(ug."progress")) AS INTEGER) AS completion,
+      CAST(COUNT(*) AS INTEGER) AS games
+    FROM "UserGame" ug
+    JOIN "User" u ON u."id" = ug."userId"
+    LEFT JOIN "PsnAccount" p ON p."userId" = u."id"
+    LEFT JOIN (
+      SELECT ut."userId", COUNT(*) AS rare FROM "UserTrophy" ut
+      WHERE ut."trophyId" IN (SELECT "id" FROM "Trophy" WHERE "earnedRate" <= ${ULTRA_RARE_MAX})
+      GROUP BY ut."userId"
+    ) r ON r."userId" = u."id"
+    ${where}
+    GROUP BY u."id", p."onlineId", p."avatarUrl", p."accountId"
+    HAVING SUM(ug."earnedCount") > 0${minGames}
+    ORDER BY ${memberOrder[metric]}
+    LIMIT ${limit}
+  `;
+  return rows.map((r) => ({
+    ...r,
+    points: Number(r.points),
+    platinums: Number(r.platinums),
+    golds: Number(r.golds),
+    silvers: Number(r.silvers),
+    bronzes: Number(r.bronzes),
+    rare: Number(r.rare),
+    trophies: Number(r.trophies),
+    completion: Number(r.completion ?? 0),
+    games: Number(r.games),
+  }));
+}
+
 async function memberBoard(opts: Opts & { metric: Metric; ids?: string[] }, limit: number): Promise<MemberRaw[]> {
   const { period, scope, metric } = opts;
 
@@ -356,7 +419,8 @@ async function memberBoard(opts: Opts & { metric: Metric; ids?: string[] }, limi
   }
 
   const since = period === "weekly" ? startOfWeekUTC() : period === "monthly" ? startOfMonthUTC() : null;
-  const trophyFilters = since ? [...filters, Prisma.sql`ut."earnedAt" >= ${since}`] : filters;
+  if (!since) return memberTotalsBoard(filters, metric, limit);
+  const trophyFilters = [...filters, Prisma.sql`ut."earnedAt" >= ${since}`];
   const where = Prisma.join(trophyFilters, " AND ");
 
   const orderBy = {

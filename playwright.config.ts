@@ -12,7 +12,7 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   // A dev server compiles pages on first visit, which can take a while.
-  timeout: 120_000,
+  timeout: 180_000,
   expect: { timeout: 20_000 },
   retries: 0,
   reporter: [["list"]],

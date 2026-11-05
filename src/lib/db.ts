@@ -17,6 +17,12 @@ function databaseUrl() {
       url.searchParams.set("pgbouncer", "true");
       if (!url.searchParams.has("connection_limit")) url.searchParams.set("connection_limit", "5");
     }
+    // How long a query may wait for a free connection. The build pre-renders pages (the home page runs
+    // a dozen queries at once) against the live database, which can be slow: waiting beats a failed
+    // deploy. On the live site 20 seconds, up from Prisma's 10.
+    if (!url.searchParams.has("pool_timeout")) {
+      url.searchParams.set("pool_timeout", process.env.NEXT_PHASE === "phase-production-build" ? "120" : "20");
+    }
     return url.toString();
   } catch {
     return raw;

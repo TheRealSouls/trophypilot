@@ -1,4 +1,5 @@
 import { prisma } from "./db";
+import { cached } from "./cache";
 import { parseCounts } from "./psn/real";
 
 /**
@@ -110,7 +111,10 @@ export async function trendingGameIds(since: Date, limit = 6) {
 }
 
 /** Headline numbers: everyone we know about, not only members. */
-export async function siteTotals() {
+/** Site-wide totals for the home page. Adding them up reads a lot and they move slowly, so they are cached for 10 minutes. */
+export const siteTotals = () => cached("site-totals", loadSiteTotals, { ttlMs: 10 * 60_000, maxStaleMs: 2 * 60 * 60_000 });
+
+async function loadSiteTotals() {
   const [players, sums, users, games] = await Promise.all([
     prisma.psnPlayer.count({ where: { hidden: false, trophiesPrivate: false } }),
     prisma.psnPlayer.aggregate({
@@ -204,10 +208,13 @@ export async function newTrophyLists(take: number) {
  * (DLC released after we saw the game), then DLC of the newest games.
  * A pack shared by a game's PS4 and PS5 lists shows once.
  */
-export async function newDlc(take: number) {
+export const newDlc = (take: number) => cached(`new-dlc:${take}`, () => loadNewDlc(take), { ttlMs: 10 * 60_000, maxStaleMs: 2 * 60 * 60_000 });
+
+async function loadNewDlc(take: number) {
   const groups = await prisma.trophyGroup.findMany({
     where: { isDlc: true },
-    orderBy: [{ addedLater: "desc" }, { createdAt: "desc" }, { game: { npCommunicationId: "desc" } }],
+    // The order of the (isDlc, addedLater, createdAt) index, so the database reads a few rows instead of sorting them all.
+    orderBy: [{ addedLater: "desc" }, { createdAt: "desc" }],
     take: take * 3,
     include: { game: { select: gameCard }, _count: { select: { trophies: true } } },
   });

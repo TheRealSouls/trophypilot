@@ -410,6 +410,10 @@ model Trophy {
   @@unique([gameId, psnTrophyId])
   @@unique([gameId, slug])
   @@index([name])
+  // Ultra rare counts on the leaderboards look up rare trophies by this.
+  @@index([earnedRate])
+  // Trophy counts per DLC pack (home page, DLC pages).
+  @@index([groupId])
 }
 
 // ─── Trophy tracking ─────────────────────────────────────────────────────────
