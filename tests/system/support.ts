@@ -63,6 +63,8 @@ export async function resetMembers() {
   await p.friendship.deleteMany({ where: { OR: [{ requesterId: { in: ids } }, { addresseeId: { in: ids } }] } });
   await p.forumThread.deleteMany({ where: { authorId: { in: ids } } });
   await p.post.deleteMany({ where: { authorId: { in: ids } } });
+  await p.guide.deleteMany({ where: { authorId: { in: ids } } });
+  await p.userGame.deleteMany({ where: { userId: { in: ids } } });
   await p.user.updateMany({ where: { id: { in: ids } }, data: { allowMessages: "EVERYONE", profileVisibility: "PUBLIC", suspendedUntil: null } });
 }
 

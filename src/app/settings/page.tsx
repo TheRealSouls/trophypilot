@@ -29,7 +29,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const psn = user.psn;
   const [jobs, nextManual, imported, blocked] = await Promise.all([
     prisma.syncJob.findMany({ where: { userId: user.id }, orderBy: { startedAt: "desc" }, take: 5 }),
-    psn?.verified ? nextManualSyncAt(user.id, user.plan) : null,
+    psn?.verified ? nextManualSyncAt(user.id, user.plan, user.role) : null,
     psn?.verified ? prisma.psnTitleSync.count({ where: { userId: user.id } }) : 0,
     prisma.block.findMany({
       where: { blockerId: user.id },
@@ -184,7 +184,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <p className="text-xs text-muted">
                 {plan.label} plan: your trophies sync automatically {everyText(plan.autoEveryMs)}
                 {nextAuto && (nextAuto.getTime() > Date.now() ? ` (next in about ${durationText(nextAuto.getTime() - Date.now())})` : " (due now)")}
-                , and you can press Sync now {everyText(plan.manualEveryMs)}.
+                , and you can press Sync now {plan.manualEveryMs ? everyText(plan.manualEveryMs) : "whenever you like"}.
               </p>
               {busy && jobs[0] && jobs[0].remaining > 0 && (
                 <div className="rounded-lg border border-line p-4" aria-live="polite">

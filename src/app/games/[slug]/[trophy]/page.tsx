@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { plainText } from "@/lib/rich-text";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { trophyHref } from "@/lib/trophy-slug";
@@ -12,6 +11,8 @@ import { GameArt } from "@/components/art";
 import { TrophyIcon } from "@/components/TrophyIcon";
 import { RevealButton, Spoiler, SpoilerSwap } from "@/components/client";
 import { Tips } from "@/components/Tips";
+import { RichText } from "@/components/RichText";
+import { YouTube } from "@/components/YouTube";
 import { SubmitButton } from "@/components/client";
 import { isStaff } from "@/lib/roles";
 import { setTrophyOnline } from "@/actions/staff";
@@ -57,7 +58,13 @@ export default async function TrophyPage({ params }: { params: Promise<Params> }
       take: 8,
       include: { user: { include: { psn: true } } },
     }),
-    prisma.guideStep.findMany({ where: { trophyId: t.id }, include: { guide: true }, take: 5 }),
+    // Steps from published guides only (drafts and guides waiting for review stay private).
+    prisma.guideStep.findMany({
+      where: { trophyId: t.id, guide: { status: "PUBLISHED" } },
+      orderBy: { guide: { createdAt: "asc" } },
+      take: 5,
+      include: { guide: { select: { slug: true, title: true } } },
+    }),
   ]);
 
   return (
@@ -149,7 +156,13 @@ export default async function TrophyPage({ params }: { params: Promise<Params> }
                       {s.guide.title} · {s.kind.toLowerCase()}
                     </Link>
                     <div className="mt-1 font-semibold">{s.title}</div>
-                    <p className="mt-1 line-clamp-4 text-sm text-muted">{plainText(s.body)}</p>
+                    {/* The whole instruction, formatted as in the guide (long ones used to be cut off after four lines). */}
+                    <RichText text={s.body} className="mt-1 text-sm" />
+                    {s.videoYoutubeId && (
+                      <div className="mt-3">
+                        <YouTube id={s.videoYoutubeId} title={s.title} />
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

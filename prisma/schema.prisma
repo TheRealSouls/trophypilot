@@ -411,7 +411,7 @@ model Trophy {
 
   @@unique([gameId, psnTrophyId])
   @@unique([gameId, slug])
-  @@index([name])
+  // No index on name: trophy search matches part of a name (ILIKE), which a plain index cannot help with, and it took 10 MB.
   // Ultra rare counts on the leaderboards look up rare trophies by this.
   @@index([earnedRate])
   // Trophy counts per DLC pack (home page, DLC pages).

@@ -19,7 +19,9 @@ export const METRICS = {
 /** The boards that rank one trophy grade, and the matching column. */
 export const GRADE_METRICS = { golds: "gold", silvers: "silver", bronzes: "bronze" } as const;
 export const PERIODS = { all: "All time", weekly: "This week", monthly: "This month" } as const;
-export const SCOPES = { global: "Global", country: "Country", friends: "Friends" } as const;
+export const SCOPES = { global: "Global", country: "Country", friends: "Friends", following: "Following" } as const;
+/** Boards that depend on who is looking: worked out fresh, never shared. */
+export const isPersonalScope = (scope: string) => scope === "friends" || scope === "following";
 
 export type Metric = keyof typeof METRICS;
 export type Period = keyof typeof PERIODS;
@@ -93,7 +95,7 @@ type MemberRaw = {
  * synced trophy history.
  */
 export function usesPsnTotals(opts: Pick<Opts, "metric" | "period" | "scope">) {
-  if (opts.scope === "friends") return false;
+  if (isPersonalScope(opts.scope)) return false;
   // Ultra rares and completion are only known all time for players who haven't joined.
   return opts.metric === "points" || opts.metric === "platinums" || opts.period === "all";
 }
@@ -106,7 +108,7 @@ export function usesPsnTotals(opts: Pick<Opts, "metric" | "period" | "scope">) {
  * always worked out fresh.
  */
 export async function getLeaderboard(opts: Opts): Promise<LeaderboardRow[]> {
-  if (opts.scope === "friends") return buildLeaderboard(opts);
+  if (isPersonalScope(opts.scope)) return buildLeaderboard(opts);
   const country = opts.scope === "country" ? (opts.country ?? "") : "";
   const key = `board:${opts.metric}:${opts.period}:${opts.scope}:${country}:${opts.limit ?? 100}`;
   const ttlMs = opts.period === "all" ? 30 * 60_000 : 5 * 60_000;
@@ -407,6 +409,19 @@ async function memberBoard(opts: Opts & { metric: Metric; ids?: string[] }, limi
     filters.push(
       Prisma.sql`u."id" IN (${Prisma.join(ids)})`,
       Prisma.sql`(u."id" = ${opts.viewerId} OR (u."showOnLeaderboards" = TRUE AND u."profileVisibility" <> 'PRIVATE'))`,
+    );
+  } else if (scope === "following") {
+    if (!opts.viewerId) return [];
+    const [follows, friends] = await Promise.all([
+      prisma.follow.findMany({ where: { followerId: opts.viewerId }, select: { followingId: true } }),
+      getFriendIds(opts.viewerId),
+    ]);
+    const ids = [opts.viewerId, ...follows.map((f) => f.followingId)];
+    // Following someone isn't friendship: public profiles, plus friends-only ones of people who are also friends.
+    const friendIds = friends.length ? friends : [""];
+    filters.push(
+      Prisma.sql`u."id" IN (${Prisma.join(ids)})`,
+      Prisma.sql`(u."id" = ${opts.viewerId} OR (u."showOnLeaderboards" = TRUE AND (u."profileVisibility" = 'PUBLIC' OR (u."profileVisibility" <> 'PRIVATE' AND u."id" IN (${Prisma.join(friendIds)})))))`,
     );
   } else {
     // Global/country boards are public: friends-only and private profiles stay off them.

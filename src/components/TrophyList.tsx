@@ -194,10 +194,14 @@ export function TrophyList({
         const earnedHere = earned ? all.filter((t) => earned.has(t.id)) : [];
         const total = all.reduce((s, t) => s + TROPHY_POINTS[t.type as TrophyType], 0);
         const got = earnedHere.reduce((s, t) => s + TROPHY_POINTS[t.type as TrophyType], 0);
+        // Weighted by grade, the way PSN works out a list's percentage.
+        const pct = total ? Math.floor((got / total) * 100) : 0;
+        const name = g.isDlc ? g.name : "Base game";
         return (
           <section key={g.id} className="card" aria-label={g.name}>
-            <header className="flex flex-wrap items-center gap-3 border-b border-line bg-surface-2 px-4 py-2.5">
-              <h3 className="text-sm font-bold">{g.isDlc ? g.name : "Base game"}</h3>
+            {/* Tinted in the accent colour so the heading stands apart from the (grey) earned rows below it. */}
+            <header className="flex flex-wrap items-center gap-3 rounded-t-[inherit] border-b border-accent/25 bg-accent/10 px-4 py-2.5">
+              <h3 className="text-sm font-bold">{name}</h3>
               {g.isDlc && <span className="chip border-very/50 text-very">DLC</span>}
               {g.isDlc && g.releaseDate && <span className="text-xs text-muted">Released {formatDate(g.releaseDate)}</span>}
               <div className="ml-auto flex items-center gap-3 text-xs text-muted">
@@ -211,10 +215,11 @@ export function TrophyList({
               </div>
               {earned && (
                 <div className="flex w-full items-center gap-3">
-                  <ProgressBar value={total ? (got / total) * 100 : 0} className="flex-1" label={`${g.isDlc ? g.name : "Base game"} completion`} />
+                  <ProgressBar value={pct} className="flex-1" label={`${name} completion`} />
                   <span className="text-xs tabular-nums text-muted">
                     {earnedHere.length}/{all.length}
                   </span>
+                  <span className="min-w-10 text-right text-sm font-bold tabular-nums">{pct}%</span>
                 </div>
               )}
             </header>
@@ -223,7 +228,7 @@ export function TrophyList({
                 const at = earned?.get(t.id);
                 const dim = !!earned && !at;
                 const placeholder = (
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center border border-line bg-surface-2">
+                  <div className={clsx("flex h-11 w-11 shrink-0 items-center justify-center border border-line bg-surface-2", at && "earned-glow")}>
                     <TrophyIcon type={t.type} size={24} dim={dim} />
                   </div>
                 );
@@ -239,7 +244,7 @@ export function TrophyList({
                             alt=""
                             loading="lazy"
                             referrerPolicy="no-referrer"
-                            className={clsx("h-11 w-11 shrink-0 border border-line bg-surface-2 object-contain", dim && "opacity-40 grayscale")}
+                            className={clsx("h-11 w-11 shrink-0 border border-line bg-surface-2 object-contain", dim && "opacity-40 grayscale", at && "earned-glow")}
                           />
                         ) : (
                           placeholder

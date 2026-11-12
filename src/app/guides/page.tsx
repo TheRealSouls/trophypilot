@@ -22,6 +22,7 @@ const TABS = [
   ["easy", "Easiest plats"],
   ["favourites", "My favourites"],
   ["mine", "My guides"],
+  ["drafts", "My drafts"],
 ] as const;
 
 // Only what the cards show: loading whole game rows (descriptions, screenshot lists) made the page slow.
@@ -54,13 +55,16 @@ export default async function GuidesPage({ searchParams }: { searchParams: Promi
   const favourites = sort === "favourites";
   // "My guides": everything the member wrote, drafts and ones waiting for review included.
   const mine = sort === "mine";
-  const viewerId = favourites || mine ? await getSessionUserId() : null;
+  // "My drafts": guides still being written, and ones sent back by a reviewer to change.
+  const drafts = sort === "drafts";
+  const own = mine || drafts;
+  const viewerId = favourites || own ? await getSessionUserId() : null;
   const where: Prisma.GuideWhereInput = {
-    ...(mine ? { authorId: viewerId! } : { status: "PUBLISHED" }),
+    ...(own ? { authorId: viewerId!, ...(drafts ? { status: { in: ["DRAFT", "REJECTED"] } } : {}) } : { status: "PUBLISHED" }),
     ...(favourites ? { favourites: { some: { userId: viewerId! } } } : {}),
     ...(q ? { OR: [{ title: { contains: q, mode: "insensitive" } }, { game: { title: { contains: q, mode: "insensitive" } } }] } : {}),
   };
-  const orderBy: Prisma.GuideOrderByWithRelationInput[] = mine
+  const orderBy: Prisma.GuideOrderByWithRelationInput[] = own
     ? [{ updatedAt: "desc" }]
     : sort === "new" || favourites
       ? [{ createdAt: "desc" }]
@@ -69,7 +73,7 @@ export default async function GuidesPage({ searchParams }: { searchParams: Promi
         : sort === "top"
           ? [{ ratingAvg: { sort: "desc", nulls: "last" } }, { ratingCount: "desc" }]
           : [{ views: "desc" }];
-  const blocked = (favourites || mine) && !viewerId;
+  const blocked = (favourites || own) && !viewerId;
   const [guides, total] = blocked
     ? [[], 0]
     : await Promise.all([prisma.guide.findMany({ where, orderBy, skip: (page - 1) * PER_PAGE, take: PER_PAGE, select: card }), prisma.guide.count({ where })]);
@@ -103,17 +107,28 @@ export default async function GuidesPage({ searchParams }: { searchParams: Promi
 
       {blocked ? (
         <EmptyState
-          title={mine ? "Log in to see your guides" : "Log in to see your favourites"}
+          title={drafts ? "Log in to see your drafts" : mine ? "Log in to see your guides" : "Log in to see your favourites"}
           action={
             <Link href={`/login?next=${encodeURIComponent(`/guides?sort=${sort}`)}`} className="btn-primary">
               Log in
             </Link>
           }
         >
-          {mine ? "Your guides and drafts show up here." : "Save a guide with Add to favourites and it shows up here."}
+          {own ? "Your guides and drafts show up here." : "Save a guide with Add to favourites and it shows up here."}
         </EmptyState>
       ) : guides.length === 0 ? (
-        mine ? (
+        drafts ? (
+          <EmptyState
+            title="No drafts"
+            action={
+              <Link href="/guides/new" className="btn-primary">
+                Write a guide
+              </Link>
+            }
+          >
+            Guides you&apos;re still writing, and ones a reviewer sent back for changes, show up here.
+          </EmptyState>
+        ) : mine ? (
           <EmptyState
             title="You haven't written a guide yet"
             action={
@@ -133,7 +148,7 @@ export default async function GuidesPage({ searchParams }: { searchParams: Promi
         <>
           <div className="grid gap-4 md:grid-cols-2">
             {guides.map((g) => (
-              <Link key={g.id} href={g.status === "DRAFT" ? `/guides/${g.slug}/edit` : `/guides/${g.slug}`} className="card flex gap-4 p-4 hover:border-muted">
+              <Link key={g.id} href={g.status === "DRAFT" || (drafts && g.status === "REJECTED") ? `/guides/${g.slug}/edit` : `/guides/${g.slug}`} className="card flex gap-4 p-4 hover:border-muted">
                 <GameArt title={g.game.title} hue={g.game.coverHue} iconUrl={g.game.iconUrl} className="w-20 self-start" />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">

@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
-import { durationText, planOf, PLANS } from "../plans";
+import { DAY_MS, durationText, planOf, PLANS, UNLIMITED_ROLES } from "../plans";
 import { recomputeUserGame } from "../progress";
 import { ensureGameTrophies, importTitles } from "./catalogue";
 import { MockPsnProvider } from "./mock";
@@ -36,7 +36,7 @@ const CONCURRENCY = Math.max(1, Number(process.env.PSN_SYNC_CONCURRENCY) || 10);
 export class SyncCooldownError extends Error {}
 
 /** When this user may press Sync now again, or null if they can now. */
-export async function nextManualSyncAt(userId: string, plan: string) {
+export async function nextManualSyncAt(userId: string, plan: string, role?: string | null) {
   const [lastManual, latest] = await Promise.all([
     // Failed syncs don't count, so a PSN outage doesn't lock anyone out for an hour.
     prisma.syncJob.findFirst({
@@ -51,8 +51,9 @@ export async function nextManualSyncAt(userId: string, plan: string) {
     const at = latest.startedAt.getTime() + 60_000;
     return at > Date.now() ? new Date(at) : null;
   }
-  if (!lastManual) return null;
-  const at = lastManual.startedAt.getTime() + planOf({ plan }).manualEveryMs;
+  const every = planOf({ plan, role }).manualEveryMs;
+  if (!lastManual || every === 0) return null;
+  const at = lastManual.startedAt.getTime() + every;
   return at > Date.now() ? new Date(at) : null;
 }
 
@@ -68,6 +69,7 @@ export function accountsDueForSync(take: number, now = Date.now()) {
         { lastSyncedAt: null },
         ...Object.entries(PLANS).map(([plan, p]) => ({ user: { plan }, lastSyncedAt: { lt: new Date(now - p.autoEveryMs) } })),
         { user: { plan: { notIn: Object.keys(PLANS) } }, lastSyncedAt: { lt: new Date(now - PLANS.FREE.autoEveryMs) } },
+        { user: { role: { in: UNLIMITED_ROLES } }, lastSyncedAt: { lt: new Date(now - DAY_MS) } },
         { user: { syncJobs: { some: { remaining: { gt: 0 }, startedAt: { gte: new Date(now - 30 * 60_000) } } } } },
       ],
     },
@@ -108,12 +110,12 @@ async function saveEarnRates(rates: { id: string; rate: number }[]) {
  * with a message for the member; returns the account otherwise.
  */
 export async function checkCanSync(userId: string, trigger: SyncTrigger = "MANUAL") {
-  const psn = await prisma.psnAccount.findUnique({ where: { userId }, include: { user: { select: { plan: true } } } });
+  const psn = await prisma.psnAccount.findUnique({ where: { userId }, include: { user: { select: { plan: true, role: true } } } });
   if (!psn?.verified || !psn.accountId) throw new Error("Link and verify your PSN account first.");
   const running = await prisma.syncJob.findFirst({ where: { userId, status: "RUNNING" }, orderBy: { startedAt: "desc" } });
   if (running && Date.now() - running.startedAt.getTime() < 10 * 60_000) throw new Error("A sync is already running.");
   if (trigger === "MANUAL") {
-    const at = await nextManualSyncAt(userId, psn.user.plan);
+    const at = await nextManualSyncAt(userId, psn.user.plan, psn.user.role);
     if (at) throw new SyncCooldownError(`You can sync again in ${durationText(at.getTime() - Date.now())}.`);
   }
   return { ...psn, accountId: psn.accountId };

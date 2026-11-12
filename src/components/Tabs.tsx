@@ -18,7 +18,8 @@ export function Tabs({ tabs, label }: { tabs: { key: string; label: string; cont
     refs.current[n]?.focus();
   };
   return (
-    <div>
+    // Fills its panel, so a short list can stretch to the height of the panel beside it (.fill-rows).
+    <div className="flex flex-1 flex-col">
       <div role="tablist" aria-label={label} className="mb-1 flex gap-1 overflow-x-auto rounded-lg bg-surface-2 p-1">
         {tabs.map((t, i) => (
           <button
@@ -51,7 +52,7 @@ export function Tabs({ tabs, label }: { tabs: { key: string; label: string; cont
         ))}
       </div>
       {tabs.map((t) => (
-        <div key={t.key} role="tabpanel" id={`${id}-panel-${t.key}`} aria-labelledby={`${id}-tab-${t.key}`} hidden={active !== t.key} tabIndex={0} className="outline-none">
+        <div key={t.key} role="tabpanel" id={`${id}-panel-${t.key}`} aria-labelledby={`${id}-tab-${t.key}`} hidden={active !== t.key} tabIndex={0} className={clsx("outline-none", active === t.key && "flex flex-1 flex-col")}>
           {t.content}
         </div>
       ))}

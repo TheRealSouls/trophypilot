@@ -48,15 +48,15 @@ const rowLink = "block truncate text-sm font-semibold leading-6 hover:underline 
 export default async function Home() {
   const [totals, recentPlats, rareUnlocks, weekly, guides, trending, needGuides, newLists, dlcs, sessions, covers, heroImage, weeklyPlats, topCompletion, topRare, threads] = await Promise.all([
     siteTotals(),
-    latestPlatinums(6),
+    latestPlatinums(8),
     // The newest unlocks of any rarity, from members who share their activity.
     prisma.userTrophy.findMany({
       where: { user: publicActivity },
       orderBy: { earnedAt: "desc" },
-      take: 6,
+      take: 8,
       include: { user: { include: { psn: true } }, trophy: { include: { game: true } } },
     }),
-    getLeaderboard({ metric: "points", period: "weekly", scope: "global", limit: 8 }),
+    getLeaderboard({ metric: "points", period: "weekly", scope: "global", limit: 10 }),
     prisma.guide.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { createdAt: "desc" },
@@ -70,10 +70,10 @@ export default async function Home() {
     latestSessions(10),
     heroCovers(24),
     getSetting(HOME_BACKGROUND_KEY),
-    getLeaderboard({ metric: "platinums", period: "weekly", scope: "global", limit: 8 }),
-    getLeaderboard({ metric: "completion", period: "all", scope: "global", limit: 8 }),
-    getLeaderboard({ metric: "rare", period: "all", scope: "global", limit: 8 }),
-    prisma.forumThread.findMany({ orderBy: { lastPostAt: "desc" }, take: 6, select: { id: true, title: true, postCount: true, lastPostAt: true, game: { select: { title: true } } } }),
+    getLeaderboard({ metric: "platinums", period: "weekly", scope: "global", limit: 10 }),
+    getLeaderboard({ metric: "completion", period: "all", scope: "global", limit: 10 }),
+    getLeaderboard({ metric: "rare", period: "all", scope: "global", limit: 10 }),
+    prisma.forumThread.findMany({ orderBy: { lastPostAt: "desc" }, take: 8, select: { id: true, title: true, postCount: true, lastPostAt: true, game: { select: { title: true } } } }),
   ]);
   const listFamilies = await familiesFor(newLists.map((g) => g.titleKey));
   const { games: gameCount, trophies: trophyCount, platinums: platCount } = totals;
@@ -251,7 +251,7 @@ export default async function Home() {
                   recentPlats.length === 0 ? (
                     <p className="py-4 text-sm text-muted">No platinums yet. They appear as players link their accounts or get tracked.</p>
                   ) : (
-                    <ul className="divide-y divide-line">
+                    <ul className="fill-rows divide-y divide-line">
                       {recentPlats.map((p) => (
                         <li key={p.key} className="flex items-center gap-3 py-3">
                           <GameArt title={p.game.title} hue={p.game.coverHue} iconUrl={p.game.iconUrl} size="sm" className="w-11 rounded-md" />
@@ -276,7 +276,7 @@ export default async function Home() {
                 key: "trophies",
                 label: "Trophies",
                 content: (
-                  <ul className="divide-y divide-line">
+                  <ul className="fill-rows divide-y divide-line">
                     {rareUnlocks.map((u) => (
                       <li key={u.id} className="flex items-center gap-3 py-3">
                         <TrophyIcon type={u.trophy.type} size={22} />
@@ -304,9 +304,9 @@ export default async function Home() {
                 key: "threads",
                 label: "Discussions",
                 content: (
-                  <ul className="divide-y divide-line">
+                  <ul className="fill-rows divide-y divide-line">
                     {threads.map((t) => (
-                      <li key={t.id} className="py-3">
+                      <li key={t.id} className="flex flex-col justify-center py-3">
                         <Link href={`/forums/thread/${t.id}`} className={rowLink}>
                           {t.title}
                         </Link>
@@ -337,8 +337,8 @@ export default async function Home() {
                       for the online trophies you still need.
                     </p>
                   ) : (
-                    <ul className="divide-y divide-line">
-                      {sessions.slice(0, 6).map((s) => (
+                    <ul className="fill-rows divide-y divide-line">
+                      {sessions.slice(0, 8).map((s) => (
                         <li key={s.id} className="flex items-center gap-3 py-3">
                           <GameArt title={s.game.title} hue={s.game.coverHue} iconUrl={s.game.iconUrl} size="sm" className="w-11 rounded-md" />
                           <div className="min-w-0 flex-1">
@@ -436,7 +436,7 @@ type BoardRow = Awaited<ReturnType<typeof getLeaderboard>>[number];
 
 function Board({ rows, value, empty }: { rows: BoardRow[]; value: (r: BoardRow) => string; empty: string }) {
   return (
-    <ol className="divide-y divide-line">
+    <ol className="fill-rows divide-y divide-line">
       {rows.map((r) => (
         <li key={r.key} className="flex items-center gap-3 py-2.5">
           <span className="w-6 text-right text-sm font-semibold tabular-nums text-muted">{r.rank}.</span>

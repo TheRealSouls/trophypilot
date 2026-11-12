@@ -473,3 +473,18 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .nav-progress[data-active] { animation: none; transform: scaleX(0.6); }
 }
+
+/* Home panels side by side: a shorter list spreads its rows over the panel's full height instead of leaving a gap below. */
+.fill-rows {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+.fill-rows > li {
+  flex: 1 1 auto;
+}
+/* An earned trophy's icon: a red ring and glow, so earned ones stand out in a list at a glance. */
+.earned-glow {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent), 0 0 12px 1px color-mix(in srgb, var(--color-accent) 55%, transparent);
+}

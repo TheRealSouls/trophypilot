@@ -132,7 +132,7 @@ export function Panel({
         <h2 className="text-sm font-bold uppercase tracking-wide">{title}</h2>
         {action && <div className="ml-auto">{action}</div>}
       </header>
-      <div className="flex-1 px-5">{children}</div>
+      <div className="flex flex-1 flex-col px-5">{children}</div>
     </section>
   );
 }

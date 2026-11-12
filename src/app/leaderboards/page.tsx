@@ -130,7 +130,8 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
             ? "Trophies earned since Monday (UTC)"
             : "Trophies earned this calendar month (UTC)"}
         {scope === "country" && ` in ${countryName(country)}`}
-        {scope === "friends" && " among you and your friends"}.
+        {scope === "friends" && " among you and your friends"}
+        {scope === "following" && " among you and the members you follow"}.
       </PageHeader>
 
       {user && (
@@ -186,7 +187,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
             <span className="text-muted" role={notRanked ? "status" : undefined}>
               {notRanked
                 ? `${sp.find === "me" ? "You're not" : `${sp.find} isn't`} in the top ${formatNumber(MAX_PAGES * PER_PAGE)} of this board.`
-                : `Jumps to your row on this board (${METRICS[metric].toLowerCase()}, ${PERIODS[period].toLowerCase()}${scope === "country" ? `, ${countryName(country)}` : scope === "friends" ? ", friends" : ", global"}).`}
+                : `Jumps to your row on this board (${METRICS[metric].toLowerCase()}, ${PERIODS[period].toLowerCase()}${scope === "country" ? `, ${countryName(country)}` : scope === "friends" ? ", friends" : scope === "following" ? ", following" : ", global"}).`}
             </span>
           </div>
         </section>
@@ -234,11 +235,11 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
         </Group>
       </div>
 
-      {scope === "friends" && !user ? (
+      {(scope === "friends" || scope === "following") && !user ? (
         <EmptyState
-          title="Log in to see your friends board"
+          title={scope === "friends" ? "Log in to see your friends board" : "Log in to see the members you follow"}
           action={
-            <Link href="/login?next=/leaderboards?scope=friends" className="btn-primary">
+            <Link href={`/login?next=/leaderboards?scope=${scope}`} className="btn-primary">
               Log in
             </Link>
           }
@@ -260,7 +261,9 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
             ? period === "all"
               ? `No players ${scope === "country" ? `from ${countryName(country)} ` : ""}have been seen yet. Players are added when someone looks up their PSN profile or they link their account.`
               : `Nobody ${scope === "country" ? `from ${countryName(country)} ` : ""}has gained points since the ${period === "weekly" ? "week" : "month"} started, as far as our refreshes have seen.`
-            : "No trophies have been earned in this window."}
+            : scope === "following"
+              ? "Nobody you follow has earned trophies in this window yet. Follow members from their profile or the Community page."
+              : "No trophies have been earned in this window."}
         </EmptyState>
       ) : (
         <>

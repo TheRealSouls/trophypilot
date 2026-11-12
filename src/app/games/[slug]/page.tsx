@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BookIcon } from "@/components/icons";
 import clsx from "clsx";
 import { prisma } from "@/lib/db";
 import { cached } from "@/lib/cache";
@@ -190,12 +191,29 @@ export default async function GamePage({ params, searchParams }: { params: Promi
                 <ProgressBar value={myProgress.progress} label="Your completion" />
               </div>
             )}
-            {viewerId && (
-              <div className="mt-5 flex flex-wrap items-center gap-2">
-                <PlayingNowButton gameId={game.id} playing={iAmPlaying} />
-                <WishlistButton gameId={game.id} wanted={onWishlist} />
-              </div>
-            )}
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              {/* The guide up top, so nobody has to scroll past the trophy list to find it. */}
+              {guides[0] ? (
+                <Link href={`/guides/${guides[0].slug}`} className="btn-primary">
+                  <BookIcon size={16} />
+                  View guide
+                </Link>
+              ) : null}
+              <Link href={`/guides/new?game=${game.id}`} className={guides[0] ? "btn-ghost" : "btn-primary"}>
+                Write a guide
+              </Link>
+              {viewerId && (
+                <>
+                  <PlayingNowButton gameId={game.id} playing={iAmPlaying} />
+                  <WishlistButton gameId={game.id} wanted={onWishlist} />
+                </>
+              )}
+              {guides.length > 1 && (
+                <a href="#guides" className="link text-sm">
+                  All {guides.length} guides
+                </a>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -334,7 +352,7 @@ export default async function GamePage({ params, searchParams }: { params: Promi
             </section>
           )}
 
-          <section className="card p-5">
+          <section id="guides" className="card scroll-mt-24 p-5">
             <h2 className="mb-3 font-bold">Guides</h2>
             <ul className="space-y-3">
               {guides.map((g) => (
