@@ -10,6 +10,24 @@ export function sortPlatforms(platforms: Iterable<string>) {
   });
 }
 
+/**
+ * Trophies per list, for these lists only. Prisma's own relation count
+ * (_count: { trophies }) adds up the whole Trophy table (400k rows) on every
+ * call whatever the filter, which is what used up the database's disk budget.
+ */
+export async function trophyCounts(gameIds: string[]): Promise<Map<string, number>> {
+  const ids = [...new Set(gameIds)];
+  if (!ids.length) return new Map();
+  const rows = await prisma.trophy.groupBy({ by: ["gameId"], where: { gameId: { in: ids } }, _count: { _all: true } });
+  return new Map(rows.map((r) => [r.gameId, r._count._all]));
+}
+
+/** The rows with `_count.trophies` filled in, the shape Prisma's relation count gave. */
+export async function withTrophyCounts<T extends { id: string }>(rows: T[]): Promise<(T & { _count: { trophies: number } })[]> {
+  const counts = await trophyCounts(rows.map((r) => r.id));
+  return rows.map((r) => ({ ...r, _count: { trophies: counts.get(r.id) ?? 0 } }));
+}
+
 export type Family = { lists: number; platforms: string[] };
 
 /**
@@ -45,14 +63,20 @@ export async function siblingLists(game: { id: string; titleKey: string }) {
       title: true,
       platforms: true,
       npCommunicationId: true,
-      _count: { select: { trophies: true, userGames: true } },
     },
     orderBy: { npCommunicationId: "asc" },
   });
   if (rows.length < 2) return [];
+  const ids = rows.map((r) => r.id);
+  const [trophies, members] = await Promise.all([
+    trophyCounts(ids),
+    prisma.userGame.groupBy({ by: ["gameId"], where: { gameId: { in: ids } }, _count: { _all: true } }),
+  ]);
+  const playing = new Map(members.map((m) => [m.gameId, m._count._all]));
   return rows
     .map((r) => ({
       ...r,
+      _count: { trophies: trophies.get(r.id) ?? 0, userGames: playing.get(r.id) ?? 0 },
       // Only right for the game that filled the cache: pages compare ids themselves (lists are shared between stacks).
       current: r.id === game.id,
       platform: sortPlatforms(r.platforms.split(","))[0] ?? "",

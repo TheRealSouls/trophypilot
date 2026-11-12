@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { withTrophyCounts } from "@/lib/games";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/forum";
 import { cached } from "@/lib/cache";
@@ -30,12 +31,9 @@ export default async function UpcomingPage() {
       const unplayed = { players: 0, userGames: { none: {} } } as const;
       const [soon, fresh] = await Promise.all([
         prisma.game.findMany({ where: { ...unplayed, releaseDate: { gt: new Date() } }, orderBy: { releaseDate: "asc" }, take: 30, select: card }),
-        prisma.game.findMany({
-          where: { ...unplayed, npCommunicationId: { startsWith: "NPWR" } },
-          orderBy: { npCommunicationId: "desc" },
-          take: 60,
-          select: { ...card, _count: { select: { trophies: true } } },
-        }),
+        prisma.game
+          .findMany({ where: { ...unplayed, npCommunicationId: { startsWith: "NPWR" } }, orderBy: { npCommunicationId: "desc" }, take: 60, select: card })
+          .then(withTrophyCounts),
       ]);
       return { soon, fresh };
     },

@@ -5,15 +5,28 @@ import { bust, cached } from "@/lib/cache";
 import { ensureGameTrophies } from "@/lib/psn/catalogue";
 import { getProvider, isDemoMode } from "@/lib/psn/sync";
 
-const query = (slug: string) =>
-  prisma.game.findUnique({
+const query = async (slug: string) => {
+  const game = await prisma.game.findUnique({
     where: { slug },
     include: {
       groups: { orderBy: { psnGroupId: "asc" } },
-      trophies: { include: { _count: { select: { tips: true } } } },
-      _count: { select: { userGames: true } },
+      trophies: true,
     },
   });
+  if (!game) return null;
+  // Counted for this game only (Prisma's relation counts add up whole tables).
+  const ids = game.trophies.map((t) => t.id);
+  const [tips, userGames] = await Promise.all([
+    ids.length ? prisma.tip.groupBy({ by: ["trophyId"], where: { trophyId: { in: ids } }, _count: { _all: true } }) : [],
+    prisma.userGame.count({ where: { gameId: game.id } }),
+  ]);
+  const tipsOf = new Map(tips.map((t) => [t.trophyId, t._count._all]));
+  return {
+    ...game,
+    trophies: game.trophies.map((t) => ({ ...t, _count: { tips: tipsOf.get(t.id) ?? 0 } })),
+    _count: { userGames },
+  };
+};
 
 /**
  * A game and its trophy list, from the database only, so the page never waits

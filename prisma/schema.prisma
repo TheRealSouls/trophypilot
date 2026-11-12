@@ -267,6 +267,8 @@ model PsnPlayerTitle {
   @@id([accountId, npCommunicationId])
   @@index([platinumAt])
   @@index([lastUpdated])
+  // Game pages (recent players, regions) and popularity counts look titles up by game.
+  @@index([gameId])
 }
 
 // Point totals over time, so weekly and monthly boards can rank real PSN
@@ -507,6 +509,8 @@ model GuideStep {
   trophy Trophy? @relation(fields: [trophyId], references: [id], onDelete: SetNull)
 
   @@index([guideId, kind, order])
+  // Trophy pages look up guide steps for their trophy.
+  @@index([trophyId])
 }
 
 model Tip {

@@ -4,6 +4,7 @@ import { plainText } from "@/lib/rich-text";
 import { Suspense } from "react";
 import clsx from "clsx";
 import { prisma } from "@/lib/db";
+import { trophyCounts } from "@/lib/games";
 import { trophyHref } from "@/lib/trophy-slug";
 import { getMilestones, getUserStats } from "@/lib/stats";
 import { getFriendIds } from "@/lib/social";
@@ -375,7 +376,7 @@ async function GamesTab({
         ? { game: { title: "asc" as const } }
         : { lastEarned: { sort: "desc" as const, nulls: "last" as const } };
   // One page, and only what the rows show (no descriptions or screenshot lists).
-  const games = await prisma.userGame.findMany({
+  const rows = await prisma.userGame.findMany({
     where,
     orderBy,
     skip: (Math.min(page, pages) - 1) * GAMES_PER_PAGE,
@@ -390,9 +391,11 @@ async function GamesTab({
       earnedSilver: true,
       earnedBronze: true,
       lastEarned: true,
-      game: { select: { slug: true, title: true, coverHue: true, iconUrl: true, platforms: true, _count: { select: { trophies: true } } } },
+      game: { select: { id: true, slug: true, title: true, coverHue: true, iconUrl: true, platforms: true } },
     },
   });
+  const listSizes = await trophyCounts(rows.map((r) => r.game.id));
+  const games = rows.map((r) => ({ ...r, game: { ...r.game, _count: { trophies: listSizes.get(r.game.id) ?? 0 } } }));
   if (!total) return <EmptyState title="No games synced yet">Once the PSN account is synced, games show up here.</EmptyState>;
 
   const sorts = [

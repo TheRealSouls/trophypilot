@@ -43,10 +43,14 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         want("games")
           ? prisma.game.findMany({
               where: { OR: [{ title: { contains: q, mode: "insensitive" } }, { developer: { contains: q, mode: "insensitive" } }, { publisher: { contains: q, mode: "insensitive" } }] },
-              // PSN has a separate trophy list per platform and region; show each game once.
-              distinct: ["titleKey"],
-              take,
-              orderBy: [{ userGames: { _count: "desc" } }, { npServiceName: "desc" }, { title: "asc" }],
+              // The stored player count (Game.players), not a count of every member's games on each search.
+              orderBy: [{ players: "desc" }, { npServiceName: "desc" }, { title: "asc" }],
+              // A few extra, then one per game: PSN has a list per platform and region. (Prisma's distinct loads every match.)
+              take: take * 4,
+            })
+            .then((rows) => {
+              const seen = new Set<string>();
+              return rows.filter((g) => !seen.has(g.titleKey || g.id) && !!seen.add(g.titleKey || g.id)).slice(0, take);
             })
           : [],
         want("trophies")

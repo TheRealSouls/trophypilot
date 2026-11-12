@@ -37,17 +37,15 @@ import {
 } from "@/lib/activity";
 import { familiesFor } from "@/lib/games";
 
-// The same page for everyone, rebuilt in the background at most once a minute. The parts that depend on
+// The same page for everyone, rebuilt in the background at most every five minutes. The parts that depend on
 // who's looking (navbar, main button, notices) fill in on the client.
-export const revalidate = 60;
+export const revalidate = 300;
 
 const publicActivity = { showActivity: true, profileVisibility: "PUBLIC" } as const;
 // leading-6 keeps each row link at least 24px tall (WCAG 2.2 target size).
 const rowLink = "block truncate text-sm font-semibold leading-6 hover:underline hover:underline-offset-4";
 
 export default async function Home() {
-  const monthAgo = new Date(Date.now() - 30 * 86_400_000);
-
   const [totals, recentPlats, rareUnlocks, weekly, guides, trending, needGuides, newLists, dlcs, sessions, covers, heroImage, weeklyPlats, topCompletion, topRare, threads] = await Promise.all([
     siteTotals(),
     latestPlatinums(6),
@@ -65,7 +63,7 @@ export default async function Home() {
       take: 6,
       select: { id: true, slug: true, title: true, summary: true, createdAt: true, game: { select: { title: true, coverHue: true, iconUrl: true } }, author: { select: { username: true } } },
     }),
-    trendingGameIds(monthAgo, 24),
+    trendingGameIds(30, 24),
     gamesNeedingGuides(5),
     newTrophyLists(8),
     newDlc(8),

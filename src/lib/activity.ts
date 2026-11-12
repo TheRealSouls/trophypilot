@@ -86,8 +86,11 @@ export async function latestPlatinums(limit = 6): Promise<PlatinumItem[]> {
     .slice(0, limit);
 }
 
-/** Games the most distinct players (members and tracked) earned trophies in since `since`. */
-export async function trendingGameIds(since: Date, limit = 6) {
+/** Games the most distinct players (members and tracked) earned trophies in over the last `days` days. Cached for 30 minutes. */
+export const trendingGameIds = (days: number, limit = 6) =>
+  cached(`trending:${days}:${limit}`, () => loadTrending(new Date(Date.now() - days * 86_400_000), limit), { ttlMs: 30 * 60_000, maxStaleMs: 6 * 3_600_000 });
+
+async function loadTrending(since: Date, limit: number) {
   const excluded = await privateMemberAccounts();
   const [members, players] = await Promise.all([
     prisma.$queryRaw<{ gameId: string; n: number }[]>`
@@ -149,17 +152,23 @@ async function loadSiteTotals() {
   };
 }
 
-/** Most-played games that nobody has written a guide for yet. */
-export async function gamesNeedingGuides(limit = 5) {
-  const rows = await prisma.psnPlayerTitle.groupBy({
-    by: ["gameId"],
-    where: { game: { guides: { none: { status: "PUBLISHED" } } } },
-    _count: true,
-    orderBy: { _count: { gameId: "desc" } },
-    take: limit,
+/**
+ * Most-played games that nobody has written a guide for yet, one per game. Uses the stored player
+ * count (Game.players, kept by the games cron) rather than counting every tracked player's games,
+ * and is cached for an hour.
+ */
+export const gamesNeedingGuides = (limit = 5) =>
+  cached(`need-guides:${limit}`, () => loadGamesNeedingGuides(limit), { ttlMs: 60 * 60_000, maxStaleMs: 12 * 3_600_000 });
+
+async function loadGamesNeedingGuides(limit: number) {
+  const rows = await prisma.game.findMany({
+    where: { players: { gt: 0 }, guides: { none: { status: "PUBLISHED" } } },
+    orderBy: { players: "desc" },
+    take: limit * 4,
   });
-  const games = await prisma.game.findMany({ where: { id: { in: rows.map((r) => r.gameId) } } });
-  return rows.map((r) => ({ game: games.find((g) => g.id === r.gameId)!, players: r._count })).filter((r) => r.game);
+  return onePerGame(rows)
+    .slice(0, limit)
+    .map((game) => ({ game, players: game.players }));
 }
 
 const gameCard = { id: true, slug: true, title: true, titleKey: true, platforms: true, iconUrl: true, coverHue: true } as const;
@@ -216,10 +225,14 @@ async function loadNewDlc(take: number) {
     // The order of the (isDlc, addedLater, createdAt) index, so the database reads a few rows instead of sorting them all.
     orderBy: [{ addedLater: "desc" }, { createdAt: "desc" }],
     take: take * 3,
-    include: { game: { select: gameCard }, _count: { select: { trophies: true } } },
+    include: { game: { select: gameCard } },
   });
+  // Counted for these packs only (by the groupId index), not the whole Trophy table.
+  const sizes = await prisma.trophy.groupBy({ by: ["groupId"], where: { groupId: { in: groups.map((g) => g.id) } }, _count: { _all: true } });
+  const sizeOf = new Map(sizes.map((s) => [s.groupId, s._count._all]));
   const seen = new Set<string>();
   return groups
+    .map((g) => ({ ...g, _count: { trophies: sizeOf.get(g.id) ?? 0 } }))
     .filter((g) => {
       const key = `${g.game.titleKey || g.game.id}:${g.name.toLowerCase()}`;
       if (seen.has(key)) return false;
@@ -249,15 +262,19 @@ export function latestSessions(take: number) {
  * rather than the trophy-farm titles top hunters play most. PS5 icons are
  * square, so they come first; PS4 ones are cropped.
  */
-export async function heroCovers(take: number) {
+export const heroCovers = (take: number) => cached(`hero-covers:${take}`, () => loadHeroCovers(take), { ttlMs: 6 * 3_600_000, maxStaleMs: 24 * 3_600_000 });
+
+async function loadHeroCovers(take: number) {
+  // The stored player count, and one per game here: Prisma's distinct loaded all 6,000 matching lists on every rebuild.
   const games = await prisma.game.findMany({
     where: { iconUrl: { not: null }, trailerYoutubeId: { not: null } },
-    orderBy: [{ npServiceName: "desc" }, { playerTitles: { _count: "desc" } }, { userGames: { _count: "desc" } }],
-    distinct: ["titleKey"],
-    take,
-    select: { id: true, title: true, iconUrl: true, coverHue: true },
+    orderBy: [{ npServiceName: "desc" }, { players: "desc" }],
+    take: take * 4,
+    select: { id: true, title: true, titleKey: true, iconUrl: true, coverHue: true },
   });
-  return games;
+  return onePerGame(games)
+    .slice(0, take)
+    .map(({ titleKey: _key, ...g }) => g);
 }
 
 /**

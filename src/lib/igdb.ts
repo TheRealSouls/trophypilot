@@ -338,10 +338,13 @@ export async function enrichGame(gameId: string): Promise<boolean> {
 export async function enrichPending(limit: number) {
   const pending = await prisma.game.findMany({
     where: { igdbCheckedAt: null },
-    orderBy: [{ playerTitles: { _count: "desc" } }, { userGames: { _count: "desc" } }, { title: "asc" }],
-    distinct: ["titleKey"],
-    take: limit,
-    select: { id: true, title: true },
+    // The stored player count, and one per game in code: Prisma's distinct loads every unchecked game.
+    orderBy: [{ players: "desc" }, { title: "asc" }],
+    take: limit * 3,
+    select: { id: true, title: true, titleKey: true },
+  }).then((rows) => {
+    const seen = new Set<string>();
+    return rows.filter((g) => !seen.has(g.titleKey || g.id) && !!seen.add(g.titleKey || g.id)).slice(0, limit);
   });
   let matched = 0;
   let missed = 0;

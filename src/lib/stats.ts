@@ -1,6 +1,27 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
+import { cached } from "./cache";
 import { levelFromPoints, pointsFor, ULTRA_RARE_MAX } from "./trophies";
+
+/**
+ * Ultra rares per member. Counting them means matching every earned trophy against the rare
+ * ones, the most expensive read on the boards, and rarity moves slowly, so it is worked out
+ * once every six hours and shared by every board and profile instead of worked out in each.
+ */
+export const ultraRaresByMember = () =>
+  cached(
+    "ultra-rares-by-member",
+    async () => {
+      const rows = await prisma.$queryRaw<{ userId: string; n: number }[]>`
+        SELECT ut."userId", CAST(COUNT(*) AS INTEGER) AS n
+        FROM "UserTrophy" ut JOIN "Trophy" t ON t."id" = ut."trophyId"
+        WHERE t."earnedRate" <= ${ULTRA_RARE_MAX}
+        GROUP BY ut."userId"`;
+      return new Map(rows.map((r) => [r.userId, Number(r.n)]));
+    },
+    // Dropped with the boards when a member syncs, so their own count catches up.
+    { ttlMs: 6 * 60 * 60_000, maxStaleMs: 24 * 60 * 60_000, tags: ["boards"] },
+  );
 
 export async function getUserStats(userId: string) {
   const [agg, platinum, completed, ultraRare] = await Promise.all([
@@ -12,7 +33,7 @@ export async function getUserStats(userId: string) {
     }),
     prisma.userGame.count({ where: { userId, hasPlatinum: true } }),
     prisma.userGame.count({ where: { userId, completedAt: { not: null } } }),
-    prisma.userTrophy.count({ where: { userId, trophy: { earnedRate: { lte: ULTRA_RARE_MAX } } } }),
+    ultraRaresByMember().then((m) => m.get(userId) ?? 0),
   ]);
 
   const counts = {

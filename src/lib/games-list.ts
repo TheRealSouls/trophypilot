@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { cached } from "./cache";
+import { withTrophyCounts } from "./games";
 import { GAME_PLATFORMS } from "./utils";
 
 /** The games list (/games): filters, sorts and one page of cards. */
@@ -110,7 +111,7 @@ async function loadPage(f: GameFilters, sort: GameSort, page: number) {
     prisma.$queryRaw<{ n: number }[]>`
       SELECT CAST(COUNT(DISTINCT COALESCE(NULLIF(g."titleKey", ''), g."id")) AS INTEGER) AS n FROM "Game" g WHERE ${filter}`,
   ]);
-  const rows = await prisma.game.findMany({
+  const found = await prisma.game.findMany({
     where: { id: { in: ids.map((r) => r.id) } },
     select: {
       id: true,
@@ -124,9 +125,9 @@ async function loadPage(f: GameFilters, sort: GameSort, page: number) {
       hoursToPlatinum: true,
       genre: true,
       trophies: { where: { type: "PLATINUM" }, select: { earnedRate: true } },
-      _count: { select: { trophies: true } },
     },
   });
+  const rows = await withTrophyCounts(found);
   const byId = new Map(rows.map((g) => [g.id, g]));
   return { games: ids.flatMap((r) => byId.get(r.id) ?? []), total: Number(count[0]?.n ?? 0) };
 }
