@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { sendNotice } from "@/lib/community";
 import { canSetRole, isAdmin, isOwner, isStaff, MODERATOR_MAX_SUSPEND_DAYS, outranks, STAFF_BADGES, type Role } from "@/lib/roles";
 import { logStaff } from "@/lib/staff";
+import { queuePlayers } from "@/lib/psn/import-queue";
 import { deleteUploadsOf } from "@/lib/uploads";
 import { FORUM_RULES_KEY, GUIDE_RULES_KEY, HOME_BACKGROUND_KEY } from "@/lib/site-settings";
 import type { FormState } from "./auth";
@@ -187,4 +188,18 @@ export async function saveGuideRules(_: FormState, fd: FormData): Promise<FormSt
   revalidatePath("/guides/new");
   revalidatePath("/staff");
   return { ok: "Guide rules saved." };
+}
+
+/** Admins queue PSN players by Online ID; the players job adds them (level and totals only), a few dozen per run. */
+export async function queuePsnPlayers(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requireUser("/staff");
+  if (!isAdmin(me)) return { error: "Only admins can add players." };
+  const text = String(fd.get("names") ?? "");
+  if (!text.trim()) return { error: "Paste at least one PSN Online ID." };
+  if (text.length > 600_000) return { error: "That's too long. Add 20,000 names or fewer at a time." };
+  const r = await queuePlayers(text, me.id);
+  await logStaff(me.id, "players.import", null, `${r.added} queued`);
+  revalidatePath("/staff");
+  const extra = [r.tracked ? `${r.tracked} already tracked` : null, r.invalid ? `${r.invalid} not valid Online IDs` : null].filter(Boolean).join(", ");
+  return { ok: `Queued ${r.added} player${r.added === 1 ? "" : "s"}${extra ? ` (${extra})` : ""}. ${r.queued} waiting in total.` };
 }

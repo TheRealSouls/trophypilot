@@ -10,6 +10,7 @@ const query = async (slug: string) => {
     where: { slug },
     include: {
       groups: { orderBy: { psnGroupId: "asc" } },
+      series: { select: { id: true, name: true } },
       trophies: true,
     },
   });

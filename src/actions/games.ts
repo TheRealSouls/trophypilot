@@ -11,6 +11,7 @@ import { verifyFirst } from "@/lib/email";
 import { hateSpeechError } from "@/lib/moderation";
 import { rateLimit } from "@/lib/rate-limit";
 import { bust } from "@/lib/cache";
+import { seriesNamed, setFamilySeries } from "@/lib/series";
 import type { FormState } from "./auth";
 
 const ratingSchema = z.object({
@@ -150,4 +151,45 @@ export async function flagOnline(_: FormState, fd: FormData): Promise<FormState>
   });
   revalidatePath("/staff");
   return { ok: "Thanks. Staff will check it before it shows on the trophy." };
+}
+
+const seriesSchema = z.object({
+  gameId: z.string().min(1),
+  // The series name for this game; empty takes it out of its series.
+  name: z.string().trim().max(80).optional(),
+  // Or another game to bring into this game's series.
+  otherGameId: z.string().optional(),
+});
+
+/**
+ * Staff link games into a series for the Series tab: name this game's series (made if new, empty
+ * to remove it), or add another game to it. Every trophy list of a game moves together.
+ */
+export async function setGameSeries(_: FormState, fd: FormData): Promise<FormState> {
+  const user = await requireUser();
+  if (!isStaff(user)) return { error: "Only staff can change this." };
+  const parsed = seriesSchema.safeParse(Object.fromEntries(fd));
+  if (!parsed.success) return { error: "Keep the series name under 80 characters." };
+  const { gameId, name, otherGameId } = parsed.data;
+  const game = await prisma.game.findUnique({ where: { id: gameId }, select: { id: true, titleKey: true, seriesId: true, series: { select: { name: true } } } });
+  if (!game) return { error: "That game is gone." };
+
+  if (otherGameId !== undefined) {
+    if (!game.seriesId) return { error: "Name this game's series first." };
+    const other = await prisma.game.findUnique({ where: { id: otherGameId }, select: { id: true, titleKey: true, title: true } });
+    if (!other) return { error: "Pick a game to add." };
+    await setFamilySeries(other, game.seriesId);
+    await logStaff(user.id, "game.series", { type: "GAME", id: other.id }, `added to ${game.series?.name}`);
+    bust("series");
+    await refreshGamePage(other.id);
+    await refreshGamePage(game.id);
+    return { ok: `Added ${other.title}.` };
+  }
+
+  const seriesId = name ? await seriesNamed(name) : null;
+  await setFamilySeries(game, seriesId);
+  await logStaff(user.id, "game.series", { type: "GAME", id: game.id }, name ? `series: ${name}` : "removed from its series");
+  bust("series");
+  await refreshGamePage(game.id);
+  return { ok: name ? "Saved." : "Taken out of the series." };
 }

@@ -483,8 +483,15 @@ body {
 .fill-rows > li {
   flex: 1 1 auto;
 }
-/* An earned trophy's icon: a red ring and glow, so earned ones stand out in a list at a glance. */
-.earned-glow {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent), 0 0 12px 1px color-mix(in srgb, var(--color-accent) 55%, transparent);
+/* A soft red glow behind an earned trophy's medal; the medal keeps its own colour on top. */
+.medal-glow::before {
+  content: "";
+  position: absolute;
+  inset: -0.6rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-accent) 38%, transparent) 0%, color-mix(in srgb, var(--color-accent) 12%, transparent) 45%, transparent 70%);
+  pointer-events: none;
+}
+.medal-glow > * {
+  position: relative;
 }

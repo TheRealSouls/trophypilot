@@ -6,11 +6,12 @@ import { trophyHref } from "@/lib/trophy-slug";
 import { prisma } from "@/lib/db";
 import { getSessionUserId } from "@/lib/auth";
 import { flag } from "@/lib/countries";
-import { formatDate, psnImage, timeAgo } from "@/lib/utils";
+import { psnImage, timeAgo } from "@/lib/utils";
 import { GameArt } from "@/components/art";
 import { TrophyIcon } from "@/components/TrophyIcon";
 import { RevealButton, Spoiler, SpoilerSwap } from "@/components/client";
 import { Tips } from "@/components/Tips";
+import { LocalTime } from "@/components/LocalTime";
 import { RichText } from "@/components/RichText";
 import { YouTube } from "@/components/YouTube";
 import { SubmitButton } from "@/components/client";
@@ -116,7 +117,7 @@ export default async function TrophyPage({ params }: { params: Promise<Params> }
             <h1 className="text-3xl font-bold">{t.name}</h1>
             <p className="text-muted">{t.description}</p>
           </SpoilerSwap>
-          {mine && <p className="mt-2 text-sm font-semibold text-good">You earned this on {formatDate(mine.earnedAt)}</p>}
+          {mine && <p className="mt-2 text-sm font-semibold text-good">You earned this on <LocalTime date={mine.earnedAt} seconds /></p>}
         </div>
         <Link href={`/games/${t.game.slug}`} className="hidden sm:block" aria-label={t.game.title}>
           <GameArt title={t.game.title} hue={t.game.coverHue} iconUrl={t.game.iconUrl} className="w-20" />

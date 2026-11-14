@@ -35,6 +35,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const q = (sp.q ?? "").trim().slice(0, 100);
   const type: SearchType = sp.type && sp.type in TYPES ? (sp.type as SearchType) : "all";
   const want = (t: SearchType) => type === "all" || type === t;
+  // Trophy text can't use an index, so matching it reads the whole trophy table (seconds, and the
+  // database's disk budget). Only the Trophies tab does that; All links to it instead.
+  const searchTrophies = type === "trophies" && q.length >= 3;
   const take = type === "all" ? 6 : 50;
   const psnLive = !isDemoMode();
 
@@ -53,7 +56,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               return rows.filter((g) => !seen.has(g.titleKey || g.id) && !!seen.add(g.titleKey || g.id)).slice(0, take);
             })
           : [],
-        want("trophies")
+        searchTrophies
           ? prisma.trophy.findMany({
               // Hidden trophies only match on their exact name, so search doesn't leak spoilers.
               where: {
@@ -71,8 +74,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           ? prisma.user.findMany({
               where: { OR: [{ username: { contains: q.toLowerCase(), mode: "insensitive" } }, { psn: { onlineId: { contains: q, mode: "insensitive" } } }] },
               take,
-              include: { psn: true, _count: { select: { games: { where: { hasPlatinum: true } } } } },
+              include: { psn: true },
             })
+            .then(withPlatinums)
           : [],
         want("guides")
           ? prisma.guide.findMany({
@@ -213,6 +217,17 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             </ul>
           </ResultGroup>
 
+          {type === "all" && q.length >= 3 && (
+            <p className="text-sm text-muted">
+              Looking for a trophy?{" "}
+              <Link href={tabHref("trophies")} className="link">
+                Search trophy names for &quot;{q}&quot;
+              </Link>
+            </p>
+          )}
+          {type === "trophies" && q.length < 3 && <p className="text-sm text-muted">Type at least 3 letters to search trophies.</p>}
+          {searchTrophies && trophies.length === 0 && <p className="text-sm text-muted">No trophies match &quot;{q}&quot;.</p>}
+
           <ResultGroup
             title="Trophies"
             show={trophies.length > 0}
@@ -290,13 +305,22 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             </ul>
           </ResultGroup>
 
-          {localTotal === 0 && !showPsn && (
+          {localTotal === 0 && !showPsn && type !== "trophies" && (
             <EmptyState title={`Nothing found for "${q}"`}>Try a shorter search or a different category.</EmptyState>
           )}
         </div>
       )}
     </div>
   );
+}
+
+/** Platinums per member, counted for these members only (a relation count would add up every member's games). */
+async function withPlatinums<U extends { id: string }>(users: U[]) {
+  const rows = users.length
+    ? await prisma.userGame.groupBy({ by: ["userId"], where: { userId: { in: users.map((u) => u.id) }, hasPlatinum: true }, _count: { _all: true } })
+    : [];
+  const n = new Map(rows.map((r) => [r.userId, r._count._all]));
+  return users.map((u) => ({ ...u, _count: { games: n.get(u.id) ?? 0 } }));
 }
 
 async function PsnPlayers({ q, live, limit, more }: { q: string; live: boolean; limit: number; more?: string }) {

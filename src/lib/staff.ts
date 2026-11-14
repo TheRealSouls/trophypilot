@@ -33,6 +33,8 @@ export const ACTION_NAMES: Record<string, string> = {
   "online.set": "Set a trophy's online status",
   "game.obtainable": "Changed obtainability",
   "game.hours": "Set the time to platinum",
+  "game.series": "Changed a game's series",
+  "players.import": "Queued PSN players to add",
   "club.delete": "Deleted a club",
   "club.edit": "Edited a club's rules or banner",
   "thread.moderate": "Moderated a thread",

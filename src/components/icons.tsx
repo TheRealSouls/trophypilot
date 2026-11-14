@@ -150,3 +150,22 @@ export const FlameIcon = (p: P) => (
     <path d="M10 17.5a5.5 5.5 0 0 0 5.5-5.5c0-3.5-3-5.5-3.5-9-2.2 1.3-3.2 3.3-3 5.5-1-.5-1.7-1.5-2-2.5C5.6 7.6 4.5 9.6 4.5 12a5.5 5.5 0 0 0 5.5 5.5Z" />
   </Icon>
 );
+
+export const CheckIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="m4 10.5 4 4 8-9" />
+  </Icon>
+);
+
+export const StarIcon = (p: P & { filled?: boolean }) => (
+  <svg width={p.size ?? 18} height={p.size ?? 18} viewBox="0 0 20 20" aria-hidden className={p.className} fill={p.filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round">
+    <path d="m10 2.5 2.3 4.8 5.2.7-3.8 3.6.9 5.2L10 14.3l-4.6 2.5.9-5.2L2.5 8l5.2-.7L10 2.5Z" />
+  </svg>
+);
+
+export const PinIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M10 17.5s5.5-5 5.5-9.5a5.5 5.5 0 0 0-11 0c0 4.5 5.5 9.5 5.5 9.5Z" />
+    <circle cx="10" cy="8" r="2" />
+  </Icon>
+);

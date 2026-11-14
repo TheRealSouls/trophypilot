@@ -1,5 +1,7 @@
 import { prisma } from "./db";
 import { cleanTitle, titleKey } from "./utils";
+import { seriesForFranchise } from "./series";
+import { getSetting, setSetting } from "./site-settings";
 
 /**
  * Release dates, descriptions, genres, companies, screenshots and trailers
@@ -110,6 +112,8 @@ type IgdbGame = {
   screenshots?: { image_id: string }[];
   videos?: { video_id: string; name?: string }[];
   release_dates?: { date?: number; platform?: number; status?: { name?: string } }[];
+  franchises?: { id: number; name: string }[];
+  collections?: { id: number; name: string }[];
 };
 
 const FIELDS = [
@@ -131,6 +135,8 @@ const FIELDS = [
   "release_dates.date",
   "release_dates.platform",
   "release_dates.status.name",
+  "franchises.name",
+  "collections.name",
 ].join(",");
 
 /** What to type into IGDB's search: the PSN title without trophy-list clutter. */
@@ -242,6 +248,24 @@ function companyFor(g: IgdbGame, role: "developer" | "publisher") {
   return (g.involved_companies ?? []).find((c) => c[role] && c.company?.name)?.company?.name ?? null;
 }
 
+/**
+ * The game's series: IGDB's franchise ("Call of Duty"), or failing that its broadest collection
+ * (collections also hold sub-series such as "Call of Duty: Black Ops", which have longer names).
+ */
+function franchiseFor(g: Pick<IgdbGame, "franchises" | "collections">) {
+  const f = g.franchises?.find((x) => x.name?.trim());
+  if (f) return f;
+  return [...(g.collections ?? [])].filter((x) => x.name?.trim()).sort((a, b) => a.name.length - b.name.length)[0] ?? null;
+}
+
+/** Collections and franchises have separate id ranges; collections are stored negative so they can't collide. */
+async function seriesIdFor(g: Pick<IgdbGame, "franchises" | "collections">) {
+  const f = franchiseFor(g);
+  if (!f) return null;
+  const isFranchise = g.franchises?.some((x) => x.id === f.id && x.name === f.name);
+  return seriesForFranchise({ id: isFranchise ? f.id : -f.id, name: f.name });
+}
+
 function summaryFor(g: IgdbGame) {
   const s = g.summary?.replace(/\s+/g, " ").trim();
   if (!s) return null;
@@ -268,6 +292,7 @@ const FAMILY_SELECT = {
   trailerYoutubeId: true,
   igdbId: true,
   igdbCheckedAt: true,
+  seriesId: true,
 } as const;
 
 /**
@@ -308,6 +333,7 @@ export async function enrichGame(gameId: string): Promise<boolean> {
       publisher: companyFor(match, "publisher"),
       trailerYoutubeId: trailerFor(match),
     };
+    const seriesId = family.some((g) => !g.seriesId) ? await seriesIdFor(match) : null;
     for (const g of family) {
       await prisma.game.update({
         where: { id: g.id },
@@ -320,6 +346,8 @@ export async function enrichGame(gameId: string): Promise<boolean> {
           publisher: g.publisher ?? shared.publisher,
           trailerYoutubeId: g.trailerYoutubeId ?? shared.trailerYoutubeId,
           screenshots: g.screenshots === "[]" && shots.length ? JSON.stringify(shots) : g.screenshots,
+          // A series staff picked by hand stays.
+          seriesId: g.seriesId ?? seriesId,
         },
       });
     }
@@ -362,6 +390,39 @@ export async function enrichPending(limit: number) {
   }
   const remaining = await prisma.game.count({ where: { igdbCheckedAt: null } });
   return { checked: matched + missed, matched, missed, remaining, error, stopped };
+}
+
+const SERIES_CURSOR_KEY = "igdb-series-cursor";
+
+/**
+ * Puts games matched on IGDB before series existed into their series: one IGDB request per 500
+ * games, walking up the IGDB ids from where the last run stopped (kept in SiteSetting), so each
+ * game is asked about once. Games matched later get their series in enrichGame.
+ */
+export async function backfillSeries(batches = 2) {
+  let cursor = Number(await getSetting(SERIES_CURSOR_KEY)) || 0;
+  let linked = 0;
+  for (let b = 0; b < batches; b++) {
+    const rows = await prisma.game.findMany({
+      where: { igdbId: { gt: cursor } },
+      orderBy: { igdbId: "asc" },
+      take: 1000,
+      select: { igdbId: true },
+    });
+    const ids = [...new Set(rows.map((r) => r.igdbId!))].slice(0, 500);
+    if (!ids.length) break;
+    const found = await query<Pick<IgdbGame, "id" | "franchises" | "collections">>(
+      "games",
+      `fields franchises.name,collections.name; where id = (${ids.join(",")}); limit 500;`,
+    );
+    for (const g of found) {
+      const seriesId = await seriesIdFor(g);
+      if (seriesId) linked += (await prisma.game.updateMany({ where: { igdbId: g.id, seriesId: null }, data: { seriesId } })).count;
+    }
+    cursor = ids[ids.length - 1];
+    await setSetting(SERIES_CURSOR_KEY, String(cursor));
+  }
+  return { linked, cursor };
 }
 
 /**

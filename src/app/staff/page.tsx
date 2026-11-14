@@ -15,14 +15,15 @@ import { SubmitButton } from "@/components/client";
 import { LocalTime } from "@/components/LocalTime";
 import { StaffBadge } from "@/components/StaffBadge";
 import { Avatar, EmptyState, PageHeader } from "@/components/ui";
-import { DeleteAccountForm, HomeBackgroundForm, RulesForm, SuspendForm, WarnForm } from "./forms";
+import { DeleteAccountForm, HomeBackgroundForm, ImportPlayersForm, RulesForm, SuspendForm, WarnForm } from "./forms";
+import { queuedCount } from "@/lib/psn/import-queue";
 import { DEFAULT_GUIDE_RULES } from "@/lib/guide-rules";
 import { GUIDE_RULES_KEY, HOME_BACKGROUND_KEY } from "@/lib/site-settings";
 import { GameArt } from "@/components/art";
 
 export const metadata: Metadata = { title: "Staff dashboard", robots: { index: false } };
 
-type Tab = "overview" | "online" | "requests" | "members" | "staff" | "rules" | "home" | "log";
+type Tab = "overview" | "online" | "requests" | "members" | "staff" | "rules" | "home" | "players" | "log";
 
 /**
  * The staff dashboard. Moderators see the community tools (reports, online
@@ -39,7 +40,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     ["online", "Online flags"],
     ["requests", "Guide requests"],
     ["members", "Members"],
-    ...(isAdmin(me) ? ([["staff", "Staff"], ["rules", "Rules"], ["home", "Home page"]] as [Tab, string][]) : []),
+    ...(isAdmin(me) ? ([["staff", "Staff"], ["rules", "Rules"], ["home", "Home page"], ["players", "PSN players"]] as [Tab, string][]) : []),
     ["log", "Audit log"],
   ];
   const tab = (tabs.find(([k]) => k === sp.tab)?.[0] ?? "overview") as Tab;
@@ -77,6 +78,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
         </div>
       )}
       {tab === "home" && isAdmin(me) && <HomeBackgroundForm url={await getSetting(HOME_BACKGROUND_KEY)} />}
+      {tab === "players" && isAdmin(me) && <ImportPlayers />}
       {tab === "log" && <AuditLog />}
     </div>
   );
@@ -91,6 +93,33 @@ function TwoStepFirst() {
       <Link href="/settings#two-step" className="btn-primary">
         Set it up in Settings
       </Link>
+    </div>
+  );
+}
+
+/** Add PSN players to the leaderboards from a list of names, level and trophy totals only. */
+async function ImportPlayers() {
+  const [waiting, added] = await Promise.all([queuedCount(), prisma.psnPlayer.count({ where: { summaryOnly: true } })]);
+  return (
+    <div className="grid gap-6 md:grid-cols-[1fr_260px]">
+      <section className="card p-5">
+        <h2 className="mb-1 font-bold">Add PSN players</h2>
+        <p className="mb-4 text-sm text-muted">
+          Players added here show on the leaderboards with their level and trophy totals, refreshed weekly. Their games aren&apos;t stored, which keeps the
+          database small. About 240 are added an hour, one PSN request each. Names already tracked are skipped.
+        </p>
+        <ImportPlayersForm />
+      </section>
+      <aside className="space-y-3">
+        <div className="card p-4">
+          <span className="block text-2xl font-bold tabular-nums">{formatNumber(waiting)}</span>
+          <span className="text-xs text-muted">Waiting to be added</span>
+        </div>
+        <div className="card p-4">
+          <span className="block text-2xl font-bold tabular-nums">{formatNumber(added)}</span>
+          <span className="text-xs text-muted">Added from lists so far</span>
+        </div>
+      </aside>
     </div>
   );
 }

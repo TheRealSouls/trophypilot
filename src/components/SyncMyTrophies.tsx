@@ -14,7 +14,7 @@ type Job = { status: string; gamesSynced: number; trophiesSynced: number; remain
  * the sync every couple of seconds until it's done, showing the result
  * underneath. Same once-an-hour limit as Settings.
  */
-export function SyncMyTrophies() {
+export function SyncMyTrophies({ wide = false }: { wide?: boolean } = {}) {
   const [state, action, pending] = useActionState(syncNow, null);
   const [message, setMessage] = useState<{ text: string; bad?: boolean } | null>(null);
   const [running, setRunning] = useState(false);
@@ -85,10 +85,11 @@ export function SyncMyTrophies() {
   const busy = pending || running;
   return (
     <form action={action} className="relative">
-      <button type="submit" disabled={busy} aria-busy={busy} className="btn-primary px-3 py-2" title="Sync my trophies">
+      {/* wide: a full-width button with its label, as in a game page's sidebar. */}
+      <button type="submit" disabled={busy} aria-busy={busy} className={wide ? "btn-primary w-full" : "btn-primary px-3 py-2"} title="Sync my trophies">
         <SyncIcon size={16} className={busy ? "animate-spin" : undefined} />
-        <span className="hidden xl:inline">{busy ? "Syncing…" : "Sync my trophies"}</span>
-        <span className="sr-only xl:hidden">{busy ? "Syncing" : "Sync my trophies"}</span>
+        <span className={wide ? undefined : "hidden xl:inline"}>{busy ? "Syncing…" : "Sync my trophies"}</span>
+        {!wide && <span className="sr-only xl:hidden">{busy ? "Syncing" : "Sync my trophies"}</span>}
       </button>
       <p
         role={message?.bad ? "alert" : "status"}

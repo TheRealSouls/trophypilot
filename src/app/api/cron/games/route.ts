@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { enrichPending, igdbEnabled } from "@/lib/igdb";
+import { backfillSeries, enrichPending, igdbEnabled } from "@/lib/igdb";
 import { bust } from "@/lib/cache";
 import { refreshGamePopularity, warmGamesList } from "@/lib/games-list";
 
@@ -28,9 +28,11 @@ export async function GET(req: Request) {
       // "Most played" counts, then the common games list pages, so they're ready before anyone asks.
       const popularity = await refreshGamePopularity().catch((err) => ({ error: String(err) }));
       const igdb = igdbEnabled() ? await enrichPending(PER_RUN) : { skipped: "IGDB_CLIENT_ID and IGDB_CLIENT_SECRET are not set" };
-      bust("games");
+      // Series for games matched before series existed (a request per 500 games; nothing once caught up).
+      const series = igdbEnabled() ? await backfillSeries().catch((err) => ({ error: String(err) })) : null;
+      bust("games", "series");
       await warmGamesList().catch((err) => console.error("[games] warm failed", err));
-      console.log("[cron/games]", JSON.stringify({ igdb, popularityUpdated: popularity }).slice(0, 1000));
+      console.log("[cron/games]", JSON.stringify({ igdb, series, popularityUpdated: popularity }).slice(0, 1000));
     } catch (err) {
       console.error("[cron/games] failed", err);
     }

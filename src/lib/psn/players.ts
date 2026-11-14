@@ -391,7 +391,8 @@ export async function datePlatinums(accountId: string, max = 5) {
  */
 export async function discoverPlayers({ maxNew = 50, seeds = 5, pauseMs = 300 } = {}) {
   const sources = await prisma.psnPlayer.findMany({
-    where: { friendsCheckedAt: null, hidden: false, trophiesPrivate: false },
+    // Not summary-only players: a staff list shouldn't snowball into thousands more through their friends.
+    where: { friendsCheckedAt: null, hidden: false, trophiesPrivate: false, summaryOnly: false },
     orderBy: { points: "desc" },
     take: seeds,
     select: { accountId: true, onlineId: true },

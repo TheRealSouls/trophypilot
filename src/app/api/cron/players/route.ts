@@ -4,6 +4,7 @@ import { discoverPlayers, refreshPlayer, refreshSummary } from "@/lib/psn/player
 import { toPsnError } from "@/lib/psn/real";
 import { getProvider, isDemoMode } from "@/lib/psn/sync";
 import { keepListsFresh } from "@/lib/psn/catalogue";
+import { workQueue } from "@/lib/psn/import-queue";
 import { cleanUpIdleClubs } from "@/lib/idle-clubs";
 import { sendSessionReminders } from "@/lib/session-reminders";
 
@@ -31,6 +32,10 @@ const FULL_REFRESH_EVERY_MS = 14 * 86_400_000;
 /** Between those, a one-request summary refresh (level, totals) at most daily keeps the weekly and monthly boards moving. */
 const SUMMARY_EVERY_MS = 86_400_000;
 const SUMMARIES_PER_RUN = Math.max(0, Number(process.env.PSN_SUMMARIES_PER_RUN) || 15);
+/** Summary-only players (added from a staff list) refresh weekly, not daily. */
+const SUMMARY_ONLY_EVERY_MS = 7 * 86_400_000;
+/** Names from the staff import list added per run, one PSN request each. */
+const IMPORTS_PER_RUN = Math.max(0, Number(process.env.PSN_IMPORTS_PER_RUN) || 40);
 
 /** One run at a time: a slow run (PSN rate limits) mustn't overlap the next hour's. */
 let running = false;
@@ -69,6 +74,8 @@ async function runPlayersJob() {
     where: {
       hidden: false,
       trophiesPrivate: false,
+      // Summary-only players never get their games list read.
+      summaryOnly: false,
       OR: [{ avgCompletion: null }, { ultraRare: null }],
       // Not ones done in the last few hours: a player with no games keeps empty figures and mustn't hog every run.
       AND: [{ OR: [{ titlesRefreshedAt: null }, { titlesRefreshedAt: { lt: new Date(Date.now() - 6 * 3_600_000) } }] }],
@@ -83,6 +90,7 @@ async function runPlayersJob() {
       ? await prisma.psnPlayer.findMany({
           where: {
             hidden: false,
+            summaryOnly: false,
             onlineId: { notIn: missing.map((p) => p.onlineId) },
             // Only players due their fortnightly full refresh.
             OR: [{ titlesRefreshedAt: null }, { titlesRefreshedAt: { lt: new Date(Date.now() - FULL_REFRESH_EVERY_MS) } }],
@@ -114,7 +122,10 @@ async function runPlayersJob() {
       where: {
         hidden: false,
         trophiesPrivate: false,
-        updatedAt: { lt: new Date(Date.now() - SUMMARY_EVERY_MS) },
+        OR: [
+          { summaryOnly: false, updatedAt: { lt: new Date(Date.now() - SUMMARY_EVERY_MS) } },
+          { summaryOnly: true, updatedAt: { lt: new Date(Date.now() - SUMMARY_ONLY_EVERY_MS) } },
+        ],
         onlineId: { notIn: stale.map((p) => p.onlineId) },
       },
       orderBy: { updatedAt: "asc" },
@@ -131,6 +142,12 @@ async function runPlayersJob() {
     }
   }
 
+  // Players from the staff import list, after the refreshes so a long list doesn't hold them up.
+  const imported =
+    IMPORTS_PER_RUN > 0 && !refreshed.some((r) => "error" in r && /rate|sign/i.test(String(r.error)))
+      ? await workQueue(IMPORTS_PER_RUN).catch((err) => ({ error: toPsnError(err).message }))
+      : null;
+
   const discovery =
     process.env.PSN_DISCOVERY === "on" && DISCOVER_PER_RUN > 0
       ? await discoverPlayers({ maxNew: DISCOVER_PER_RUN }).catch((err) => ({ error: toPsnError(err).message }))
@@ -142,5 +159,5 @@ async function runPlayersJob() {
     grown: Math.max(0, Number(process.env.PSN_GROWN_LISTS_PER_RUN) || 5),
   }).catch((err) => ({ error: toPsnError(err).message }));
 
-  return { refreshed, summarised: summarised.length, discovery, lists, clubs, reminders };
+  return { refreshed, summarised: summarised.length, imported, discovery, lists, clubs, reminders };
 }

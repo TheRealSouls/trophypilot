@@ -235,6 +235,9 @@ model PsnPlayer {
   // The ultra rare tally per list, compact: { "NPWR12345_00": [count, lastUpdated in epoch seconds] }. One small
   // value per player instead of a row per game, since big libraries run to thousands of lists.
   rareLists         Json?
+  // Added from a staff list of names (Staff > Players): only the level and trophy totals are kept and
+  // refreshed weekly, never the games list, so thousands of them stay small in the database.
+  summaryOnly       Boolean   @default(false)
 
   titles    PsnPlayerTitle[]
   snapshots PsnPlayerSnapshot[]
@@ -343,6 +346,10 @@ model Game {
   // igdbCheckedAt is set even when nothing matched, so a title is looked up once.
   igdbId             Int?
   igdbCheckedAt      DateTime?
+  // The series the game belongs to (Call of Duty, Uncharted), from IGDB's franchise or set by staff.
+  // Every trophy list of one game shares it.
+  seriesId           String?
+  series             Series?   @relation(fields: [seriesId], references: [id], onDelete: SetNull)
 
   groups        TrophyGroup[]
   trophies      Trophy[]
@@ -361,6 +368,18 @@ model Game {
 
   @@index([title])
   @@index([titleKey])
+  @@index([seriesId])
+  @@index([igdbId])
+}
+
+// A game series for the Series tab on game pages. igdbId is IGDB's franchise id when it came from there;
+// series staff make by hand have none.
+model Series {
+  id     String @id @default(cuid())
+  slug   String @unique
+  name   String
+  igdbId Int?   @unique
+  games  Game[]
 }
 
 model TrophyGroup {

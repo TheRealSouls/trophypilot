@@ -2,7 +2,8 @@
 
 import { useActionState, useOptimistic, useState, useTransition } from "react";
 import clsx from "clsx";
-import { flagOnline, rateGame, setNowPlaying, setStaffHours, setUnobtainable, toggleWishlist } from "@/actions/games";
+import { flagOnline, rateGame, setGameSeries, setNowPlaying, setStaffHours, setUnobtainable, toggleWishlist } from "@/actions/games";
+import { GamePicker } from "@/components/GamePicker";
 import { SubmitButton } from "@/components/client";
 import { FormMessage } from "@/components/ui";
 
@@ -244,6 +245,42 @@ export function StaffHoursForm({ gameId, hours }: { gameId: string; hours: numbe
       </div>
       <FormMessage state={state} />
     </form>
+  );
+}
+
+/** Staff: name this game's series (empty takes it out), and add other games to it. */
+export function SeriesForms({ gameId, series }: { gameId: string; series: string | null }) {
+  const [state, action] = useActionState(setGameSeries, null);
+  const [addState, addAction] = useActionState(setGameSeries, null);
+  // A new picker after each game is added, so the field empties.
+  const [added, setAdded] = useState(0);
+  return (
+    <div className="space-y-5">
+      <form action={action} className="space-y-2">
+        <input type="hidden" name="gameId" value={gameId} />
+        <label htmlFor="series-name" className="label">
+          Series name
+        </label>
+        <p className="text-xs text-muted">Every platform of this game moves together. An existing series with the same name is reused. Empty takes the game out.</p>
+        <div className="flex gap-2">
+          <input id="series-name" name="name" defaultValue={series ?? ""} maxLength={80} placeholder="Call of Duty" className="input" />
+          <SubmitButton className="btn-ghost" pendingText="Saving…">
+            Save
+          </SubmitButton>
+        </div>
+        <FormMessage state={state} />
+      </form>
+      {series && (
+        <form action={(fd) => { addAction(fd); setAdded((n) => n + 1); }} className="space-y-2">
+          <input type="hidden" name="gameId" value={gameId} />
+          <GamePicker key={added} name="otherGameId" label={`Add a game to ${series}`} required />
+          <SubmitButton className="btn-ghost" pendingText="Adding…">
+            Add to series
+          </SubmitButton>
+          <FormMessage state={addState} />
+        </form>
+      )}
+    </div>
   );
 }
 

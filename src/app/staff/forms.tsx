@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { deleteMemberAccount, saveForumRules, saveGuideRules, saveHomeBackground, suspendMember, warnMember } from "@/actions/staff";
+import { deleteMemberAccount, queuePsnPlayers, saveForumRules, saveGuideRules, saveHomeBackground, suspendMember, warnMember } from "@/actions/staff";
 import { uploadPicture } from "@/lib/shrink-image";
 import { SubmitButton } from "@/components/client";
 import { FormMessage } from "@/components/ui";
@@ -146,6 +146,58 @@ export function HomeBackgroundForm({ url }: { url: string | null }) {
             Back to the game covers
           </button>
         )}
+      </div>
+      <FormMessage state={state} />
+    </form>
+  );
+}
+
+/** Paste (or load from a .txt file) PSN Online IDs to add to the boards, one per line. */
+export function ImportPlayersForm() {
+  const [state, action] = useActionState(queuePsnPlayers, null);
+  const [names, setNames] = useState("");
+  // Empty the box once the names are queued.
+  useEffect(() => {
+    if (state?.ok) setNames("");
+  }, [state]);
+  const count = names.split(/[\s,;]+/).filter(Boolean).length;
+  return (
+    <form action={action} className="space-y-3">
+      <div>
+        <label htmlFor="import-names" className="label">
+          PSN Online IDs
+        </label>
+        <textarea
+          id="import-names"
+          name="names"
+          rows={10}
+          value={names}
+          onChange={(e) => setNames(e.target.value)}
+          placeholder={"One per line, for example\nGamingWithFlacy"}
+          className="input font-mono text-sm"
+          aria-describedby="import-names-count"
+        />
+        <p id="import-names-count" className="mt-1 text-xs text-muted">
+          {count} name{count === 1 ? "" : "s"}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="btn-ghost cursor-pointer">
+          Load a .txt file
+          <input
+            type="file"
+            accept=".txt,text/plain"
+            className="sr-only"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) setNames(await file.text());
+            }}
+          />
+        </label>
+        <SubmitButton className="btn-primary" pendingText="Queueing…">
+          Queue players
+        </SubmitButton>
       </div>
       <FormMessage state={state} />
     </form>

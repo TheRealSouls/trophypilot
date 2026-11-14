@@ -10,3 +10,7 @@ export const GUIDE_RULES_KEY = "guide-rules";
 export async function getSetting(key: string) {
   return (await prisma.siteSetting.findUnique({ where: { key } }))?.value ?? null;
 }
+
+export async function setSetting(key: string, value: string, updatedById?: string) {
+  await prisma.siteSetting.upsert({ where: { key }, create: { key, value, updatedById }, update: { value, updatedById } });
+}
