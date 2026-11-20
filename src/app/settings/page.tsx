@@ -20,6 +20,7 @@ import QRCode from "qrcode";
 import { DeleteAccountForm, LinkPsnForm, PrivacyForm, ProfileForm, ResendVerificationForm, SyncButton, ThemeForm, VaultForm, VerifyPsnButton } from "./forms";
 import { needsVerification } from "@/lib/email";
 import { LookForm } from "./LookForm";
+import { Celebration } from "@/components/Celebration";
 
 export const metadata: Metadata = { title: "Settings", robots: { index: false } };
 
@@ -86,6 +87,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </Notice>
       )}
 
+      {verified === "1" && <Celebration title="Email confirmed" body="You can post, message and start clubs now." />}
       {verified === "1" && (
         <Notice tone="good" className="mb-6">
           Your email address is confirmed. You can post, message and start clubs now.
@@ -217,6 +219,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                         </span>
                         <span className="flex-1">
                           {formatDate(j.startedAt, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                          <span className="ml-2 text-xs text-muted">{j.trigger === "AUTO" ? "Automatic" : j.trigger === "IMPORT" ? "First import" : "Sync now"}</span>
                           {j.error && <span className="block text-xs text-bad">{j.error}</span>}
                         </span>
                         <span className="text-xs text-muted">

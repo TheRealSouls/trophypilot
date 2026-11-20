@@ -69,9 +69,16 @@ export function SyncMyTrophies({ wide = false }: { wide?: boolean } = {}) {
     };
     const t = setInterval(() => void tick(), 2000);
     void tick();
+    // Never leave "Syncing your trophies…" up for ever if the sync never reports back.
+    const giveUp = setTimeout(() => {
+      stop = true;
+      setRunning(false);
+      setMessage(null);
+    }, 3 * 60_000);
     return () => {
       stop = true;
       clearInterval(t);
+      clearTimeout(giveUp);
     };
   }, [running, router, reload]);
 

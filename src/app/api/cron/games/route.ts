@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { cronRefusal } from "@/lib/cron-auth";
 import { backfillSeries, enrichPending, igdbEnabled } from "@/lib/igdb";
 import { bust } from "@/lib/cache";
 import { refreshGamePopularity, warmGamesList } from "@/lib/games-list";
@@ -17,10 +18,8 @@ export const maxDuration = 300;
 const PER_RUN = Math.max(1, Number(process.env.IGDB_GAMES_PER_RUN) || 100);
 
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const refused = cronRefusal(req);
+  if (refused) return refused;
   // Answered straight away and done after the response: a hundred IGDB look-ups take longer than
   // schedulers and Cloudflare wait, and cut-off runs never got to refreshing the lists.
   after(async () => {

@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { cronRefusal } from "@/lib/cron-auth";
 import { prisma } from "@/lib/db";
 import { discoverPlayers, refreshPlayer, refreshSummary } from "@/lib/psn/players";
 import { toPsnError } from "@/lib/psn/real";
@@ -41,10 +42,8 @@ const IMPORTS_PER_RUN = Math.max(0, Number(process.env.PSN_IMPORTS_PER_RUN) || 1
 let running = false;
 
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const refused = cronRefusal(req);
+  if (refused) return refused;
   if (running) return NextResponse.json({ skipped: "the previous run is still going" });
   // Answer straight away and work after the response. The work takes minutes, and schedulers (about 30
   // seconds) and Cloudflare (100 seconds) gave up and cut runs off part-way, so most never finished.

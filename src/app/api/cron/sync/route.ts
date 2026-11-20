@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { cronRefusal } from "@/lib/cron-auth";
 import { accountsDueForSync, syncUser } from "@/lib/psn/sync";
 
 /**
@@ -16,10 +17,8 @@ export const maxDuration = 300;
 const BATCH = Math.max(1, Number(process.env.PSN_SYNC_PER_RUN) || 10);
 
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const refused = cronRefusal(req);
+  if (refused) return refused;
 
   const due = await accountsDueForSync(BATCH);
 

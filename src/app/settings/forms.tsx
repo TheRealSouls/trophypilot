@@ -210,7 +210,8 @@ export function SyncButton({ nextAt, busy }: { nextAt: string | null; busy: bool
           </SubmitButton>
         )}
       </div>
-      <FormMessage state={state} />
+      {/* "Syncing your trophies…" only while it is; the result shows in Recent syncs below. */}
+      <FormMessage state={state?.error || busy || following ? state : null} />
     </form>
   );
 }

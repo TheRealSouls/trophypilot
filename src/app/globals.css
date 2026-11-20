@@ -495,3 +495,35 @@ body {
 .medal-glow > * {
   position: relative;
 }
+
+/* The "Email confirmed" card: pops in, then fades as it closes. */
+@keyframes celebrate-pop {
+  0% { opacity: 0; transform: scale(0.85); }
+  15% { opacity: 1; transform: scale(1.03); }
+  25% { transform: scale(1); }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.celebrate-pop {
+  animation: celebrate-pop 2s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .celebrate-pop {
+    animation: none;
+  }
+}
+
+/* The sign-up demo's cursor: a ripple where it clicks, and a blinking caret in the field it types in. */
+@keyframes demo-click {
+  from { transform: scale(0.3); opacity: 0.9; }
+  to { transform: scale(1.6); opacity: 0; }
+}
+.demo-click {
+  animation: demo-click 0.4s ease-out both;
+}
+@keyframes demo-caret {
+  50% { opacity: 0; }
+}
+.demo-caret {
+  animation: demo-caret 1s steps(1) infinite;
+}
