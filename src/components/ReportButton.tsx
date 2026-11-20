@@ -21,6 +21,7 @@ export function ReportButton({
   what = "this",
   label = "Report",
   className,
+  look = "link",
 }: {
   type: ReportType;
   id: string;
@@ -31,6 +32,8 @@ export function ReportButton({
   /** The button text, "Report" unless the place needs more ("Report member"). */
   label?: string;
   className?: string;
+  /** "button": a bordered button like its neighbours (profile header); "link": small text (comments, posts). */
+  look?: "link" | "button";
 }) {
   const { me } = useMe();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -51,7 +54,7 @@ export function ReportButton({
       <button
         type="button"
         onClick={() => dialog.current?.showModal()}
-        className={clsx("text-xs text-muted underline-offset-2 hover:text-bad hover:underline", className)}
+        className={clsx(look === "button" ? "btn-ghost text-muted hover:text-bad" : "text-xs text-muted underline-offset-2 hover:text-bad hover:underline", className)}
         aria-label={`Report ${what}`}
       >
         {label}

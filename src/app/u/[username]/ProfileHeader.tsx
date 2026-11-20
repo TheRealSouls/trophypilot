@@ -209,40 +209,6 @@ export async function ProfileHeader({
               <SubmitButton className={iFollow ? "btn-ghost" : "btn-primary"}>{iFollow ? "Following" : "Follow"}</SubmitButton>
             </form>
           )}
-          {relation !== "SELF" && viewerId && owner.allowMessages !== "NOBODY" && (
-            <Link href={`/messages?to=${owner.username}`} className="btn-ghost">Message</Link>
-          )}
-          {relation !== "SELF" && (
-            <Link href={`/compare?b=${owner.username}`} className="btn-ghost">Compare</Link>
-          )}
-          {staffViewing && (
-            <form action={setTrusted}>
-              <input type="hidden" name="userId" value={owner.id} />
-              <input type="hidden" name="trusted" value={owner.trusted ? "0" : "1"} />
-              <SubmitButton className="btn-ghost">{owner.trusted ? "Stop trusting guides" : "Trust to publish guides"}</SubmitButton>
-            </form>
-          )}
-          {relation !== "SELF" && (
-            <ReportButton type="USER" id={owner.id} what={`${display}'s profile`} className="self-center px-1" />
-          )}
-          {relation !== "SELF" && viewerId && (
-            <form action={toggleBlock} className="self-center">
-              <input type="hidden" name="userId" value={owner.id} />
-              {iBlocked ? (
-                <>
-                  <input type="hidden" name="block" value="0" />
-                  <SubmitButton className="px-1 text-xs text-muted underline-offset-2 hover:text-text hover:underline">Unblock</SubmitButton>
-                </>
-              ) : (
-                <ConfirmButton
-                  message={`Block ${display}? Neither of you will be able to message, friend or follow the other. They won't be told.`}
-                  className="px-1 text-xs text-muted underline-offset-2 hover:text-bad hover:underline"
-                >
-                  Block
-                </ConfirmButton>
-              )}
-            </form>
-          )}
           {relation === "NONE" && viewerId && (
             <form action={addFriend}>
               <input type="hidden" name="username" value={owner.username} />
@@ -266,6 +232,41 @@ export async function ProfileHeader({
               <ConfirmButton message={`Remove ${owner.username} from your friends?`} className="btn-ghost">
                 Friends
               </ConfirmButton>
+            </form>
+          )}
+          {relation !== "SELF" && viewerId && owner.allowMessages !== "NOBODY" && (
+            <Link href={`/messages?to=${owner.username}`} className="btn-ghost">Message</Link>
+          )}
+          {relation !== "SELF" && (
+            <Link href={`/compare?b=${owner.username}`} className="btn-ghost">Compare</Link>
+          )}
+          {staffViewing && (
+            <form action={setTrusted}>
+              <input type="hidden" name="userId" value={owner.id} />
+              <input type="hidden" name="trusted" value={owner.trusted ? "0" : "1"} />
+              <SubmitButton className="btn-ghost">{owner.trusted ? "Stop trusting guides" : "Trust to publish guides"}</SubmitButton>
+            </form>
+          )}
+          {/* Report and Block last, styled like the rest so the row lines up. */}
+          {relation !== "SELF" && (
+            <ReportButton type="USER" id={owner.id} what={`${display}'s profile`} look="button" />
+          )}
+          {relation !== "SELF" && viewerId && (
+            <form action={toggleBlock}>
+              <input type="hidden" name="userId" value={owner.id} />
+              {iBlocked ? (
+                <>
+                  <input type="hidden" name="block" value="0" />
+                  <SubmitButton className="btn-ghost">Unblock</SubmitButton>
+                </>
+              ) : (
+                <ConfirmButton
+                  message={`Block ${display}? Neither of you will be able to message, friend or follow the other. They won't be told.`}
+                  className="btn-ghost text-muted hover:text-bad"
+                >
+                  Block
+                </ConfirmButton>
+              )}
             </form>
           )}
         </div>

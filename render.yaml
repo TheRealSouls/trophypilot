@@ -1,12 +1,12 @@
-# Render Blueprint: free web service. The data lives in a free Supabase
-# PostgreSQL database (set DATABASE_URL when Render asks), so it survives
-# restarts and sleeping.
+# Render Blueprint: Starter web service (always on, no sleeping). The data lives in a
+# Supabase PostgreSQL database (set DATABASE_URL when Render asks), so it survives
+# restarts and deploys.
 services:
   - type: web
-    # Also the free address: https://trophypilot.onrender.com. Renaming it makes Render create a new service.
+    # Also the onrender address: https://trophypilot.onrender.com. Renaming it makes Render create a new service.
     name: trophypilot
     runtime: node
-    plan: free
+    plan: starter
     region: frankfurt
     # db push creates/updates the tables; it refuses changes that would delete data, which fails the build safely.
     buildCommand: npm ci --include=dev && npx prisma db push && npm run db:trophy-slugs && npm run demo:user && npm run build
