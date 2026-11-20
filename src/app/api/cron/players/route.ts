@@ -34,8 +34,8 @@ const SUMMARY_EVERY_MS = 86_400_000;
 const SUMMARIES_PER_RUN = Math.max(0, Number(process.env.PSN_SUMMARIES_PER_RUN) || 15);
 /** Summary-only players (added from a staff list) refresh weekly, not daily. */
 const SUMMARY_ONLY_EVERY_MS = 7 * 86_400_000;
-/** Names from the staff import list added per run, one PSN request each. */
-const IMPORTS_PER_RUN = Math.max(0, Number(process.env.PSN_IMPORTS_PER_RUN) || 40);
+/** Names from the staff import list added per run, one PSN request each (runs come about hourly, since each takes a while). */
+const IMPORTS_PER_RUN = Math.max(0, Number(process.env.PSN_IMPORTS_PER_RUN) || 100);
 
 /** One run at a time: a slow run (PSN rate limits) mustn't overlap the next hour's. */
 let running = false;

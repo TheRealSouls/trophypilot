@@ -106,7 +106,7 @@ async function ImportPlayers() {
         <h2 className="mb-1 font-bold">Add PSN players</h2>
         <p className="mb-4 text-sm text-muted">
           Players added here show on the leaderboards with their level and trophy totals, refreshed weekly. Their games aren&apos;t stored, which keeps the
-          database small. About 240 are added an hour, one PSN request each. Names already tracked are skipped.
+          database small. Up to 100 are added each time the players job runs (about once an hour), one PSN request each, so 10,000 take about four days. Names already tracked are skipped.
         </p>
         <ImportPlayersForm />
       </section>
