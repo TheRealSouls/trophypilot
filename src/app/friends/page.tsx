@@ -55,7 +55,7 @@ export default async function FriendsPage() {
   return (
     <div>
       <PageHeader kicker="Social" title="Friends">
-        Compare progress, chase each other up the boards, and team up for online trophies.
+        Compare progress, chase each other up the boards and team up for online trophies.
       </PageHeader>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_320px] [&>*]:min-w-0">

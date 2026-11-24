@@ -85,7 +85,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
     return (
       <div className="mx-auto max-w-5xl">
         <PageHeader kicker="Head to head" title="Compare hunters">
-          Put two members side by side: levels, platinums, and progress on every game you both play.
+          Put two members side by side: levels, platinums and progress on every game you both play.
         </PageHeader>
         {form}
         {problem && "missing" in problem && (

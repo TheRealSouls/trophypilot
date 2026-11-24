@@ -8,7 +8,8 @@ import { REPORT_REASONS, REPORT_TYPE_NAMES, type ReportType } from "@/lib/report
 import { resolveReport } from "@/actions/reports";
 import { reviewGuide } from "@/actions/community";
 import { plainText } from "@/lib/rich-text";
-import { ConfirmButton, SubmitButton } from "@/components/client";
+import { SubmitButton } from "@/components/client";
+import { DeleteButton } from "@/components/DeleteButton";
 import { LocalTime } from "@/components/LocalTime";
 import { EmptyState, PageHeader } from "@/components/ui";
 
@@ -133,13 +134,17 @@ export default async function ReportsPage() {
                     <span className="text-xs text-muted">A private message: the text above is what was reported.</span>
                   )}
                   {r.targetType !== "USER" && r.targetType !== "TROPHY_LIST" && (
-                    <form action={resolveReport}>
-                      <input type="hidden" name="reportId" value={r.id} />
-                      <input type="hidden" name="decision" value="remove" />
-                      <ConfirmButton message={`Delete this ${name.toLowerCase()}? This can't be undone.`} className="btn-danger px-3 py-1.5 text-xs">
-                        Remove it
-                      </ConfirmButton>
-                    </form>
+                    <DeleteButton
+                      action={resolveReport}
+                      fields={{ reportId: r.id, decision: "remove" }}
+                      confirm={`Delete this ${name.toLowerCase()}? This can't be undone.`}
+                      what={`this ${name.toLowerCase()}`}
+                      moderating
+                      defaultReason={r.reason === "HACKED" ? "CHEATING" : r.reason}
+                      className="btn-danger px-3 py-1.5 text-xs"
+                    >
+                      Remove it
+                    </DeleteButton>
                   )}
                   <form action={resolveReport}>
                     <input type="hidden" name="reportId" value={r.id} />

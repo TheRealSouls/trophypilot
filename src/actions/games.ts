@@ -23,6 +23,7 @@ const ratingSchema = z.object({
 /** A member's own difficulty (1 to 10) and quality (1 to 5 stars) for a game. 0 clears that part. */
 export async function rateGame(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
+  if (!(await rateLimit("rate-game", 30, 10 * 60_000, user.id))) return { error: "You're rating quickly. Wait a few minutes." };
   const parsed = ratingSchema.safeParse(Object.fromEntries(fd));
   if (!parsed.success) return { error: "Pick a difficulty from 1 to 10 and a rating from 1 to 5." };
   const { gameId, difficulty, rating } = parsed.data;
@@ -47,6 +48,7 @@ export async function rateGame(_: FormState, fd: FormData): Promise<FormState> {
 /** Adds a game to the member's wishlist, or takes it off. */
 export async function toggleWishlist(fd: FormData) {
   const user = await requireUser();
+  if (!(await rateLimit("wishlist", 60, 10 * 60_000, user.id))) return;
   const gameId = String(fd.get("gameId") ?? "");
   const game = await prisma.game.findUnique({ where: { id: gameId }, select: { id: true, slug: true } });
   if (!game) return;
@@ -67,6 +69,7 @@ const PLAYING_FOR_MS = 3 * 3600_000;
  */
 export async function setNowPlaying(fd: FormData) {
   const user = await requireUser();
+  if (!(await rateLimit("now-playing", 20, 10 * 60_000, user.id))) return;
   const gameId = (fd.get("gameId") as string) || null;
   const game = gameId ? await prisma.game.findUnique({ where: { id: gameId }, select: { id: true } }) : null;
   await prisma.user.update({

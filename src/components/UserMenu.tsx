@@ -68,6 +68,7 @@ export function UserMenu({
   const items: [string, string, React.ReactNode?][] = [
     [`/u/${username}`, "My profile"],
     ["/messages", "Messages", count(unread)],
+    ["/notifications", "Notifications"],
     ["/friends", "Friends", count(pending)],
     ["/clubs", "Clubs"],
     ["/compare", "Compare hunters"],

@@ -1,10 +1,12 @@
 "use server";
 
+import { rateLimit } from "@/lib/rate-limit";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { logStaff } from "@/lib/staff";
+import { notifyRemoval, removalFrom } from "@/lib/removals";
 import { requireUser } from "@/lib/auth";
 import { verifyFirst } from "@/lib/email";
 import { formText, hateSpeechError } from "@/lib/moderation";
@@ -16,6 +18,7 @@ import type { FormState } from "./auth";
 
 export async function addTip(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
+  if (!(await rateLimit("tip", 10, 10 * 60_000, user.id))) return { error: "You're adding tips quickly. Wait a few minutes." };
   const unverified = verifyFirst(user);
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
@@ -35,6 +38,7 @@ export async function addTip(_: FormState, fd: FormData): Promise<FormState> {
 
 export async function voteTip(fd: FormData) {
   const user = await requireUser();
+  if (!(await rateLimit("tip-vote", 60, 60_000, user.id))) return;
   const tipId = String(fd.get("tipId"));
   const value = fd.get("value") === "-1" ? -1 : 1;
   const existing = await prisma.tipVote.findUnique({ where: { userId_tipId: { userId: user.id, tipId } } });
@@ -91,6 +95,7 @@ export async function setTrusted(fd: FormData) {
 /** Saves a guide to the member's favourites, or removes it. */
 export async function toggleGuideFavourite(fd: FormData) {
   const user = await requireUser();
+  if (!(await rateLimit("guide-fav", 60, 60_000, user.id))) return;
   const guide = await prisma.guide.findUnique({ where: { id: String(fd.get("guideId")) }, select: { id: true, slug: true } });
   if (!guide) return;
   const key = { userId_guideId: { userId: user.id, guideId: guide.id } };
@@ -113,6 +118,7 @@ const sessionSchema = z.object({
 
 export async function createSession(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
+  if (!(await rateLimit("session", 5, 60 * 60_000, user.id))) return { error: "You've started a few sessions just now. Try again in an hour." };
   const unverified = verifyFirst(user);
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
@@ -124,6 +130,10 @@ export async function createSession(_: FormState, fd: FormData): Promise<FormSta
   const trophies = wanted.length
     ? await prisma.trophy.findMany({ where: { id: { in: wanted }, gameId: parsed.data.gameId }, select: { id: true } })
     : [];
+  // At most a handful of upcoming sessions per host.
+  if ((await prisma.session.count({ where: { hostId: user.id, startsAt: { gte: new Date() } } })) >= 5) {
+    return { error: "You're hosting 5 upcoming sessions already. Cancel one or wait for one to finish." };
+  }
   const s = await prisma.session.create({
     data: {
       ...parsed.data,
@@ -139,6 +149,7 @@ export async function createSession(_: FormState, fd: FormData): Promise<FormSta
 
 export async function addSessionComment(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
+  if (!(await rateLimit("session-comment", 10, 60_000, user.id))) return { error: "Slow down a little." };
   const unverified = verifyFirst(user);
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
@@ -159,11 +170,15 @@ export async function deleteSessionComment(fd: FormData) {
   // The author, the session's host or an admin can remove a comment.
   if (!c || (c.authorId !== user.id && c.session.hostId !== user.id && !isStaff(user))) return;
   await prisma.sessionComment.delete({ where: { id: c.id } });
+  if (c.authorId !== user.id && c.session.hostId !== user.id) {
+    await notifyRemoval({ authorId: c.authorId, actorId: user.id, what: "your comment on a session", excerpt: c.body, url: `/sessions/${c.sessionId}`, removal: removalFrom(fd) });
+  }
   revalidatePath(`/sessions/${c.sessionId}`);
 }
 
 export async function toggleSession(fd: FormData) {
   const user = await requireUser();
+  if (!(await rateLimit("session-join", 30, 10 * 60_000, user.id))) return;
   const sessionId = String(fd.get("sessionId"));
   const session = await prisma.session.findUnique({ where: { id: sessionId }, include: { _count: { select: { members: true } } } });
   if (!session) return;

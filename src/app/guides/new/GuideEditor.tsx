@@ -350,7 +350,7 @@ export function GuideEditor({
           ) : (
             <>
               <p className="text-sm text-muted">
-                Optional. Say how to earn each trophy: where, when, and any trick to it. Leave one blank and it&apos;s left out of the guide. {written} of{" "}
+                Optional. Say how to earn each trophy: where, when and any trick to it. Leave one blank and it&apos;s left out of the guide. {written} of{" "}
                 {trophies.length} written.
               </p>
               <ul className="card divide-y divide-line">

@@ -116,10 +116,10 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
           : metric === "rare"
           ? r.rare != null
             ? `${formatNumber(r.rare)}${r.rarePartial ? "+" : ""}`
-            : "–"
+            : "n/a"
           : r.completion != null
             ? `${r.completion}%`
-            : "–";
+            : "n/a";
 
   return (
     <div>
@@ -356,7 +356,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
                           `${r.completion}%`
                         ) : (
                           <span className="text-faint" title="Not counted yet">
-                            –<span className="sr-only">not counted yet</span>
+                            n/a<span className="sr-only">not counted yet</span>
                           </span>
                         )}
                       </Td>
@@ -429,7 +429,7 @@ function RareCount({ rare, partial, allTime }: { rare: number | null; partial: b
   if (rare == null)
     return (
       <span className="text-faint" title={allTime ? "Not counted yet" : "Counted all time only for players who haven't joined"}>
-        –<span className="sr-only">{allTime ? "not counted yet" : "not counted for this period"}</span>
+        n/a<span className="sr-only">{allTime ? "not counted yet" : "not counted for this period"}</span>
       </span>
     );
   return partial ? (

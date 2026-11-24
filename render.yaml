@@ -11,7 +11,9 @@ services:
     # db push creates/updates the tables; it refuses changes that would delete data, which fails the build safely.
     buildCommand: npm ci --include=dev && npx prisma db push && npm run db:trophy-slugs && npm run demo:user && npm run build
     startCommand: npm start
-    healthCheckPath: /api/health
+    # /api/ping, not /api/health: Render restarts the server when a check takes over 5 seconds, and a database
+    # check queues behind busy cron jobs for that long. A restart then cut the jobs off part-way.
+    healthCheckPath: /api/ping
     autoDeploy: true
     envVars:
       - key: NODE_VERSION

@@ -91,20 +91,11 @@ export async function updateLook(_: FormState, fd: FormData): Promise<FormState>
     ? await prisma.userGame.findUnique({ where: { userId_gameId: { userId: user.id, gameId: bannerId } }, select: { gameId: true } })
     : null;
 
-  // Picture: default (PSN avatar or initial), the initial, a built-in one, or the icon of one of their games.
+  // Picture: default (PSN avatar or initial), the initial or a built-in one. (Game icons were retired.)
   const pick = given("avatar");
   let avatar: string | null = null;
   if (pick === "letter") avatar = "letter";
   else if (pick.startsWith("preset:") && Object.hasOwn(AVATAR_PRESETS, pick.slice(7))) avatar = pick;
-  else if (pick.startsWith("game:")) {
-    const owned = await prisma.userGame.findUnique({
-      where: { userId_gameId: { userId: user.id, gameId: pick.slice(5) } },
-      select: { game: { select: { iconUrl: true } } },
-    });
-    const icon = owned?.game.iconUrl?.replace(/^http:/, "https:");
-    if (!icon?.startsWith("https://")) return { error: "That game has no artwork to use as a picture." };
-    avatar = icon;
-  }
 
   // Favourite platinum: one of their own platinums, or none.
   const favId = given("favouritePlatinumGameId");

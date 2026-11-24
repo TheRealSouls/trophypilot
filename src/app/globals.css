@@ -527,3 +527,11 @@ body {
 .demo-caret {
   animation: demo-caret 1s steps(1) infinite;
 }
+
+/* Tailwind's reset sets margin: 0 on everything, which pins modal dialogs (Report, Remove) to the
+   top-left corner. Browsers centre them with auto margins, so put those back. */
+dialog:modal {
+  margin: auto;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}

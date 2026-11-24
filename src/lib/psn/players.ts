@@ -287,7 +287,10 @@ export async function countUltraRares(accountId: string, raw: RawTitle[], maxLoo
   }
 
   // Free first: unstarted lists are 0, finished lists we hold in full (with rarity) count from the catalogue.
-  const finishedIds = due.filter((t) => t.progress === 100).map((t) => t.id);
+  // At most FINISHED_PER_RUN per refresh: counting trophies across a few thousand lists at once took
+  // ten seconds and held a database connection the whole time. The rest wait for the next refresh.
+  const finishedIds = due.filter((t) => t.progress === 100).map((t) => t.id).slice(0, FINISHED_PER_RUN);
+  const finishedNow = new Set(finishedIds);
   const games = finishedIds.length
     ? await prisma.game.findMany({ where: { npCommunicationId: { in: finishedIds } }, select: { id: true, npCommunicationId: true, definedTrophies: true } })
     : [];
@@ -310,6 +313,9 @@ export async function countUltraRares(accountId: string, raw: RawTitle[], maxLoo
     if (t.progress === 0) {
       tally[t.id] = [0, t.at];
       counted++;
+    } else if (t.progress === 100 && !finishedNow.has(t.id)) {
+      // Counted on a later refresh (see FINISHED_PER_RUN).
+      continue;
     } else if (t.progress === 100 && g && h && g.definedTrophies && h._all >= g.definedTrophies && h.earnedRate === h._all) {
       tally[t.id] = [ultraBy.get(g.id) ?? 0, t.at];
       counted++;
@@ -350,6 +356,9 @@ export async function countUltraRares(accountId: string, raw: RawTitle[], maxLoo
   });
   return { counted, lookups, pending };
 }
+
+/** Finished lists counted from the catalogue per refresh (see countUltraRares). */
+const FINISHED_PER_RUN = 150;
 
 /** Looks up the exact date of the newest platinums we only know exist (one PSN request each). */
 export async function datePlatinums(accountId: string, max = 5) {

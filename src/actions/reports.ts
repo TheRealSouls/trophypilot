@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { logStaff } from "@/lib/staff";
+import { notifyRemoval, removalFrom } from "@/lib/removals";
 import { requireUser } from "@/lib/auth";
 import { isStaff } from "@/lib/forum";
 import { plainText } from "@/lib/rich-text";
@@ -122,7 +123,14 @@ export async function resolveReport(fd: FormData) {
   if (!report || report.status !== "OPEN") return;
   const remove = fd.get("decision") === "remove";
 
-  if (remove) await removeTarget(report.targetType as ReportType, report.targetId);
+  if (remove) {
+    // Who wrote it, read before it's gone, so they can be told why.
+    const author = await authorOf(report.targetType as ReportType, report.targetId);
+    await removeTarget(report.targetType as ReportType, report.targetId);
+    if (author) {
+      await notifyRemoval({ authorId: author.id, actorId: me.id, what: author.what, excerpt: report.excerpt, url: author.url, removal: removalFrom(fd) });
+    }
+  }
   await prisma.report.updateMany({
     where: { targetType: report.targetType, targetId: report.targetId, status: "OPEN" },
     data: { status: remove ? "REMOVED" : "DISMISSED", resolvedAt: new Date(), resolvedById: me.id },
@@ -130,6 +138,34 @@ export async function resolveReport(fd: FormData) {
   await logStaff(me.id, remove ? "report.remove" : "report.dismiss", { type: report.targetType, id: report.targetId }, report.excerpt?.slice(0, 120));
   revalidatePath("/reports");
   revalidatePath(report.url.split("#")[0]);
+}
+
+/** The author of reported content and how to describe it to them. */
+async function authorOf(type: ReportType, id: string): Promise<{ id: string | null; what: string; url?: string } | null> {
+  switch (type) {
+    case "FORUM_POST": {
+      const p = await prisma.forumPost.findUnique({ where: { id }, select: { authorId: true, threadId: true, thread: { select: { title: true } } } });
+      return p && { id: p.authorId, what: `your post in "${p.thread.title}"`, url: `/forums/thread/${p.threadId}` };
+    }
+    case "POST":
+      return prisma.post.findUnique({ where: { id }, select: { authorId: true } }).then((p) => p && { id: p.authorId, what: "your update", url: "/community" });
+    case "POST_COMMENT":
+      return prisma.postComment.findUnique({ where: { id }, select: { authorId: true } }).then((c) => c && { id: c.authorId, what: "your comment on an update", url: "/community" });
+    case "SESSION_COMMENT":
+      return prisma.sessionComment.findUnique({ where: { id }, select: { authorId: true, sessionId: true } }).then((c) => c && { id: c.authorId, what: "your comment on a session", url: `/sessions/${c.sessionId}` });
+    case "TIP":
+      return prisma.tip.findUnique({ where: { id }, select: { authorId: true } }).then((t) => t && { id: t.authorId, what: "your tip" });
+    case "GUIDE":
+      return prisma.guide.findUnique({ where: { id }, select: { authorId: true, title: true } }).then((g) => g && { id: g.authorId, what: `your guide "${g.title}"`, url: "/guides?sort=mine" });
+    case "MESSAGE":
+      return prisma.message.findUnique({ where: { id }, select: { authorId: true } }).then((m) => m && { id: m.authorId, what: "a message you sent" });
+    case "CLUB":
+      return prisma.club.findUnique({ where: { id }, select: { ownerId: true, name: true } }).then((c) => c && { id: c.ownerId, what: `your club "${c.name}"`, url: "/clubs" });
+    case "SESSION":
+      return prisma.session.findUnique({ where: { id }, select: { hostId: true, title: true } }).then((s) => s && { id: s.hostId, what: `your session "${s.title}"`, url: "/sessions" });
+    default:
+      return null;
+  }
 }
 
 /** Deletes reported content. Profiles aren't deleted from here; staff contact the member instead. */

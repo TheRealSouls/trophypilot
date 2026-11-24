@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasStaffRole, isAdmin } from "@/lib/roles";
 import { unreadConversations } from "@/lib/community";
+import { unreadNotifications } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ user: null }, { headers: { "Cache-Control": "private, no-store" } });
   // Staff who still need to switch on two-step sign-in see the menu too, so they find out how.
   const admin = hasStaffRole(user);
-  const [pending, unread, reports] = await Promise.all([
+  const [pending, unread, reports, notifications] = await Promise.all([
     prisma.friendship.count({ where: { addresseeId: user.id, status: "PENDING" } }),
     unreadConversations(user.id),
     // Staff see how much is waiting for them: reports, guides to review and online flags.
@@ -27,6 +28,7 @@ export async function GET() {
           prisma.onlineFlag.count({ where: { status: "PENDING" } }),
         ]).then((n) => n.reduce((a, b) => a + b, 0))
       : 0,
+    unreadNotifications(user).catch(() => 0),
   ]);
   return NextResponse.json(
     {
@@ -43,6 +45,7 @@ export async function GET() {
         pending,
         unread,
         reports,
+        notifications,
         theme: user.theme === "dark" ? "dark" : "light",
       },
     },

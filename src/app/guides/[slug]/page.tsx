@@ -1,4 +1,5 @@
 import { isStaff } from "@/lib/roles";
+import { DeleteButton } from "@/components/DeleteButton";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ReportButton } from "@/components/ReportButton";
@@ -11,7 +12,7 @@ import { getSessionUserId } from "@/lib/auth";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { GameArt } from "@/components/art";
 import { TrophyIcon } from "@/components/TrophyIcon";
-import { ConfirmButton, RevealButton, Spoiler, SpoilerSwap, StepCheck, SubmitButton } from "@/components/client";
+import { RevealButton, Spoiler, SpoilerSwap, StepCheck, SubmitButton } from "@/components/client";
 import { HeartIcon } from "@/components/icons";
 import { ShareMenu } from "@/components/ShareMenu";
 import { GuideRating } from "@/components/GuideRating";
@@ -176,12 +177,14 @@ export default async function GuidePage({ params }: { params: Promise<Params> })
                 <Link href={`/guides/${guide.slug}/edit`} className="btn-ghost">
                   Edit
                 </Link>
-                <form action={deleteGuide}>
-                  <input type="hidden" name="guideId" value={guide.id} />
-                  <ConfirmButton message={`Delete "${guide.title}"? Its steps and tips go with it, and it can't be brought back.`} className="btn-ghost text-bad">
-                    Delete
-                  </ConfirmButton>
-                </form>
+                <DeleteButton
+                  action={deleteGuide}
+                  fields={{ guideId: guide.id }}
+                  confirm={`Delete "${guide.title}"? Its steps and tips go with it, and it can't be brought back.`}
+                  what={`"${guide.title}"`}
+                  moderating={guide.authorId !== viewerId}
+                  className="btn-ghost text-bad"
+                />
               </>
             )}
             <ReportButton type="GUIDE" id={guide.id} authorId={guide.authorId} what="this guide" label="Report guide" className="btn-ghost no-underline hover:no-underline" />

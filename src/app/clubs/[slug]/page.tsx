@@ -21,7 +21,7 @@ import { PostComposer } from "@/components/community-forms";
 import { Avatar, Notice } from "@/components/ui";
 import { ClubDetailsForm } from "@/components/ClubDetailsForm";
 import { parseJsonArray } from "@/lib/utils";
-import { deletionDate, WARN_AFTER_DAYS } from "@/lib/idle-clubs";
+import { deletionDate, idleClubsEnabled, WARN_AFTER_DAYS } from "@/lib/idle-clubs";
 
 type Params = { slug: string };
 
@@ -125,7 +125,7 @@ export default async function ClubPage({ params }: { params: Promise<Params> }) 
         </div>
         </div>
       </section>
-      {club.idleWarnedAt && (
+      {club.idleWarnedAt && idleClubsEnabled() && (
         <Notice tone="warn" className="mb-8">
           This club has been quiet for {WARN_AFTER_DAYS} days. It will be deleted on {formatDate(deletionDate(club.idleWarnedAt))} unless
           someone joins, posts an update or reacts to one.

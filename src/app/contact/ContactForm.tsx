@@ -175,7 +175,7 @@ export function ContactForm({
           className="input"
           placeholder={
             topic === "bug"
-              ? "What were you doing, what did you expect, and what happened instead? The page address helps."
+              ? "What were you doing, what did you expect and what happened instead? The page address helps."
               : topic === "content"
                 ? "Link to the guide, tip or profile, and what's wrong with it."
                 : undefined

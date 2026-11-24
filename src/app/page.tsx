@@ -162,9 +162,6 @@ export default async function Home() {
             </div>
             <button className="btn-primary px-5 text-[15px]">Look up</button>
           </div>
-          <p className="mt-3 text-sm text-muted">
-            See any public player&apos;s avatar, level and recent games, even if they haven&apos;t joined {SITE.name} yet.
-          </p>
         </form>
       </section>
 
@@ -368,8 +365,8 @@ export default async function Home() {
             tabs={[
               { key: "points", label: "This week", content: <Board rows={weekly} value={(r) => `${formatNumber(r.points)} pts`} empty="Nobody has earned a trophy yet this week." /> },
               { key: "plats", label: "Platinums", content: <Board rows={weeklyPlats} value={(r) => `${formatNumber(r.platinums)} plat${r.platinums === 1 ? "" : "s"}`} empty="No platinums yet this week." /> },
-              { key: "completion", label: "Average %", content: <Board rows={topCompletion} value={(r) => (r.completion != null ? `${r.completion}%` : "–")} empty="Not enough players ranked yet." /> },
-              { key: "rare", label: "Ultra rare", content: <Board rows={topRare} value={(r) => (r.rare != null ? formatNumber(r.rare) : "–")} empty="Not enough players ranked yet." /> },
+              { key: "completion", label: "Average %", content: <Board rows={topCompletion} value={(r) => (r.completion != null ? `${r.completion}%` : "n/a")} empty="Not enough players ranked yet." /> },
+              { key: "rare", label: "Ultra rare", content: <Board rows={topRare} value={(r) => (r.rare != null ? formatNumber(r.rare) : "n/a")} empty="Not enough players ranked yet." /> },
             ]}
           />
         </Panel>

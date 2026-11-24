@@ -15,7 +15,7 @@ import { GAME_FORUMS_SLUG } from "@/lib/game-forum";
 import { formatDate, timeAgo } from "@/lib/utils";
 import { deletePost, moderateThread } from "@/actions/forum";
 import { GameArt } from "@/components/art";
-import { ConfirmButton } from "@/components/client";
+import { DeleteButton } from "@/components/DeleteButton";
 import { Avatar, Notice } from "@/components/ui";
 import { EditablePost, ReplyForm } from "../../forms";
 
@@ -128,13 +128,18 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
             </select>
             <button className="btn-ghost px-3 py-1 text-xs">Move</button>
           </form>
-          <form action={moderateThread} className="ml-auto">
-            <input type="hidden" name="threadId" value={thread.id} />
-            <input type="hidden" name="action" value="delete" />
-            <ConfirmButton message="Delete this whole thread and every reply?" className="btn-danger px-3 py-1 text-xs">
+          <div className="ml-auto">
+            <DeleteButton
+              action={moderateThread}
+              fields={{ threadId: thread.id, action: "delete" }}
+              confirm="Delete this whole thread and every reply?"
+              what="this thread and every reply"
+              moderating={thread.authorId !== user?.id}
+              className="btn-danger px-3 py-1 text-xs"
+            >
               Delete thread
-            </ConfirmButton>
-          </form>
+            </DeleteButton>
+          </div>
         </div>
       )}
 
@@ -169,19 +174,18 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
                 <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted">
                   <a href={`#post-${p.id}`} className="hover:text-text">{timeAgo(p.createdAt)}</a>
                   {p.editedAt && <span>· edited {timeAgo(p.editedAt)}</span>}
-                  <span className="ml-auto" />
-                  <ReportButton type="FORUM_POST" id={p.id} authorId={p.author?.id} what={`post by ${p.author?.username ?? "a deleted member"}`} />
-                  {(mine || admin) && (
-                    <form action={deletePost}>
-                      <input type="hidden" name="postId" value={p.id} />
-                      <ConfirmButton
-                        message={p.id === firstPost?.id ? "This is the first post, so the whole thread will be deleted. Continue?" : "Delete this post?"}
-                        className="text-xs text-muted hover:text-bad"
-                      >
-                        Delete
-                      </ConfirmButton>
-                    </form>
-                  )}
+                  <span className="ml-auto flex items-center gap-3 leading-5">
+                    <ReportButton type="FORUM_POST" id={p.id} authorId={p.author?.id} what={`post by ${p.author?.username ?? "a deleted member"}`} />
+                    {(mine || admin) && (
+                      <DeleteButton
+                        action={deletePost}
+                        fields={{ postId: p.id }}
+                        confirm={p.id === firstPost?.id ? "This is the first post, so the whole thread will be deleted. Continue?" : "Delete this post?"}
+                        what={p.id === firstPost?.id ? "this post and its thread" : `post by ${name}`}
+                        moderating={!mine}
+                      />
+                    )}
+                  </span>
                 </div>
                 <EditablePost postId={p.id} body={p.body} canEdit={mine || admin} />
                 <ReactionBar kind="FORUM_POST" id={p.id} initial={reactions.get(p.id) ?? []} signedIn={!!user} />

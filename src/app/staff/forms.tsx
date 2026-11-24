@@ -173,7 +173,7 @@ export function ImportPlayersForm() {
           rows={10}
           value={names}
           onChange={(e) => setNames(e.target.value)}
-          placeholder={"One per line, for example\nGamingWithFlacy"}
+          placeholder="One PSN Online ID per line"
           className="input font-mono text-sm"
           aria-describedby="import-names-count"
         />

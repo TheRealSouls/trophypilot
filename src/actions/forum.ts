@@ -11,6 +11,7 @@ import { formText, hateSpeechError } from "@/lib/moderation";
 import { isAdmin, isStaff, POSTS_PER_PAGE, uniqueSectionSlug } from "@/lib/forum";
 import { ensureGameSection, GAME_FORUMS_SLUG } from "@/lib/game-forum";
 import { rateLimit } from "@/lib/rate-limit";
+import { notifyRemoval, removalFrom } from "@/lib/removals";
 import { slugify } from "@/lib/utils";
 import type { FormState } from "./auth";
 
@@ -154,6 +155,7 @@ export async function replyToThread(_: FormState, fd: FormData): Promise<FormSta
 
 export async function editPost(_: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser("/forums");
+  if (!(await rateLimit("forum-edit", 20, 10 * 60_000, user.id))) return { error: "You're editing a lot. Wait a few minutes." };
   const hate = hateSpeechError(...formText(fd));
   if (hate) return { error: hate };
   const post = await prisma.forumPost.findUnique({ where: { id: String(fd.get("postId")) } });
@@ -171,6 +173,17 @@ export async function deletePost(fd: FormData) {
   const user = await requireUser("/forums");
   const post = await prisma.forumPost.findUnique({ where: { id: String(fd.get("postId")) }, include: { thread: true } });
   if (!post || (post.authorId !== user.id && !isStaff(user))) return;
+  if (post.authorId !== user.id) {
+    await logStaff(user.id, "forum.remove", { type: "FORUM_POST", id: post.id }, post.body.slice(0, 120));
+    await notifyRemoval({
+      authorId: post.authorId,
+      actorId: user.id,
+      what: `your post in "${post.thread.title}"`,
+      excerpt: post.body,
+      url: `/forums/thread/${post.threadId}`,
+      removal: removalFrom(fd),
+    });
+  }
 
   const first = await prisma.forumPost.findFirst({ where: { threadId: post.threadId }, orderBy: { createdAt: "asc" }, select: { id: true } });
   if (first?.id === post.id) {
@@ -201,6 +214,7 @@ export async function moderateThread(fd: FormData) {
   await logStaff(user.id, "thread.moderate", { type: "THREAD", id }, `${action}: ${thread.title}`);
   if (action === "delete") {
     await prisma.forumThread.delete({ where: { id } });
+    await notifyRemoval({ authorId: thread.authorId, actorId: user.id, what: `your thread "${thread.title}"`, url: `/forums/${thread.section.slug}`, removal: removalFrom(fd) });
     revalidatePath("/forums", "layout");
     redirect(`/forums/${thread.section.slug}`);
   }

@@ -16,7 +16,7 @@ import { reactionCounts, type ReactionCount } from "@/lib/reactions";
 import { ReactionBar } from "./ReactionBar";
 import { GameArt } from "./art";
 import { TrophyIcon } from "./TrophyIcon";
-import { ConfirmButton } from "./client";
+import { DeleteButton } from "./DeleteButton";
 import { Avatar } from "./ui";
 
 /**
@@ -90,16 +90,19 @@ export async function PostList({ posts, viewer, empty }: { posts: FeedPost[]; vi
                   </Link>
                 )}
                 <span className="text-xs text-muted">{timeAgo(p.createdAt)}</span>
-                <span className="ml-auto" />
-                <ReportButton type="POST" id={p.id} authorId={p.author.id} what={`update by ${name}`} />
-                {canDelete && (
-                  <form action={deletePost}>
-                    <input type="hidden" name="postId" value={p.id} />
-                    <ConfirmButton message="Delete this update?" className="text-xs text-muted hover:text-bad">
-                      Delete
-                    </ConfirmButton>
-                  </form>
-                )}
+                {/* Report and Delete as one group of plain text buttons, on the same line. */}
+                <span className="ml-auto flex items-center gap-3 text-xs leading-5">
+                  <ReportButton type="POST" id={p.id} authorId={p.author.id} what={`update by ${name}`} />
+                  {canDelete && (
+                    <DeleteButton
+                      action={deletePost}
+                      fields={{ postId: p.id }}
+                      confirm="Delete this update?"
+                      what={`update by ${name}`}
+                      moderating={viewer.id !== p.author.id}
+                    />
+                  )}
+                </span>
               </div>
               {p.kind === "PLATINUM" && p.game && (
                 <Link href={`/games/${p.game.slug}`} className="mt-2 flex items-center gap-3 rounded-lg border border-plat/40 bg-plat/5 p-2.5 hover:border-plat">
@@ -145,16 +148,18 @@ function Comments({ post, viewer, reactions }: { post: FeedPost; viewer: { id: s
                       {name}
                     </Link>
                     <span className="text-muted">{timeAgo(c.createdAt)}</span>
-                    <span className="ml-auto" />
-                    <ReportButton type="POST_COMMENT" id={c.id} authorId={c.author.id} what={`comment by ${name}`} />
-                    {canDelete && (
-                      <form action={deleteComment}>
-                        <input type="hidden" name="commentId" value={c.id} />
-                        <ConfirmButton message="Delete this comment?" className="text-muted hover:text-bad">
-                          Delete
-                        </ConfirmButton>
-                      </form>
-                    )}
+                    <span className="ml-auto flex items-center gap-3 leading-5">
+                      <ReportButton type="POST_COMMENT" id={c.id} authorId={c.author.id} what={`comment by ${name}`} />
+                      {canDelete && (
+                        <DeleteButton
+                          action={deleteComment}
+                          fields={{ commentId: c.id }}
+                          confirm="Delete this comment?"
+                          what={`comment by ${name}`}
+                          moderating={viewer.id !== c.author.id && viewer.id !== post.author.id}
+                        />
+                      )}
+                    </span>
                   </div>
                   <p className="whitespace-pre-line break-words">{c.body}</p>
                   <ReactionBar kind="COMMENT" id={c.id} initial={reactions.get(c.id) ?? []} signedIn={!!viewer} small />

@@ -34,6 +34,7 @@ export async function startConversation(_: FormState, fd: FormData): Promise<For
   const hate = hateSpeechError(...formText(fd));
   if (hate) return { error: hate };
   if (!(await rateLimit("message-start", 10, 10 * 60_000, me.id))) return { error: "You've started a lot of conversations just now. Try again in a few minutes." };
+  if (!(await rateLimit("message-start-day", 30, 24 * 60 * 60_000, me.id))) return { error: "You've started a lot of conversations today. Try again tomorrow." };
   const msg = cleanBody(fd);
   if ("error" in msg) return msg;
 
@@ -77,7 +78,8 @@ export async function sendMessage(_: FormState, fd: FormData): Promise<FormState
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
   if (hate) return { error: hate };
-  if (!(await rateLimit("message", 30, 60_000, me.id))) return { error: "Slow down a little and try again in a minute." };
+  if (!(await rateLimit("message", 15, 60_000, me.id))) return { error: "Slow down a little and try again in a minute." };
+  if (!(await rateLimit("message-day", 500, 24 * 60 * 60_000, me.id))) return { error: "That's the most messages for one day. You can send more tomorrow." };
   const msg = cleanBody(fd);
   if ("error" in msg) return msg;
   const conversationId = String(fd.get("conversationId"));
@@ -106,7 +108,8 @@ export async function sendDirect(_: FormState, fd: FormData): Promise<FormState>
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
   if (hate) return { error: hate };
-  if (!(await rateLimit("message", 30, 60_000, me.id))) return { error: "Slow down a little and try again in a minute." };
+  if (!(await rateLimit("message", 15, 60_000, me.id))) return { error: "Slow down a little and try again in a minute." };
+  if (!(await rateLimit("message-day", 500, 24 * 60 * 60_000, me.id))) return { error: "That's the most messages for one day. You can send more tomorrow." };
   const msg = cleanBody(fd);
   if ("error" in msg) return msg;
   const recipient = await prisma.user.findUnique({

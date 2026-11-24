@@ -1,5 +1,6 @@
 "use server";
 
+import { rateLimit } from "@/lib/rate-limit";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
@@ -10,6 +11,7 @@ import type { FormState } from "./auth";
 
 export async function sendFriendRequest(_: FormState, fd: FormData): Promise<FormState> {
   const me = await requireUser();
+  if (!(await rateLimit("friend-request", 20, 60 * 60_000, me.id))) return { error: "You've sent a lot of friend requests. Try again later." };
   const unverified = verifyFirst(me);
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));

@@ -10,6 +10,12 @@ import { SITE } from "./site";
  * the DELETE_AFTER days that follow, the club is deleted. Any activity cancels
  * the warning (clubActive). Runs with the players cron.
  */
+/**
+ * Off while the site is small: a club can easily go a few quiet days. Set IDLE_CLUBS=on in Render
+ * to switch the clean-up (and the warnings on club pages) back on.
+ */
+export const idleClubsEnabled = () => process.env.IDLE_CLUBS === "on";
+
 export const WARN_AFTER_DAYS = 5;
 export const DELETE_AFTER_WARNING_DAYS = 2;
 const DAY = 86_400_000;
@@ -23,6 +29,12 @@ export async function clubActive(clubId: string) {
 export const deletionDate = (warnedAt: Date) => new Date(warnedAt.getTime() + DELETE_AFTER_WARNING_DAYS * DAY);
 
 export async function cleanUpIdleClubs(now = new Date()) {
+  if (!idleClubsEnabled()) {
+    // Clear warnings given before it was switched off, so club pages stop showing them.
+    const cleared = await prisma.club.updateMany({ where: { idleWarnedAt: { not: null } }, data: { idleWarnedAt: null } });
+    if (cleared.count) revalidatePath("/clubs", "layout");
+    return { skipped: "IDLE_CLUBS is off", cleared: cleared.count };
+  }
   const clubs = await prisma.$queryRaw<{ id: string; slug: string; name: string; ownerId: string; idleWarnedAt: Date | null; lastActivity: Date }[]>`
     SELECT c.id, c.slug, c.name, c."ownerId", c."idleWarnedAt",
       GREATEST(

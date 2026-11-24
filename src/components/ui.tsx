@@ -27,7 +27,9 @@ export function Avatar({
   className?: string;
 }) {
   if (avatar?.startsWith("preset:")) return <PresetAvatar id={avatar.slice(7)} size={size} className={className} />;
-  if (avatar?.startsWith("https://")) url = avatar;
+  // Game icons as pictures were retired (they looked blurry and badly cropped): anyone who picked one
+  // shows their PSN avatar again. Uploaded pictures are on our own storage, not PlayStation's.
+  if (avatar?.startsWith("https://") && !/playstation\.(net|com)\//.test(avatar)) url = avatar;
   else if (avatar === "letter") url = null;
   if (url)
     return (

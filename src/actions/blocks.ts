@@ -1,5 +1,6 @@
 "use server";
 
+import { rateLimit } from "@/lib/rate-limit";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
@@ -10,6 +11,7 @@ import { requireUser } from "@/lib/auth";
  */
 export async function toggleBlock(fd: FormData) {
   const me = await requireUser();
+  if (!(await rateLimit("block", 30, 10 * 60_000, me.id))) return;
   const target = await prisma.user.findUnique({ where: { id: String(fd.get("userId")) }, select: { id: true, username: true } });
   if (!target || target.id === me.id) return;
   const key = { blockerId_blockedId: { blockerId: me.id, blockedId: target.id } };

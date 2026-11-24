@@ -43,6 +43,8 @@ model User {
   favouritePlatinumGameId String?
   // light | dark. The site is light unless the member picks dark in Settings; it never follows the device.
   theme                   String    @default("light")
+  // When the member last opened Notifications; newer items count as unread (src/lib/notifications.ts).
+  notificationsSeenAt     DateTime?
   // Profile extras. The banner is artwork from one of the member's games (no uploads).
   bannerGameId            String?
   // Accent colour for the member's own profile page: "" (site red) or a preset key (see src/lib/profile-themes.ts).
@@ -93,6 +95,7 @@ model User {
   conversations         ConversationMember[]
   messages              Message[]
   reportsFiled          Report[]             @relation("reportsFiled")
+  notifications         Notification[]
   wishlist              WishlistGame[]
   favouritePlatinumGame Game?                @relation("favouritePlatinum", fields: [favouritePlatinumGameId], references: [id], onDelete: SetNull)
   reportsResolved       Report[]             @relation("reportsResolved")
@@ -370,6 +373,8 @@ model Game {
   @@index([titleKey])
   @@index([seriesId])
   @@index([igdbId])
+  // "Most played" ordering (games list, home page covers, search) without reading the whole table.
+  @@index([players])
 }
 
 // A game series for the Series tab on game pages. igdbId is IGDB's franchise id when it came from there;
@@ -511,6 +516,7 @@ model Guide {
 
   @@index([gameId])
   @@index([status, createdAt])
+  @@index([authorId])
 }
 
 model GuideStep {
@@ -681,6 +687,7 @@ model ForumThread {
 
   @@index([sectionId, pinned, lastPostAt])
   @@index([gameId, lastPostAt])
+  @@index([authorId])
 }
 
 model ForumPost {
@@ -1019,4 +1026,21 @@ model GuideRating {
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([guideId, userId])
+}
+
+// Notices only staff actions make: content removed by a moderator, with the reason. Replies, comments,
+// reactions, follows and trophies aren't stored here; Notifications reads them from their own tables.
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  // REMOVED (a moderator took something down)
+  kind      String
+  title     String
+  body      String?
+  url       String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

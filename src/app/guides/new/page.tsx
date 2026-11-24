@@ -20,7 +20,7 @@ export default async function NewGuidePage({ searchParams }: { searchParams: Pro
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader kicker="Contribute" title="Write a trophy guide">
-        Share your route to the platinum. Split it into roadmap stages, flag missables, and list collectibles. Your draft saves itself as you write.
+        Share your route to the platinum. Split it into roadmap stages, flag missables and list collectibles. Your draft saves itself as you write.
       </PageHeader>
       <GuideEditor initialGame={initialGame} trusted={isStaff(user) || user.trusted} rules={parseRules((await getSetting(GUIDE_RULES_KEY)) ?? DEFAULT_GUIDE_RULES)} />
     </div>

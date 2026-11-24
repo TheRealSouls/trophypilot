@@ -68,7 +68,7 @@ export default function TermsPage() {
 
         <h2>6. Fair use of the service</h2>
         <p>
-          Don&apos;t scrape the site, overload it, probe it for vulnerabilities without permission, or use it to send bulk requests
+          Don&apos;t scrape the site, overload it, probe it for vulnerabilities without permission or use it to send bulk requests
           to PlayStation Network. We rate limit lookups to keep the service working for everyone.
         </p>
 

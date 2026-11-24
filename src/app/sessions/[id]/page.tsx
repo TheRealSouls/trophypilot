@@ -1,4 +1,5 @@
 import { isStaff } from "@/lib/roles";
+import { DeleteButton } from "@/components/DeleteButton";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ReportButton } from "@/components/ReportButton";
@@ -148,7 +149,7 @@ export default async function SessionPage({ params }: { params: Promise<Params> 
               Comments ({session.comments.length})
             </h2>
             {session.comments.length === 0 ? (
-              <p className="mb-4 text-sm text-muted">No comments yet. Say when you&apos;re free, whether you have a mic, or what you still need.</p>
+              <p className="mb-4 text-sm text-muted">No comments yet. Say when you&apos;re free, whether you have a mic or what you still need.</p>
             ) : (
               <ol className="mb-6 space-y-3">
                 {session.comments.map((c) => {
@@ -162,14 +163,18 @@ export default async function SessionPage({ params }: { params: Promise<Params> 
                           <Link href={`/u/${c.author.username}`} className="font-semibold hover:underline hover:underline-offset-4">{name}</Link>
                           {c.authorId === session.hostId && <span className="chip border-accent-text/50 text-accent-text">Host</span>}
                           <span className="text-xs text-muted">{timeAgo(c.createdAt)}</span>
-                          <span className="ml-auto" />
-                          <ReportButton type="SESSION_COMMENT" id={c.id} authorId={c.authorId} what={`comment by ${name}`} />
-                          {canDelete && (
-                            <form action={deleteSessionComment}>
-                              <input type="hidden" name="commentId" value={c.id} />
-                              <ConfirmButton message="Delete this comment?" className="text-xs text-muted hover:text-bad">Delete</ConfirmButton>
-                            </form>
-                          )}
+                          <span className="ml-auto flex items-center gap-3 text-xs leading-5">
+                            <ReportButton type="SESSION_COMMENT" id={c.id} authorId={c.authorId} what={`comment by ${name}`} />
+                            {canDelete && (
+                              <DeleteButton
+                                action={deleteSessionComment}
+                                fields={{ commentId: c.id }}
+                                confirm="Delete this comment?"
+                                what={`comment by ${name}`}
+                                moderating={c.authorId !== viewer.id && !isHost}
+                              />
+                            )}
+                          </span>
                         </div>
                         <RichText text={c.body} className="mt-1" />
                       </div>

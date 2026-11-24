@@ -7,7 +7,7 @@ export const DEFAULT_FORUM_RULES = [
   ["Post in the right place", "Pick the section that fits and give your thread a clear title. Search first: someone may have asked already."],
   ["Mark spoilers", "Put a spoiler warning in the title and keep story details out of thread titles."],
   ["No cheating presented as legitimate", "Don't share hacked saves, mods or exploits that get accounts banned, and don't boast about using them."],
-  ["No selling", "No paid boosting, account selling or sharing, and no advertising. Free boosting belongs in Sessions."],
+  ["No selling", "No paid boosting, account selling or sharing and no advertising. Free boosting belongs in Sessions."],
   ["No piracy", "Don't post or ask for pirated games, keys or leaked content."],
   ["Keep it legal and safe for work", "Nothing illegal, sexually explicit or gory. No one else's private information."],
   ["One account each", "Don't create extra accounts to dodge a suspension or to back yourself up in an argument."],

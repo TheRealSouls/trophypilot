@@ -63,7 +63,7 @@ export default async function PsnProfilePage({
     );
   }
 
-  if (!(await rateLimit("psn-lookup", 40, 10 * 60_000))) {
+  if (!(await rateLimit("psn-lookup", 20, 10 * 60_000))) {
     return (
       <Wrapper onlineId={onlineId}>
         <Notice tone="warn">You&apos;ve looked up a lot of profiles in a short time. Wait a few minutes and try again.</Notice>
@@ -264,8 +264,10 @@ async function TitleList({
       })
     ).map((g) => [g.npCommunicationId!, g.slug]),
   );
-  // Their recent games and platinums also feed the home page and weekly boards. Runs after the response.
-  after(async () => {
+  // Their recent games and platinums also feed the home page and weekly boards. Runs after the response,
+  // and only up to a site-wide cap an hour, so lookups can't be used to fill the database.
+  const mayStore = await rateLimit("psn-store-site", 200, 60 * 60_000, "all");
+  if (mayStore) after(async () => {
     try {
       await storePlayerTitles(
         accountId,

@@ -13,7 +13,7 @@ export default function PrivacyPage() {
       </PageHeader>
       <article className="prose-legal">
         <p>
-          This policy explains what personal data {SITE.name} collects, why, and what you can do about it. The data controller is{" "}
+          This policy explains what personal data {SITE.name} collects, why and what you can do about it. The data controller is{" "}
           {SITE.operator}. For anything privacy related, use the <Link href="/contact?topic=privacy">contact form</Link>.
         </p>
         <p>
@@ -38,20 +38,20 @@ export default function PrivacyPage() {
         <ul>
           <li>
             Guides, tips, forum threads and posts, community updates, club memberships, game ratings, votes, friend requests, who you
-            follow, and sessions and session comments you create or join.
+            follow and sessions and session comments you create or join.
           </li>
           <li>
             Private messages you send and receive. They are stored so the people in the conversation can read them. We don&apos;t
             read them as a matter of course; staff may look at a conversation when someone in it reports abuse or the law requires it.
           </li>
           <li>
-            Reports you send about posts, messages or profiles: what you reported, your reason and any details, and a copy of the
+            Reports you send about posts, messages or profiles: what you reported, your reason and any details plus a copy of the
             reported text. Only staff see them, and the person reported isn&apos;t told who reported them. When you report a
             private message, staff see that message (and only that one).
           </li>
           <li>Profile extras you choose to add: streaming links, a banner, a profile picture and card theme (picked from built-in art or your games; we don't take uploads), your Trophy Vault and a &quot;playing now&quot; status.</li>
           <li>
-            Anything you send through the <Link href="/contact">contact form</Link>: your email, the message, and your name, username
+            Anything you send through the <Link href="/contact">contact form</Link>: your email, the message and your name, username
             or PSN Online ID if you include them. To limit messages to one a day, we keep a scrambled (hashed) form of your IP
             address, and your account if you&apos;re signed in, for up to two days. We can&apos;t get your IP address back from it.
           </li>
@@ -79,7 +79,7 @@ export default function PrivacyPage() {
         </p>
         <p>
           We find players this way when someone looks them up, when a member links their account, when we add well-known trophy
-          hunters, and through the friends lists of players we already track where PSN makes those lists public. We only ever read
+          hunters and through the friends lists of players we already track where PSN makes those lists public. We only ever read
           what PSN shows publicly.
         </p>
         <p>
@@ -99,7 +99,7 @@ export default function PrivacyPage() {
 
         <h2>Who can see it</h2>
         <p>
-          Your profile visibility setting decides who sees your trophy data: everyone, friends only, or just you. Guides, tips, forum
+          Your profile visibility setting decides who sees your trophy data: everyone, friends only or just you. Guides, tips, forum
           posts, community updates, club posts, session comments, game ratings (as averages), your followers and who you follow are
           public. Private messages are seen only by the people in the conversation. Your email address is never shown to other users.
         </p>
@@ -147,7 +147,7 @@ export default function PrivacyPage() {
 
         <h2>Security</h2>
         <p>
-          Passwords are hashed with bcrypt, sessions are signed and sent over HTTPS only, and access to production data is limited.
+          Passwords are hashed with bcrypt, sessions are signed and sent over HTTPS only. Access to production data is limited.
           No system is perfectly secure. If we have a breach that puts your data at risk, we&apos;ll report it to the Data Protection
           Commission within 72 hours and tell you if it&apos;s likely to affect you seriously, as the GDPR requires.
         </p>

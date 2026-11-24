@@ -59,16 +59,13 @@ export function LookForm({
   const [card, setCard] = useState(values.profileCard);
   const [accent, setAccent] = useState(values.profileAccent);
   const [banner, setBanner] = useState(values.bannerGameId);
-  // Game pictures are stored as their icon URL; in the form they're "game:<id>".
-  const [avatar, setAvatar] = useState(() => {
-    const g = games.find((x) => x.iconUrl && values.avatar === x.iconUrl.replace(/^http:/, "https:"));
-    return g ? `game:${g.id}` : values.avatar;
-  });
+  // A game icon picked before those were retired shows as the default picture.
+  const [avatar, setAvatar] = useState(() => (/playstation\.(net|com)\//.test(values.avatar) ? "" : values.avatar));
 
   const gameById = new Map(games.map((g) => [g.id, g]));
   const bannerGame = banner ? gameById.get(banner) : undefined;
   const bannerUrl = bannerGame ? bannerImage(bannerGame) : null;
-  const previewAvatar = avatar.startsWith("game:") ? (gameById.get(avatar.slice(5))?.iconUrl ?? null) : avatar || null;
+  const previewAvatar = avatar || null;
   const bannerTitle = banner ? (allGames.find((g) => g.id === banner)?.title ?? "your game") : null;
 
   return (
@@ -133,7 +130,7 @@ export function LookForm({
         </div>
       </Picker>
 
-      <Picker legend="Profile picture" hint="Your PSN avatar, a built-in picture, or one of your games.">
+      <Picker legend="Profile picture" hint="Your PSN avatar or a built-in picture.">
         <div className="flex flex-wrap gap-2">
           <Choice name="avatarChoice" checked={avatar === ""} onPick={() => setAvatar("")} label={psnAvatarUrl ? "Your PSN avatar" : "Your initial (default)"} tile>
             <Avatar name={name} hue={avatarHue} url={psnAvatarUrl} size={52} />
@@ -148,13 +145,6 @@ export function LookForm({
               <Avatar name={name} hue={avatarHue} avatar={`preset:${key}`} size={52} />
             </Choice>
           ))}
-          {games
-            .filter((g) => g.iconUrl)
-            .map((g) => (
-              <Choice key={g.id} name="avatarChoice" checked={avatar === `game:${g.id}`} onPick={() => setAvatar(`game:${g.id}`)} label={`${g.title} icon`} tile>
-                <Avatar name={name} hue={avatarHue} url={g.iconUrl} size={52} className="object-contain" />
-              </Choice>
-            ))}
         </div>
       </Picker>
 

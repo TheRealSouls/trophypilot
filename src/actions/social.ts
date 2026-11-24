@@ -12,6 +12,7 @@ import { blockBetween } from "@/lib/blocks";
 import { clubActive } from "@/lib/idle-clubs";
 import { COMMENT_MAX, POST_MAX } from "@/lib/community";
 import { isStaff } from "@/lib/forum";
+import { notifyRemoval, removalFrom } from "@/lib/removals";
 import { rateLimit } from "@/lib/rate-limit";
 import { isOurUpload } from "@/lib/uploads";
 import { slugify } from "@/lib/utils";
@@ -24,6 +25,7 @@ import type { FormState } from "./auth";
 /** Follow or unfollow. Following needs no approval, unlike a friend request. */
 export async function toggleFollow(fd: FormData) {
   const me = await requireUser();
+  if (!(await rateLimit("follow", 30, 10 * 60_000, me.id))) return;
   const target = await prisma.user.findUnique({ where: { id: String(fd.get("userId")) }, select: { id: true, username: true } });
   if (!target || target.id === me.id) return;
   const key = { followerId_followingId: { followerId: me.id, followingId: target.id } };
@@ -83,10 +85,15 @@ export async function deleteComment(fd: FormData) {
   const me = await requireUser();
   const c = await prisma.postComment.findUnique({
     where: { id: String(fd.get("commentId") ?? "") },
-    select: { id: true, authorId: true, post: { select: { authorId: true, club: { select: { slug: true } } } } },
+    select: { id: true, authorId: true, body: true, post: { select: { authorId: true, club: { select: { slug: true } } } } },
   });
   if (!c || (c.authorId !== me.id && c.post.authorId !== me.id && !isStaff(me))) return;
   await prisma.postComment.delete({ where: { id: c.id } });
+  // Staff taking down someone else's comment tell them why (an update's author tidying their own thread doesn't).
+  if (c.authorId !== me.id && c.post.authorId !== me.id && isStaff(me)) {
+    await logStaff(me.id, "comment.remove", { type: "POST_COMMENT", id: c.id }, c.body.slice(0, 120));
+    await notifyRemoval({ authorId: c.authorId, actorId: me.id, what: "your comment on an update", excerpt: c.body, url: c.post.club ? `/clubs/${c.post.club.slug}` : "/community", removal: removalFrom(fd) });
+  }
   if (c.post.club) revalidatePath(`/clubs/${c.post.club.slug}`);
   revalidatePath("/community");
 }
@@ -96,6 +103,10 @@ export async function deletePost(fd: FormData) {
   const post = await prisma.post.findUnique({ where: { id: String(fd.get("postId")) } });
   if (!post || (post.authorId !== me.id && !isStaff(me))) return;
   await prisma.post.delete({ where: { id: post.id } });
+  if (post.authorId !== me.id) {
+    await logStaff(me.id, "post.remove", { type: "POST", id: post.id }, post.body.slice(0, 120));
+    await notifyRemoval({ authorId: post.authorId, actorId: me.id, what: "your update", excerpt: post.body, url: "/community", removal: removalFrom(fd) });
+  }
   revalidatePath("/community");
   revalidatePath("/clubs", "layout");
 }
@@ -120,6 +131,7 @@ export async function createClub(_: FormState, fd: FormData): Promise<FormState>
   if (!(await rateLimit("club", 3, 60 * 60_000, me.id))) return { error: "You've created a few clubs already. Try again later." };
   const parsed = clubSchema.safeParse(Object.fromEntries(fd));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
+  if ((await prisma.club.count({ where: { ownerId: me.id } })) >= 3) return { error: "You own 3 clubs already, the most one member can run." };
   const base = slugify(parsed.data.name) || "club";
   // /clubs/new would clash with nothing today, but keep the word free.
   let slug = base === "new" ? "new-club" : base;
@@ -181,6 +193,7 @@ export async function saveClubDetails(_: FormState, fd: FormData): Promise<FormS
 /** Join or leave. The owner can't leave their own club; they delete it instead. */
 export async function toggleClubMembership(fd: FormData) {
   const me = await requireUser("/clubs");
+  if (!(await rateLimit("club-join", 20, 10 * 60_000, me.id))) return;
   const club = await prisma.club.findUnique({ where: { id: String(fd.get("clubId")) } });
   if (!club || club.ownerId === me.id) return;
   const key = { clubId_userId: { clubId: club.id, userId: me.id } };

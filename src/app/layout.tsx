@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
   title: { default: `${SITE.name}: ${SITE.tagline}`, template: `%s · ${SITE.name}` },
   description:
-    "Track your PlayStation trophies, plan platinums with community guides, and see where you rank globally, in your country and among friends.",
+    "Track your PlayStation trophies, plan platinums with community guides and see where you rank globally, in your country and among friends.",
   applicationName: SITE.name,
   openGraph: { siteName: SITE.name, type: "website" },
 };

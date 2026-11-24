@@ -12,6 +12,7 @@ import { refreshEstimates } from "@/lib/estimates";
 import { slugify, youtubeId } from "@/lib/utils";
 import { isStaff } from "@/lib/roles";
 import { logStaff } from "@/lib/staff";
+import { notifyRemoval, removalFrom } from "@/lib/removals";
 
 
 /**
@@ -92,8 +93,11 @@ async function stepRows(gameId: string, steps: GuideStepInput[], strict: boolean
 }
 
 /** The guide this member may edit, or null. Staff can edit anyone's. */
+/** Unfinished guides (drafts and ones sent back) one member can have at once. */
+const MAX_DRAFTS = 20;
+
 async function editable(id: string, user: { id: string; role: string }) {
-  const g = await prisma.guide.findUnique({ where: { id }, select: { id: true, slug: true, authorId: true, status: true, gameId: true } });
+  const g = await prisma.guide.findUnique({ where: { id }, select: { id: true, slug: true, title: true, authorId: true, status: true, gameId: true } });
   return g && (g.authorId === user.id || isStaff(user)) ? g : null;
 }
 
@@ -135,6 +139,10 @@ export async function saveGuideDraft(input: GuideInput): Promise<SaveResult> {
     });
     return { ok: true, id: saved.id, slug: saved.slug, savedAt: saved.updatedAt.toISOString() };
   }
+  // A cap on unfinished guides, so drafts can't be used to fill the database.
+  if ((await prisma.guide.count({ where: { authorId: user.id, status: { in: ["DRAFT", "REJECTED"] } } })) >= MAX_DRAFTS) {
+    return { ok: false, error: `You have ${MAX_DRAFTS} unfinished guides. Finish or delete one first (Guides, My drafts).` };
+  }
   const created = await prisma.guide.create({
     data: { ...data, slug: await uniqueSlug(data.title), status: "DRAFT", authorId: user.id, steps: { create: steps } },
     select: { id: true, slug: true, updatedAt: true },
@@ -148,6 +156,7 @@ export async function saveGuideDraft(input: GuideInput): Promise<SaveResult> {
  */
 export async function publishGuide(input: GuideInput): Promise<{ ok: false; error: string } | { ok: true; slug: string; status: string }> {
   const user = await requireUser("/guides/new");
+  if (!(await rateLimit("guide-publish", 10, 60 * 60_000, user.id))) return { ok: false, error: "You've published a lot just now. Try again in an hour." };
   const blocked = verifyFirst(user);
   if (blocked) return { ok: false, error: blocked };
   if (hasHateSpeech(...allText(input))) return { ok: false, error: HATE_MESSAGE };
@@ -211,7 +220,10 @@ export async function deleteGuide(fd: FormData) {
   const g = await editable(String(fd.get("guideId") ?? ""), user);
   if (!g) return;
   await prisma.guide.delete({ where: { id: g.id } });
-  if (g.authorId !== user.id) await logStaff(user.id, "guide.delete", { type: "GUIDE", id: g.id });
+  if (g.authorId !== user.id) {
+    await logStaff(user.id, "guide.delete", { type: "GUIDE", id: g.id });
+    await notifyRemoval({ authorId: g.authorId, actorId: user.id, what: `your guide "${g.title}"`, url: "/guides?sort=mine", removal: removalFrom(fd) });
+  }
   await refreshEstimates([g.gameId]);
   revalidatePath("/guides");
   revalidatePath("/games", "layout");
@@ -241,6 +253,7 @@ export async function requestGuide(fd: FormData) {
  */
 export async function rateGuide(guideId: string, stars: number): Promise<{ ok: true; avg: number | null; count: number } | { ok: false; error: string }> {
   const user = await requireUser();
+  if (!(await rateLimit("rate-guide", 30, 10 * 60_000, user.id))) return { ok: false, error: "You're rating quickly. Wait a few minutes." };
   const blocked = verifyFirst(user);
   if (blocked) return { ok: false, error: blocked };
   const guide = await prisma.guide.findUnique({ where: { id: guideId }, select: { id: true, slug: true, authorId: true, status: true } });

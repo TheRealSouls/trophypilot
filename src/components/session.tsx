@@ -22,6 +22,8 @@ export type Me = {
   unread: number;
   /** Open reports, for staff. */
   reports: number;
+  /** Unread notifications (replies, comments, reactions, follows, staff notices). */
+  notifications?: number;
   theme: "light" | "dark";
 };
 
@@ -159,6 +161,22 @@ export function NavAccount() {
         {me.unread > 0 && (
           <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white" aria-hidden>
             {me.unread}
+          </span>
+        )}
+      </Link>
+      <Link
+        href="/notifications"
+        className="btn-ghost relative px-2.5"
+        aria-label={me.notifications ? `Notifications, ${me.notifications} new` : "Notifications"}
+        title="Notifications"
+      >
+        <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden>
+          <path d="M5 8.5a5 5 0 0 1 10 0c0 3.6 1.5 5 1.5 5h-13S5 12.1 5 8.5Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+          <path d="M8.3 16.5a1.8 1.8 0 0 0 3.4 0" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+        {!!me.notifications && (
+          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white" aria-hidden>
+            {me.notifications > 99 ? "99+" : me.notifications}
           </span>
         )}
       </Link>
