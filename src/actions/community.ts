@@ -1,5 +1,6 @@
 "use server";
 
+import { spamCheck } from "@/lib/spam";
 import { rateLimit } from "@/lib/rate-limit";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -23,6 +24,8 @@ export async function addTip(_: FormState, fd: FormData): Promise<FormState> {
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
   if (hate) return { error: hate };
+  const spam = await spamCheck(user, "tip", String(fd.get("body") ?? ""));
+  if (spam) return { error: spam };
   const body = String(fd.get("body") ?? "").trim();
   const trophyId = (fd.get("trophyId") as string) || null;
   const guideId = (fd.get("guideId") as string) || null;
@@ -154,6 +157,8 @@ export async function addSessionComment(_: FormState, fd: FormData): Promise<For
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
   if (hate) return { error: hate };
+  const spam = await spamCheck(user, "session-comment", String(fd.get("body") ?? ""));
+  if (spam) return { error: spam };
   const sessionId = String(fd.get("sessionId"));
   const body = String(fd.get("body") ?? "").trim();
   if (body.length < 2) return { error: "Write something first." };

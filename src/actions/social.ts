@@ -1,5 +1,6 @@
 "use server";
 
+import { spamCheck } from "@/lib/spam";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -43,6 +44,8 @@ export async function createPost(_: FormState, fd: FormData): Promise<FormState>
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
   if (hate) return { error: hate };
+  const spam = await spamCheck(me, "update", String(fd.get("body") ?? ""));
+  if (spam) return { error: spam };
   if (!(await rateLimit("post", 10, 10 * 60_000, me.id))) return { error: "You've posted a lot just now. Try again in a few minutes." };
   const body = String(fd.get("body") ?? "").trim();
   if (body.length < 2) return { error: "Write something first." };
@@ -70,6 +73,8 @@ export async function addComment(_: FormState, fd: FormData): Promise<FormState>
   if (body.length > COMMENT_MAX) return { error: `Keep comments under ${COMMENT_MAX} characters.` };
   const hate = hateSpeechError(body);
   if (hate) return { error: hate };
+  const spam = await spamCheck(me, "comment", String(fd.get("body") ?? ""));
+  if (spam) return { error: spam };
   const post = await prisma.post.findUnique({ where: { id: String(fd.get("postId") ?? "") }, select: { id: true, authorId: true, clubId: true, club: { select: { slug: true } } } });
   if (!post) return { error: "That update was deleted." };
   if (await blockBetween(me.id, post.authorId)) return { error: "You can't comment on this update." };

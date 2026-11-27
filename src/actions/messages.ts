@@ -1,5 +1,6 @@
 "use server";
 
+import { spamCheck } from "@/lib/spam";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -33,6 +34,8 @@ export async function startConversation(_: FormState, fd: FormData): Promise<For
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
   if (hate) return { error: hate };
+  const spam = await spamCheck(me, "message", String(fd.get("body") ?? ""));
+  if (spam) return { error: spam };
   if (!(await rateLimit("message-start", 10, 10 * 60_000, me.id))) return { error: "You've started a lot of conversations just now. Try again in a few minutes." };
   if (!(await rateLimit("message-start-day", 30, 24 * 60 * 60_000, me.id))) return { error: "You've started a lot of conversations today. Try again tomorrow." };
   const msg = cleanBody(fd);
@@ -78,6 +81,8 @@ export async function sendMessage(_: FormState, fd: FormData): Promise<FormState
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
   if (hate) return { error: hate };
+  const spam = await spamCheck(me, "message", String(fd.get("body") ?? ""));
+  if (spam) return { error: spam };
   if (!(await rateLimit("message", 15, 60_000, me.id))) return { error: "Slow down a little and try again in a minute." };
   if (!(await rateLimit("message-day", 500, 24 * 60 * 60_000, me.id))) return { error: "That's the most messages for one day. You can send more tomorrow." };
   const msg = cleanBody(fd);
@@ -108,6 +113,8 @@ export async function sendDirect(_: FormState, fd: FormData): Promise<FormState>
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
   if (hate) return { error: hate };
+  const spam = await spamCheck(me, "message", String(fd.get("body") ?? ""));
+  if (spam) return { error: spam };
   if (!(await rateLimit("message", 15, 60_000, me.id))) return { error: "Slow down a little and try again in a minute." };
   if (!(await rateLimit("message-day", 500, 24 * 60 * 60_000, me.id))) return { error: "That's the most messages for one day. You can send more tomorrow." };
   const msg = cleanBody(fd);

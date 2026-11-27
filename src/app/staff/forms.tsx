@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { deleteMemberAccount, queuePsnPlayers, saveForumRules, saveGuideRules, saveHomeBackground, suspendMember, warnMember } from "@/actions/staff";
+import { deleteMemberAccount, queuePsnPlayers, saveHomeBackground, suspendMember, warnMember } from "@/actions/staff";
 import { uploadPicture } from "@/lib/shrink-image";
 import { SubmitButton } from "@/components/client";
 import { FormMessage } from "@/components/ui";
@@ -64,24 +64,6 @@ export function DeleteAccountForm({ userId, username }: { userId: string; userna
         <input id={`del-${userId}`} name="confirm" autoComplete="off" placeholder={username} className="input w-48 py-1.5" />
         <SubmitButton className="btn-danger px-3 py-1.5 text-xs">Delete account</SubmitButton>
       </div>
-      <FormMessage state={state} />
-    </form>
-  );
-}
-
-export function RulesForm({ rules, kind = "forum" }: { rules: string; kind?: "forum" | "guide" }) {
-  const [state, action] = useActionState(kind === "forum" ? saveForumRules : saveGuideRules, null);
-  return (
-    <form action={action} className="space-y-3">
-      <label className="label" htmlFor={`${kind}-rules`}>
-        {kind === "forum" ? "Forum rules" : "Guide rules (shown beside the guide editor)"}
-      </label>
-      <p className="text-xs text-muted">
-        One rule per block, with a blank line between rules. The first line of each block is the rule&apos;s title; the rest is its
-        explanation (formatting works).
-      </p>
-      <textarea id={`${kind}-rules`} name="rules" rows={kind === "forum" ? 20 : 14} defaultValue={rules} className="input font-mono text-xs" />
-      <SubmitButton>Save rules</SubmitButton>
       <FormMessage state={state} />
     </form>
   );

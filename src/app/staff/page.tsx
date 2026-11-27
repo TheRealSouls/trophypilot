@@ -8,14 +8,17 @@ import { canSetRole, hasStaffRole, isAdmin, isOwner, needsTwoStep, MODERATOR_MAX
 import { ACTION_NAMES } from "@/lib/staff";
 import { DEFAULT_FORUM_RULES } from "@/lib/forum-rules";
 import { FORUM_RULES_KEY, getSetting } from "@/lib/site-settings";
-import { formatNumber, timeAgo } from "@/lib/utils";
+import { formatDate, formatNumber, timeAgo } from "@/lib/utils";
 import { trophyHref } from "@/lib/trophy-slug";
 import { reviewOnlineFlag, setRole, unsuspendMember } from "@/actions/staff";
 import { SubmitButton } from "@/components/client";
 import { LocalTime } from "@/components/LocalTime";
 import { StaffBadge } from "@/components/StaffBadge";
 import { Avatar, EmptyState, PageHeader } from "@/components/ui";
-import { DeleteAccountForm, HomeBackgroundForm, ImportPlayersForm, RulesForm, SuspendForm, WarnForm } from "./forms";
+import { DeleteAccountForm, HomeBackgroundForm, ImportPlayersForm, SuspendForm, WarnForm } from "./forms";
+import { RulesEditor } from "./RulesEditor";
+import { Pager } from "@/components/Pager";
+import { parseRules } from "@/lib/forum-rules";
 import { queuedCount } from "@/lib/psn/import-queue";
 import { DEFAULT_GUIDE_RULES } from "@/lib/guide-rules";
 import { GUIDE_RULES_KEY, HOME_BACKGROUND_KEY } from "@/lib/site-settings";
@@ -30,7 +33,7 @@ type Tab = "overview" | "online" | "requests" | "members" | "staff" | "rules" | 
  * flags, warnings and short suspensions); admins also manage moderators and
  * the forum rules; the owner also appoints admins and can delete accounts.
  */
-export default async function StaffPage({ searchParams }: { searchParams: Promise<{ tab?: string; q?: string }> }) {
+export default async function StaffPage({ searchParams }: { searchParams: Promise<{ tab?: string; q?: string; who?: string; what?: string; page?: string }> }) {
   const me = await requireUser("/staff");
   if (!hasStaffRole(me)) notFound();
   if (needsTwoStep(me)) return <TwoStepFirst />;
@@ -40,7 +43,8 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     ["online", "Online flags"],
     ["requests", "Guide requests"],
     ["members", "Members"],
-    ...(isAdmin(me) ? ([["staff", "Staff"], ["rules", "Rules"], ["home", "Home page"], ["players", "PSN players"]] as [Tab, string][]) : []),
+    ["rules", "Rules"],
+    ...(isAdmin(me) ? ([["staff", "Staff"], ["home", "Home page"], ["players", "PSN players"]] as [Tab, string][]) : []),
     ["log", "Audit log"],
   ];
   const tab = (tabs.find(([k]) => k === sp.tab)?.[0] ?? "overview") as Tab;
@@ -71,15 +75,10 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
       {tab === "members" && <Members me={me} q={sp.q ?? ""} />}
       {tab === "staff" && isAdmin(me) && <StaffList me={me} />}
       {tab === "requests" && <GuideRequests />}
-      {tab === "rules" && isAdmin(me) && (
-        <div className="space-y-10">
-          <RulesForm rules={(await getSetting(FORUM_RULES_KEY)) ?? DEFAULT_FORUM_RULES} />
-          <RulesForm kind="guide" rules={(await getSetting(GUIDE_RULES_KEY)) ?? DEFAULT_GUIDE_RULES} />
-        </div>
-      )}
+      {tab === "rules" && <Rules />}
       {tab === "home" && isAdmin(me) && <HomeBackgroundForm url={await getSetting(HOME_BACKGROUND_KEY)} />}
       {tab === "players" && isAdmin(me) && <ImportPlayers />}
-      {tab === "log" && <AuditLog />}
+      {tab === "log" && <AuditLog who={sp.who ?? ""} what={sp.what ?? ""} page={Number(sp.page) || 1} />}
     </div>
   );
 }
@@ -171,7 +170,10 @@ async function Overview() {
       </ul>
       <section>
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wider">Recent staff actions</h2>
-        <AuditLog take={10} />
+        <RecentActions />
+        <Link href="/staff?tab=log" className="link mt-2 inline-block text-sm">
+          Full audit log
+        </Link>
       </section>
     </div>
   );
@@ -398,8 +400,52 @@ async function StaffList({ me }: { me: Me }) {
   );
 }
 
-async function AuditLog({ take = 100 }: { take?: number }) {
-  const rows = await prisma.staffAction.findMany({ orderBy: { createdAt: "desc" }, take, include: { actor: { select: { username: true } } } });
+/** Both sets of rules, rule by rule, with who last changed them. Any staff member can edit; every save is logged. */
+async function Rules() {
+  const [forum, guide, history] = await Promise.all([
+    prisma.siteSetting.findUnique({ where: { key: FORUM_RULES_KEY } }),
+    prisma.siteSetting.findUnique({ where: { key: GUIDE_RULES_KEY } }),
+    prisma.staffAction.findMany({
+      where: { action: { in: ["rules.edit", "rules.guides"] } },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      include: { actor: { select: { username: true } } },
+    }),
+  ]);
+  const lastBy = async (s: { updatedById: string | null; updatedAt: Date } | null) => {
+    if (!s) return null;
+    const who = s.updatedById ? await prisma.user.findUnique({ where: { id: s.updatedById }, select: { username: true } }) : null;
+    return `Last changed${who ? ` by ${who.username}` : ""} on ${formatDate(s.updatedAt, { day: "numeric", month: "short", year: "numeric" })}.`;
+  };
+  return (
+    <div className="space-y-10">
+      <RulesEditor rules={parseRules(forum?.value ?? DEFAULT_FORUM_RULES)} updated={await lastBy(forum)} />
+      <RulesEditor kind="guide" rules={parseRules(guide?.value ?? DEFAULT_GUIDE_RULES)} updated={await lastBy(guide)} />
+      <section>
+        <h2 className="mb-2 font-bold">Recent rule changes</h2>
+        {history.length ? (
+          <ul className="card divide-y divide-line text-sm">
+            {history.map((h) => (
+              <li key={h.id} className="px-4 py-2.5">
+                <span className="font-semibold">{h.actor?.username ?? "former staff"}</span> {h.action === "rules.edit" ? "changed the forum rules" : "changed the guide rules"}
+                <span className="ml-2 text-xs text-muted">
+                  <LocalTime date={h.createdAt} />
+                </span>
+                {h.detail && <p className="text-muted">{h.detail}</p>}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted">No changes logged yet.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/** The last few staff actions, on the overview. */
+async function RecentActions() {
+  const rows = await prisma.staffAction.findMany({ orderBy: { createdAt: "desc" }, take: 10, include: { actor: { select: { username: true } } } });
   if (!rows.length) return <p className="text-sm text-muted">No staff actions yet.</p>;
   return (
     <ul className="card divide-y divide-line text-sm">
@@ -414,5 +460,71 @@ async function AuditLog({ take = 100 }: { take?: number }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+const LOG_PAGE = 50;
+
+/**
+ * Everything staff have done, newest first, for every staff member to see: who, what, when and to what.
+ * Filter by person or by kind of action.
+ */
+async function AuditLog({ who, what, page }: { who: string; what: string; page: number }) {
+  const staff = await prisma.user.findMany({ where: { staffActions: { some: {} } }, select: { id: true, username: true }, orderBy: { username: "asc" } });
+  const actor = staff.find((s) => s.username === who);
+  const where = { ...(actor ? { actorId: actor.id } : {}), ...(what && what in ACTION_NAMES ? { action: what } : {}) };
+  const [rows, total] = await Promise.all([
+    prisma.staffAction.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * LOG_PAGE, take: LOG_PAGE, include: { actor: { select: { username: true } } } }),
+    prisma.staffAction.count({ where }),
+  ]);
+  const pages = Math.max(1, Math.ceil(total / LOG_PAGE));
+  const href = (p: number) => `/staff?${new URLSearchParams({ tab: "log", ...(who ? { who } : {}), ...(what ? { what } : {}), ...(p > 1 ? { page: String(p) } : {}) })}`;
+  return (
+    <div className="space-y-4">
+      <form action="/staff" className="flex flex-wrap items-end gap-2">
+        <input type="hidden" name="tab" value="log" />
+        <label className="text-sm">
+          <span className="label">Staff member</span>
+          <select name="who" defaultValue={who} className="input w-auto py-1.5">
+            <option value="">Everyone</option>
+            {staff.map((s) => (
+              <option key={s.id} value={s.username}>
+                {s.username}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="label">Action</span>
+          <select name="what" defaultValue={what} className="input w-auto py-1.5">
+            <option value="">Everything</option>
+            {Object.entries(ACTION_NAMES).map(([k, l]) => (
+              <option key={k} value={k}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="btn-ghost">Filter</button>
+        <span className="ml-auto text-xs text-muted">{formatNumber(total)} actions</span>
+      </form>
+      {rows.length ? (
+        <ul className="card divide-y divide-line text-sm">
+          {rows.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5">
+              <span className="font-semibold">{r.actor?.username ?? "former staff"}</span>
+              <span>{ACTION_NAMES[r.action] ?? r.action}</span>
+              {r.detail && <span className="min-w-0 basis-full text-muted sm:basis-auto">{r.detail}</span>}
+              <span className="ml-auto text-xs text-muted">
+                <LocalTime date={r.createdAt} />
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted">No staff actions match.</p>
+      )}
+      <Pager page={page} pages={pages} href={href} />
+    </div>
   );
 }

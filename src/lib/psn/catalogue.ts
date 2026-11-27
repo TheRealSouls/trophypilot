@@ -267,7 +267,10 @@ export async function ensureGameTrophies(
 export async function keepListsFresh(provider: TrophyProvider, { newest = 5, grown = 5 } = {}) {
   const [fresh, grownIds] = await Promise.all([
     prisma.game.findMany({
-      where: { npCommunicationId: { startsWith: "NPWR" }, trophies: { none: {} } },
+      // Only games new to the catalogue this week (for New games on the home page). Older lists load when
+      // someone opens the game or syncs it: loading every list in the catalogue in the background added
+      // about 20 MB a day of trophies nobody looked at.
+      where: { npCommunicationId: { startsWith: "NPWR" }, createdAt: { gte: new Date(Date.now() - 7 * 86_400_000) }, trophies: { none: {} } },
       // Lists never tried come first, newest first; ones PSN refused go to the back of the queue, so they
       // can't hold up everything behind them (that left the home page showing "List not loaded").
       orderBy: [{ listTriedAt: { sort: "asc", nulls: "first" } }, { npCommunicationId: "desc" }],

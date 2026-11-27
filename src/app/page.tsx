@@ -16,7 +16,9 @@ import { SpoilerName } from "@/components/client";
 import { Avatar, MoreLink, Panel, RarityBadge } from "@/components/ui";
 import {
   BookIcon,
+  CalendarIcon,
   ChartIcon,
+  ChatIcon,
   FlameIcon,
   GamepadIcon,
   SearchIcon,
@@ -101,33 +103,32 @@ export default async function Home() {
         <DeletedNotice />
       </Suspense>
 
-      {/* Hero: text on the left, real game art behind the lookup card on the right. */}
-      <section className="relative -mt-8 grid gap-10 pb-6 pt-10 lg:min-h-[470px] lg:grid-cols-[1.1fr_1fr] lg:items-end">
+      {/* Hero: text on the left, real game art behind the lookup card on the right. Kept short so the boards
+          below show on a laptop screen without scrolling (people took the hero for the whole page). */}
+      <section className="relative -mt-8 grid gap-8 pb-6 pt-8 lg:grid-cols-[1.1fr_1fr] lg:items-center">
         {heroImage ? <HeroBackground url={heroImage} /> : <HeroCovers covers={covers} />}
         <div className="relative lg:self-center">
-          <p className="mb-5 flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.16em] text-accent-text">
+          <p className="mb-3 flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.16em] text-accent-text">
             For PlayStation trophy hunters
             <span className="h-px w-10 bg-accent" aria-hidden />
           </p>
-          <h1 className="max-w-2xl text-4xl font-extrabold leading-[1.04] tracking-tight sm:text-5xl xl:text-[3.6rem]">
-            Your trophies,
-            <br />
-            your platinums,
+          <h1 className="max-w-2xl text-3xl font-extrabold leading-[1.08] tracking-tight sm:text-4xl xl:text-[2.75rem]">
+            Your trophies, your platinums,
             <br />
             <span className="text-accent">and the people chasing the same ones.</span>
           </h1>
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted">
+          <p className="mt-4 max-w-xl text-base leading-relaxed text-muted">
             Sync your PSN trophy list, plan a platinum with a community roadmap that flags the missables, and see where you rank
             in the world, your country and your friends list.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-5 flex flex-wrap gap-3">
             <HomeCta />
             <Link href="/games" className="btn-ghost px-5 py-3 text-[15px]">
               <GamepadIcon size={18} />
               Browse games
             </Link>
           </div>
-          <p className="mt-8 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted">
+          <p className="mt-5 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted">
             <span>
               <strong className="font-semibold text-text">{formatNumber(gameCount)}</strong> games tracked
             </span>
@@ -142,7 +143,8 @@ export default async function Home() {
           </p>
         </div>
 
-        <form action="/psn" role="search" className="relative rounded-xl border border-line bg-surface p-5 shadow-[var(--shadow-raised)] lg:mb-2">
+        <div className="relative space-y-3">
+        <form action="/psn" role="search" className="rounded-xl border border-line bg-surface p-5 shadow-[var(--shadow-raised)]">
           <label htmlFor="psn-id" className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide">
             <UsersIcon size={18} />
             Look up any PSN profile
@@ -163,6 +165,28 @@ export default async function Home() {
             <button className="btn-primary px-5 text-[15px]">Look up</button>
           </div>
         </form>
+        {/* The rest of the site at a glance, so the page plainly goes on past the headline. */}
+        <nav aria-label="Explore" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {(
+            [
+              ["/leaderboards", "Leaderboards", "Where you rank", <ChartIcon key="i" size={18} />],
+              ["/guides", "Guides", "Roadmaps and missables", <BookIcon key="i" size={18} />],
+              ["/games", "Games", "Every trophy list", <GamepadIcon key="i" size={18} />],
+              ["/forums", "Forums", "Ask and help", <ChatIcon key="i" size={18} />],
+              ["/sessions", "Sessions", "Boost online trophies", <CalendarIcon key="i" size={18} />],
+              ["/community", "Community", "Updates and clubs", <UsersIcon key="i" size={18} />],
+            ] as const
+          ).map(([href, label, sub, icon]) => (
+            <Link key={href} href={href} className="flex items-center gap-2.5 rounded-xl border border-line bg-surface/90 px-3 py-2.5 shadow-[var(--shadow-card)] hover:border-line-strong">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent-text">{icon}</span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold">{label}</span>
+                <span className="block truncate text-xs text-muted">{sub}</span>
+              </span>
+            </Link>
+          ))}
+        </nav>
+        </div>
       </section>
 
       {/* Four tabbed panels instead of eight separate boxes: the same features with far less scrolling. */}

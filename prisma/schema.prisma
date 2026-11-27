@@ -375,6 +375,7 @@ model Game {
   @@index([igdbId])
   // "Most played" ordering (games list, home page covers, search) without reading the whole table.
   @@index([players])
+  @@index([createdAt])
 }
 
 // A game series for the Series tab on game pages. igdbId is IGDB's franchise id when it came from there;
@@ -458,6 +459,11 @@ model UserGame {
   completedAt  DateTime? // 100%
   firstEarned  DateTime?
   lastEarned   DateTime?
+  // Staff voided this list (faked unlock times, hacked trophies): it stays on the profile, marked, but
+  // counts on no leaderboard. Who, when and why, for the audit trail.
+  voidedAt     DateTime?
+  voidReason   String?
+  voidedById   String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)

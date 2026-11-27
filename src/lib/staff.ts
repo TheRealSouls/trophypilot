@@ -37,6 +37,8 @@ export const ACTION_NAMES: Record<string, string> = {
   "comment.remove": "Removed a comment",
   "post.remove": "Removed an update",
   "forum.remove": "Removed a forum post",
+  "trophies.void": "Voided a trophy list",
+  "trophies.restore": "Restored a voided trophy list",
   "players.import": "Queued PSN players to add",
   "club.delete": "Deleted a club",
   "club.edit": "Edited a club's rules or banner",

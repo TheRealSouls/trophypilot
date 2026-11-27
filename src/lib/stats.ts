@@ -16,6 +16,7 @@ export const ultraRaresByMember = () =>
         SELECT ut."userId", CAST(COUNT(*) AS INTEGER) AS n
         FROM "UserTrophy" ut JOIN "Trophy" t ON t."id" = ut."trophyId"
         WHERE t."earnedRate" <= ${ULTRA_RARE_MAX}
+          AND NOT EXISTS (SELECT 1 FROM "UserGame" v WHERE v."userId" = ut."userId" AND v."gameId" = t."gameId" AND v."voidedAt" IS NOT NULL)
         GROUP BY ut."userId"`;
       return new Map(rows.map((r) => [r.userId, Number(r.n)]));
     },

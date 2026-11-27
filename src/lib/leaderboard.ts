@@ -115,6 +115,25 @@ export async function getLeaderboard(opts: Opts): Promise<LeaderboardRow[]> {
   return cached(key, () => buildLeaderboard({ ...opts, viewerId: null }), { ttlMs, maxStaleMs: 6 * 60 * 60_000, tags: ["boards"] });
 }
 
+/** Pages of a board worked out from its cached top (the first CACHED_PAGES); deeper all-time pages read just their own rows. */
+export const CACHED_PAGES = 20;
+
+/**
+ * One page of a board. The first pages come from the cached top of the board. Pages past that, on the
+ * all-time boards ranked by PSN totals (thousands of tracked players), read only their own 50 rows,
+ * ranked by their place in the table, so page 200 costs no more than page 2.
+ */
+export async function getLeaderboardPage(opts: Opts, page: number, perPage: number): Promise<{ rows: LeaderboardRow[]; more: boolean }> {
+  const deep = page > CACHED_PAGES && opts.period === "all" && !isPersonalScope(opts.scope) && usesPsnTotals(opts);
+  if (!deep) {
+    const board = await getLeaderboard({ ...opts, limit: Math.min(page, CACHED_PAGES) * perPage });
+    return { rows: board.slice((page - 1) * perPage, page * perPage), more: board.length === page * perPage && page < CACHED_PAGES };
+  }
+  const metric: Metric = opts.metric;
+  const rows = await psnTotalsBoard({ ...opts, metric, viewerId: null }, [], perPage, (page - 1) * perPage);
+  return { rows, more: rows.length === perPage };
+}
+
 async function buildLeaderboard(opts: Opts): Promise<LeaderboardRow[]> {
   const { period, limit = 100 } = opts;
   // Completion is a lifetime stat with no meaningful weekly/monthly variant.
@@ -158,7 +177,7 @@ function memberRow(m: MemberRaw, rank: number): LeaderboardRow {
  * we have are ranked by it (a partial import won't hold them back); members
  * without one (demo mode, not synced yet) fall back to their synced trophies.
  */
-async function psnTotalsBoard(opts: Opts, members: MemberRaw[], limit: number): Promise<LeaderboardRow[]> {
+async function psnTotalsBoard(opts: Opts, members: MemberRaw[], limit: number, offset = 0): Promise<LeaderboardRow[]> {
   const country = opts.scope === "country" ? opts.country : null;
   if (opts.scope === "country" && !country) return [];
 
@@ -193,6 +212,7 @@ async function psnTotalsBoard(opts: Opts, members: MemberRaw[], limit: number): 
               ...(opts.metric === "completion" ? { gamesPlayed: { gte: COMPLETION_MIN_GAMES } } : {}),
             },
             orderBy,
+            skip: offset,
             take: limit,
           })
         ).map((p) => ({ ...p, trophies: p.platinum + p.gold + p.silver + p.bronze }))
@@ -217,9 +237,23 @@ async function psnTotalsBoard(opts: Opts, members: MemberRaw[], limit: number): 
     ]),
   );
   const allTime = opts.period === "all";
+  // Members' PSN totals still include lists staff voided, so those come off here.
+  const voided = allTime ? await voidedTotals() : new Map<string, VoidedTotals>();
 
-  const rows: Omit<LeaderboardRow, "rank">[] = players.map((p) => {
-    const m = memberByAccount.get(p.accountId);
+  const rows: Omit<LeaderboardRow, "rank">[] = players.map((raw) => {
+    const m = memberByAccount.get(raw.accountId);
+    const v = m && voided.get(m.id);
+    const p = v
+      ? {
+          ...raw,
+          points: raw.points - v.points,
+          platinum: raw.platinum - v.platinums,
+          gold: (raw.gold ?? 0) - v.golds,
+          silver: (raw.silver ?? 0) - v.silvers,
+          bronze: (raw.bronze ?? 0) - v.bronzes,
+          trophies: raw.trophies - v.trophies,
+        }
+      : raw;
     const stats = m ? memberStats.get(m.id) : undefined;
     return {
       key: m?.id ?? p.accountId,
@@ -282,8 +316,35 @@ async function psnTotalsBoard(opts: Opts, members: MemberRaw[], limit: number): 
     const [b1, b2] = key(b);
     return b1 - a1 || b2 - a2;
   });
-  return rows.slice(0, limit).map((r, i) => ({ ...r, rank: i + 1 }));
+  return rows.slice(0, limit).map((r, i) => ({ ...r, rank: offset + i + 1 }));
 }
+
+type VoidedTotals = { points: number; platinums: number; golds: number; silvers: number; bronzes: number; trophies: number };
+
+/** What each member's voided lists add up to, to take off their PSN totals. Few rows; cached with the boards. */
+const voidedTotals = () =>
+  cached(
+    "voided-totals",
+    async () => {
+      const rows = await prisma.userGame.findMany({
+        where: { voidedAt: { not: null } },
+        select: { userId: true, hasPlatinum: true, earnedGold: true, earnedSilver: true, earnedBronze: true, earnedCount: true },
+      });
+      const out = new Map<string, VoidedTotals>();
+      for (const r of rows) {
+        const t = out.get(r.userId) ?? { points: 0, platinums: 0, golds: 0, silvers: 0, bronzes: 0, trophies: 0 };
+        t.points += (r.hasPlatinum ? 300 : 0) + r.earnedGold * 90 + r.earnedSilver * 30 + r.earnedBronze * 15;
+        t.platinums += r.hasPlatinum ? 1 : 0;
+        t.golds += r.earnedGold;
+        t.silvers += r.earnedSilver;
+        t.bronzes += r.earnedBronze;
+        t.trophies += r.earnedCount;
+        out.set(r.userId, t);
+      }
+      return out;
+    },
+    { ttlMs: 30 * 60_000, tags: ["boards"] },
+  );
 
 type PlayerTotals = {
   accountId: string;
@@ -353,7 +414,8 @@ const memberOrder: Record<Metric, Prisma.Sql> = {
  * the rare trophies only (Trophy.earnedRate is indexed).
  */
 async function memberTotalsBoard(filters: Prisma.Sql[], metric: Metric, limit: number): Promise<MemberRaw[]> {
-  const where = filters.length ? Prisma.sql`WHERE ${Prisma.join(filters, " AND ")}` : Prisma.empty;
+  // Lists staff voided (faked timestamps) don't count.
+  const where = Prisma.sql`WHERE ${Prisma.join([Prisma.sql`ug."voidedAt" IS NULL`, ...filters], " AND ")}`;
   // Ultra rares come from the shared count, so that board sorts here, after the totals.
   const byRare = metric === "rare";
   const minGames = metric === "completion" ? Prisma.sql` AND COUNT(*) >= ${COMPLETION_MIN_GAMES}` : Prisma.empty;
@@ -434,7 +496,7 @@ async function memberBoard(opts: Opts & { metric: Metric; ids?: string[] }, limi
 
   const since = period === "weekly" ? startOfWeekUTC() : period === "monthly" ? startOfMonthUTC() : null;
   if (!since) return memberTotalsBoard(filters, metric, limit);
-  const trophyFilters = [...filters, Prisma.sql`ut."earnedAt" >= ${since}`];
+  const trophyFilters = [...filters, Prisma.sql`ut."earnedAt" >= ${since}`, Prisma.sql`NOT EXISTS (SELECT 1 FROM "UserGame" v WHERE v."userId" = ut."userId" AND v."gameId" = t."gameId" AND v."voidedAt" IS NOT NULL)`];
   const where = Prisma.join(trophyFilters, " AND ");
 
   const orderBy = {

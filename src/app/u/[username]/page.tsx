@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Pager } from "@/components/Pager";
 import Link from "next/link";
 import { plainText } from "@/lib/rich-text";
 import { Suspense } from "react";
@@ -20,7 +21,10 @@ import { ProfileHeader } from "./ProfileHeader";
 import { loadProfile } from "./profile-data";
 
 type Params = { username: string };
-type Search = { tab?: string; sort?: string; platform?: string; show?: string; page?: string; q?: string };
+type Search = { tab?: string; sort?: string; platform?: string; show?: string; page?: string; q?: string; letter?: string };
+
+/** The A to Z bar over a games list: "0" stands for titles that start with a number or symbol. */
+const LETTERS = ["0", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
 
 /** Games per page on the Games tab: big libraries run to thousands. */
 const GAMES_PER_PAGE = 50;
@@ -34,7 +38,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 
 export default async function ProfilePage({ params, searchParams }: { params: Promise<Params>; searchParams: Promise<Search> }) {
   const { username } = await params;
-  const { tab = "games", sort = "recent", platform = "", show = "", page = "1", q = "" } = await searchParams;
+  const { tab = "games", sort = "recent", platform = "", show = "", page = "1", q = "", letter = "" } = await searchParams;
   const { owner, viewerId, canView, relation } = await loadProfile(username);
   // The member's chosen accent colour applies to their whole profile page.
   const accent = accentClass(owner.profileAccent);
@@ -81,7 +85,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
       <div className="mb-6">
         <TabLinks tabs={tabs} active={tab} />
       </div>
-      <Suspense key={[tab, sort, platform, show, page, q].join(":")} fallback={<SkeletonRows rows={6} />}>
+      <Suspense key={[tab, sort, platform, show, page, q, letter].join(":")} fallback={<SkeletonRows rows={6} />}>
         {tab === "platinums" && <PlatinumTracker userId={owner.id} username={owner.username} />}
         {tab === "log" && <TrophyLog userId={owner.id} isOwner={relation === "SELF"} />}
         {tab === "milestones" && <Milestones userId={owner.id} stats={stats} isOwner={relation === "SELF"} />}
@@ -96,6 +100,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
             platform={platform}
             show={show}
             q={q.trim().slice(0, 100)}
+            letter={LETTERS.includes(letter.toUpperCase()) ? letter.toUpperCase() : ""}
             page={Math.max(1, Number.parseInt(page, 10) || 1)}
           />
         )}
@@ -336,6 +341,7 @@ async function GamesTab({
   platform,
   show,
   q,
+  letter,
   page,
 }: {
   userId: string;
@@ -345,15 +351,24 @@ async function GamesTab({
   show: string;
   /** Search by game title, on top of the other filters. */
   q: string;
+  /** Titles starting with this letter ("0" for numbers and symbols), A to Z. */
+  letter: string;
   page: number;
 }) {
+  const letterWhere =
+    letter === "0"
+      ? { NOT: LETTERS.slice(1).map((l) => ({ title: { startsWith: l, mode: "insensitive" as const } })) }
+      : letter
+        ? { title: { startsWith: letter, mode: "insensitive" as const } }
+        : {};
   const where = {
     userId,
-    ...(PLATFORMS.includes(platform) || q
+    ...(PLATFORMS.includes(platform) || q || letter
       ? {
           game: {
             ...(PLATFORMS.includes(platform) ? { platforms: { contains: platform } } : {}),
             ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}),
+            ...letterWhere,
           },
         }
       : {}),
@@ -372,7 +387,7 @@ async function GamesTab({
   const orderBy =
     sort === "progress"
       ? [{ progress: "desc" as const }, { lastEarned: { sort: "desc" as const, nulls: "last" as const } }]
-      : sort === "title"
+      : sort === "title" || letter
         ? { game: { title: "asc" as const } }
         : { lastEarned: { sort: "desc" as const, nulls: "last" as const } };
   // One page, and only what the rows show (no descriptions or screenshot lists).
@@ -391,6 +406,7 @@ async function GamesTab({
       earnedSilver: true,
       earnedBronze: true,
       lastEarned: true,
+      voidedAt: true,
       game: { select: { id: true, slug: true, title: true, coverHue: true, iconUrl: true, platforms: true } },
     },
   });
@@ -404,9 +420,9 @@ async function GamesTab({
     ["progress", "Percent complete"],
   ];
   // Every filter link keeps the other two choices.
-  const href = (o: { sort?: string; platform?: string; show?: string; page?: string; q?: string }) => {
+  const href = (o: { sort?: string; platform?: string; show?: string; page?: string; q?: string; letter?: string }) => {
     const p = new URLSearchParams(
-      Object.entries({ sort, platform, show, q, page: undefined, ...o }).filter(([k, v]) => v && !(k === "sort" && v === "recent")) as [string, string][],
+      Object.entries({ sort, platform, show, q, letter, page: undefined, ...o }).filter(([k, v]) => v && !(k === "sort" && v === "recent")) as [string, string][],
     );
     const query = p.toString();
     return `/u/${username}${query ? `?${query}` : ""}`;
@@ -417,6 +433,7 @@ async function GamesTab({
         <form action={`/u/${username}`} role="search" className="flex gap-2">
           {sort !== "recent" && <input type="hidden" name="sort" value={sort} />}
           {platform && <input type="hidden" name="platform" value={platform} />}
+          {letter && <input type="hidden" name="letter" value={letter} />}
           {show && <input type="hidden" name="show" value={show} />}
           <label htmlFor="games-q" className="sr-only">
             Search games
@@ -458,6 +475,29 @@ async function GamesTab({
           </span>
         </div>
       </div>
+      {/* A to Z, as on PSNProfiles: titles starting with that letter, in order. */}
+      <nav aria-label="Games by first letter" className="-mx-4 mb-4 flex gap-1 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+        <Link href={href({ letter: "" })} scroll={false} aria-current={!letter ? "page" : undefined} className={clsx("flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md border px-2 text-xs font-semibold", !letter ? "border-accent bg-accent text-white" : "border-line hover:border-line-strong")}>
+          All
+        </Link>
+        {LETTERS.map((l) => (
+          <Link
+            key={l}
+            href={href({ letter: l })}
+            scroll={false}
+            aria-current={letter === l ? "page" : undefined}
+            aria-label={l === "0" ? "Titles starting with a number or symbol" : `Titles starting with ${l}`}
+            className={clsx("flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md border text-xs font-semibold", letter === l ? "border-accent bg-accent text-white" : "border-line hover:border-line-strong")}
+          >
+            {l === "0" ? "#" : l}
+          </Link>
+        ))}
+      </nav>
+      {pages > 1 && (
+        <div className="mb-4">
+          <Pager page={Math.min(page, pages)} pages={pages} href={(n) => href({ page: n > 1 ? String(n) : "" })} label="Games pages (top)" />
+        </div>
+      )}
       {games.length === 0 && <EmptyState title="No games match these filters" action={<Link href={`/u/${username}`} className="btn-ghost">Clear filters</Link>} />}
       <ul className="space-y-2.5">
         {games.map((ug) => (
@@ -472,6 +512,7 @@ async function GamesTab({
                   <span className="truncate font-semibold">{ug.game.title}</span>
                   {ug.hasPlatinum && <TrophyIcon type="PLATINUM" size={16} />}
                   {ug.completedAt && <span className="chip border-good/40 text-good">100%</span>}
+                  {ug.voidedAt && <span className="chip border-bad/50 text-bad" title="Staff found this list's unlock times suspicious: it counts on no leaderboard">Voided</span>}
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-muted">
                   <span>{ug.game.platforms.replace(",", " · ")}</span>
@@ -495,25 +536,9 @@ async function GamesTab({
         ))}
       </ul>
       {pages > 1 && (
-        <nav className="mt-6 flex items-center justify-between border-t border-line pt-4 text-sm" aria-label="Games pages">
-          {page > 1 ? (
-            <Link href={href({ page: String(page - 1) })} scroll={false} className="btn-ghost">
-              Previous
-            </Link>
-          ) : (
-            <span />
-          )}
-          <span className="text-muted">
-            Page {Math.min(page, pages)} of {pages}
-          </span>
-          {page < pages ? (
-            <Link href={href({ page: String(page + 1) })} scroll={false} className="btn-ghost">
-              Next
-            </Link>
-          ) : (
-            <span />
-          )}
-        </nav>
+        <div className="mt-6 border-t border-line pt-4">
+          <Pager page={Math.min(page, pages)} pages={pages} href={(n) => href({ page: n > 1 ? String(n) : "" })} label="Games pages" />
+        </div>
       )}
     </div>
   );

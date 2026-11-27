@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Pager } from "@/components/Pager";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import clsx from "clsx";
@@ -9,6 +10,7 @@ import {
   COMPLETION_MIN_GAMES,
   GRADE_METRICS,
   getLeaderboard,
+  getLeaderboardPage,
   METRICS,
   PERIODS,
   SCOPES,
@@ -57,10 +59,12 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
   const requested = sp.country?.toUpperCase();
   const country = requested && /^[A-Z]{2}$/.test(requested) ? requested : (user?.country ?? "GB");
 
-  const page = Math.min(MAX_PAGES, Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1));
-  const [board, trackedCount, myRanks] = await Promise.all([
-    // The top page × 50, cached; this page is the last 50 of it.
-    getLeaderboard({ metric, period, scope, country, viewerId: user?.id, limit: page * PER_PAGE }),
+  const psnTotals = usesPsnTotals({ metric, period, scope });
+  // All-time boards by PSN totals go as deep as there are tracked players; the others stop at MAX_PAGES.
+  const deepBoard = psnTotals && period === "all";
+  const page = Math.min(deepBoard ? 100_000 : MAX_PAGES, Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1));
+  const [{ rows, more }, trackedCount, myRanks] = await Promise.all([
+    getLeaderboardPage({ metric, period, scope, country, viewerId: user?.id }, page, PER_PAGE),
     cached(
       `boards:tracked:${scope === "country" ? country : ""}`,
       () => prisma.psnPlayer.count({ where: { hidden: false, trophiesPrivate: false, ...(scope === "country" ? { country } : {}) } }),
@@ -87,11 +91,8 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
     }
     notRanked = true;
   }
-  const psnTotals = usesPsnTotals({ metric, period, scope });
-  const rows = board.slice((page - 1) * PER_PAGE, page * PER_PAGE);
-  // A full board means there may be more; the tracked count says how many pages to expect.
-  const hasNext = board.length === page * PER_PAGE && page < MAX_PAGES;
-  const lastPage = psnTotals && period === "all" ? Math.min(MAX_PAGES, Math.max(page, Math.ceil(trackedCount / PER_PAGE))) : null;
+  // The tracked count says how many pages an all-time board has; other boards show pages while there are more.
+  const lastPage = deepBoard ? Math.max(page, Math.ceil(trackedCount / PER_PAGE)) : more ? page + 1 : page;
   // Ultra rares and average completion only show on their own boards.
   const showRare = metric === "rare";
   const showCompletion = metric === "completion";
@@ -268,69 +269,69 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
       ) : (
         <>
           {page === 1 && rows.length >= 3 && (
-            <ol className="mb-6 grid gap-3 sm:grid-cols-3">
+            <ol className="mb-6 grid grid-cols-3 gap-2 sm:gap-3">
               {rows.slice(0, 3).map((r) => (
                 <li
                   key={r.key}
                   className={clsx(
-                    "card relative flex flex-col items-center p-5 text-center",
-                    r.rank === 1 && "border-gold/60 sm:order-2",
-                    r.rank === 2 && "sm:order-1 sm:mt-6",
-                    r.rank === 3 && "sm:order-3 sm:mt-6",
+                    "card relative flex min-w-0 flex-col items-center p-3 text-center sm:p-5",
+                    r.rank === 1 && "order-2 border-gold/60",
+                    r.rank === 2 && "order-1 mt-4 sm:mt-6",
+                    r.rank === 3 && "order-3 mt-4 sm:mt-6",
                   )}
                 >
                   <span className={clsx("absolute left-3 top-2 text-lg font-bold", r.rank === 1 ? "text-gold" : "text-muted")}>
                     {r.rank}
                   </span>
-                  <Avatar name={r.name} hue={r.avatarHue} url={r.avatarUrl} avatar={r.avatar} size={r.rank === 1 ? 72 : 60} />
-                  <Link href={r.href} className="mt-3 break-all font-bold hover:underline hover:underline-offset-4">
+                  <Avatar name={r.name} hue={r.avatarHue} url={r.avatarUrl} avatar={r.avatar} size={r.rank === 1 ? 56 : 48} />
+                  <Link href={r.href} className="mt-2 w-full truncate text-sm font-bold hover:underline hover:underline-offset-4 sm:mt-3 sm:text-base">
                     {r.name} <span className="text-sm">{flag(r.country)}</span>
                   </Link>
                   <div className="text-xs text-muted">Level {r.level}</div>
-                  <div className="mt-1 text-xl font-bold tabular-nums">{valueOf(r)}</div>
+                  <div className="mt-1 text-base font-bold tabular-nums sm:text-xl">{valueOf(r)}</div>
                   <div className="text-xs text-muted">{METRICS[metric]}</div>
                 </li>
               ))}
             </ol>
           )}
           <div className="card overflow-x-auto" role="region" aria-label="Leaderboard table" tabIndex={0}>
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full text-sm md:min-w-[720px]">
               <thead className="border-b border-line bg-surface-2 text-left text-xs uppercase tracking-wider text-muted">
                 <tr>
-                  <th className="w-14 px-4 py-3">Rank</th>
-                  <th className="px-4 py-3">Hunter</th>
-                  <Th>Level</Th>
+                  <th className="w-10 px-2 py-3 sm:w-14 sm:px-4">Rank</th>
+                  <th className="px-2 py-3 sm:px-4">Hunter</th>
+                  <Th wide>Level</Th>
                   <Th active={metric === "points"}>Points</Th>
-                  <Th active={metric === "platinums"}>Plats</Th>
+                  <Th active={metric === "platinums"} wide={metric !== "platinums"}>Plats</Th>
                   {grade && <Th active>{METRICS[metric]}</Th>}
                   {showRare && <Th active>Ultra rares</Th>}
-                  <Th>Trophies</Th>
+                  <Th wide>Trophies</Th>
                   {showCompletion && <Th active>Avg %</Th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {rows.map((r) => (
                   <tr key={r.key} id={`rank-${r.key}`} className={clsx("scroll-mt-24 target:bg-accent/10", r.userId && r.userId === user?.id && "bg-surface-3")}>
-                    <td className="px-4 py-2.5 tabular-nums text-muted">{r.rank}</td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-2 py-2.5 tabular-nums text-muted sm:px-4">{r.rank}</td>
+                    <td className="px-2 py-2.5 sm:px-4">
                       <Link
                         href={r.href}
-                        className="flex items-center gap-2.5 font-semibold hover:underline hover:underline-offset-4"
+                        className="flex min-w-0 items-center gap-2 font-semibold hover:underline hover:underline-offset-4 sm:gap-2.5"
                       >
                         <Avatar name={r.name} hue={r.avatarHue} url={r.avatarUrl} avatar={r.avatar} size={28} />
-                        {r.name}
+                        <span className="max-w-[10rem] truncate sm:max-w-none">{r.name}</span>
                         <span title={countryName(r.country)}>{flag(r.country)}</span>
                         {r.userId && r.userId === user?.id && <span className="chip">You</span>}
                         {r.kind === "member" && r.userId !== user?.id && psnTotals && (
-                          <span className="chip" title="Has a TrophyPilot account">
+                          <span className="chip hidden sm:inline-flex" title="Has a TrophyPilot account">
                             Member
                           </span>
                         )}
                       </Link>
                     </td>
-                    <Td>{r.level}</Td>
+                    <Td wide>{r.level}</Td>
                     <Td active={metric === "points"}>{formatNumber(r.points)}</Td>
-                    <Td active={metric === "platinums"}>
+                    <Td active={metric === "platinums"} wide={metric !== "platinums"}>
                       <span className="inline-flex items-center gap-1">
                         <TrophyIcon type="PLATINUM" size={13} />
                         {formatNumber(r.platinums)}
@@ -349,7 +350,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
                         <RareCount rare={r.rare} partial={r.rarePartial} allTime={period === "all"} />
                       </Td>
                     )}
-                    <Td>{formatNumber(r.trophies)}</Td>
+                    <Td wide>{formatNumber(r.trophies)}</Td>
                     {showCompletion && (
                       <Td active>
                         {r.completion != null ? (
@@ -366,27 +367,13 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
               </tbody>
             </table>
           </div>
-          {(page > 1 || hasNext) && (
-            <nav className="mt-4 flex items-center justify-between gap-3 text-sm" aria-label="Leaderboard pages">
-              {page > 1 ? (
-                <Link href={href({ page: String(page - 1) })} className="btn-ghost">
-                  Previous 50
-                </Link>
-              ) : (
-                <span />
-              )}
-              <span className="text-muted">
+          {lastPage > 1 && (
+            <div className="mt-4 space-y-2">
+              <Pager page={page} pages={lastPage} href={(p) => href({ page: String(p) })} label="Leaderboard pages" />
+              <p className="text-center text-xs text-muted">
                 Ranks {formatNumber((page - 1) * PER_PAGE + 1)} to {formatNumber((page - 1) * PER_PAGE + rows.length)}
-                {lastPage ? ` · page ${page} of ${lastPage}` : ` · page ${page}`}
-              </span>
-              {hasNext ? (
-                <Link href={href({ page: String(page + 1) })} className="btn-ghost">
-                  Next 50
-                </Link>
-              ) : (
-                <span />
-              )}
-            </nav>
+              </p>
+            </div>
           )}
           {metric === "completion" && (
             <p className="mt-3 text-xs text-faint">Completion rankings require at least {COMPLETION_MIN_GAMES} games.</p>
@@ -466,9 +453,10 @@ function Pill({ href, active, children }: { href: string; active: boolean; child
   );
 }
 
-function Th({ children, active }: { children: React.ReactNode; active?: boolean }) {
-  return <th className={clsx("px-4 py-3 text-right", active && "text-accent-text")}>{children}</th>;
+/** `wide`: a column only shown from tablets up, so the board fits a phone without sideways scrolling. */
+function Th({ children, active, wide }: { children: React.ReactNode; active?: boolean; wide?: boolean }) {
+  return <th className={clsx("px-2 py-3 text-right sm:px-4", active && "text-accent-text", wide && "hidden md:table-cell")}>{children}</th>;
 }
-function Td({ children, active }: { children: React.ReactNode; active?: boolean }) {
-  return <td className={clsx("px-4 py-2.5 text-right tabular-nums", active && "font-bold text-text")}>{children}</td>;
+function Td({ children, active, wide }: { children: React.ReactNode; active?: boolean; wide?: boolean }) {
+  return <td className={clsx("px-2 py-2.5 text-right tabular-nums sm:px-4", active && "font-bold text-text", wide && "hidden md:table-cell")}>{children}</td>;
 }

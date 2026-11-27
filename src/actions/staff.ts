@@ -7,9 +7,12 @@ import { requireUser } from "@/lib/auth";
 import { sendNotice } from "@/lib/community";
 import { canSetRole, isAdmin, isOwner, isStaff, MODERATOR_MAX_SUSPEND_DAYS, outranks, STAFF_BADGES, type Role } from "@/lib/roles";
 import { logStaff } from "@/lib/staff";
+import { bust } from "@/lib/cache";
 import { queuePlayers } from "@/lib/psn/import-queue";
 import { deleteUploadsOf } from "@/lib/uploads";
-import { FORUM_RULES_KEY, GUIDE_RULES_KEY, HOME_BACKGROUND_KEY } from "@/lib/site-settings";
+import { FORUM_RULES_KEY, getSetting, GUIDE_RULES_KEY, HOME_BACKGROUND_KEY, setSetting } from "@/lib/site-settings";
+import { DEFAULT_FORUM_RULES, parseRules } from "@/lib/forum-rules";
+import { DEFAULT_GUIDE_RULES } from "@/lib/guide-rules";
 import type { FormState } from "./auth";
 
 /**
@@ -99,18 +102,9 @@ export async function deleteMemberAccount(_: FormState, fd: FormData): Promise<F
   redirect("/staff?tab=members");
 }
 
-/** Owners and admins edit the site-wide forum rules. Moderators enforce them but can't change them. */
+/** Any staff member edits the forum rules. Each save is logged with which rules changed. */
 export async function saveForumRules(_: FormState, fd: FormData): Promise<FormState> {
-  const me = await requireUser("/staff");
-  if (!isAdmin(me)) return { error: "Only admins can change the forum rules." };
-  const value = String(fd.get("rules") ?? "").trim();
-  if (value.length < 20) return { error: "The rules need a little more than that." };
-  if (value.length > 20_000) return { error: "Keep the rules under 20,000 characters." };
-  await prisma.siteSetting.upsert({ where: { key: FORUM_RULES_KEY }, create: { key: FORUM_RULES_KEY, value, updatedById: me.id }, update: { value, updatedById: me.id } });
-  await logStaff(me.id, "rules.edit", null, `${value.length} characters`);
-  revalidatePath("/forums/rules");
-  revalidatePath("/staff");
-  return { ok: "Forum rules saved." };
+  return saveRules(fd, FORUM_RULES_KEY, DEFAULT_FORUM_RULES, "rules.edit", ["/forums/rules"], "Forum rules saved.");
 }
 
 /** Approves or rejects a member's "this trophy needs online" flag. Approving sets the trophy. */
@@ -176,18 +170,38 @@ export async function saveHomeBackground(_: FormState, fd: FormData): Promise<Fo
   return { ok: url ? "Saved. The home page shows it within a minute." : "Removed. The home page shows the game covers again." };
 }
 
-/** Owners and admins edit the rules shown beside the guide editor. */
+/** Any staff member edits the rules shown beside the guide editor, logged the same way. */
 export async function saveGuideRules(_: FormState, fd: FormData): Promise<FormState> {
+  return saveRules(fd, GUIDE_RULES_KEY, DEFAULT_GUIDE_RULES, "rules.guides", ["/guides/new"], "Guide rules saved.");
+}
+
+/** What changed between two versions of the rules, for the audit log: added, removed, reworded and moved. */
+function rulesChange(before: string, after: string) {
+  const a = parseRules(before);
+  const b = parseRules(after);
+  const titles = (l: typeof a) => l.map((r) => r.title.toLowerCase());
+  const added = b.filter((r) => !titles(a).includes(r.title.toLowerCase())).map((r) => r.title);
+  const removed = a.filter((r) => !titles(b).includes(r.title.toLowerCase())).map((r) => r.title);
+  const edited = b.filter((r) => a.some((o) => o.title.toLowerCase() === r.title.toLowerCase() && o.text !== r.text)).map((r) => r.title);
+  const kept = titles(b).filter((t) => titles(a).includes(t));
+  const moved = kept.join("|") !== titles(a).filter((t) => titles(b).includes(t)).join("|");
+  const part = (label: string, list: string[]) => (list.length ? `${label}: ${list.map((t) => `"${t}"`).join(", ")}` : null);
+  return [part("Added", added), part("Removed", removed), part("Reworded", edited), moved ? "Changed the order" : null].filter(Boolean).join(". ") || "No changes";
+}
+
+async function saveRules(fd: FormData, key: string, fallback: string, action: string, paths: string[], ok: string): Promise<FormState> {
   const me = await requireUser("/staff");
-  if (!isAdmin(me)) return { error: "Only admins can change the guide rules." };
+  if (!isStaff(me)) return { error: "Only staff can change the rules." };
   const value = String(fd.get("rules") ?? "").trim();
   if (value.length < 20) return { error: "The rules need a little more than that." };
-  if (value.length > 10_000) return { error: "Keep the rules under 10,000 characters." };
-  await prisma.siteSetting.upsert({ where: { key: GUIDE_RULES_KEY }, create: { key: GUIDE_RULES_KEY, value, updatedById: me.id }, update: { value, updatedById: me.id } });
-  await logStaff(me.id, "rules.guides", null, `${value.length} characters`);
-  revalidatePath("/guides/new");
-  revalidatePath("/staff");
-  return { ok: "Guide rules saved." };
+  if (value.length > 20_000) return { error: "Keep the rules under 20,000 characters." };
+  const before = (await getSetting(key)) ?? fallback;
+  const change = rulesChange(before, value);
+  if (change === "No changes") return { ok: "Nothing changed." };
+  await setSetting(key, value, me.id);
+  await logStaff(me.id, action, null, change);
+  for (const p of [...paths, "/staff"]) revalidatePath(p);
+  return { ok };
 }
 
 /** Admins queue PSN players by Online ID; the players job adds them (level and totals only), a few dozen per run. */
@@ -202,4 +216,38 @@ export async function queuePsnPlayers(_: FormState, fd: FormData): Promise<FormS
   revalidatePath("/staff");
   const extra = [r.tracked ? `${r.tracked} already tracked` : null, r.invalid ? `${r.invalid} not valid Online IDs` : null].filter(Boolean).join(", ");
   return { ok: `Queued ${r.added} player${r.added === 1 ? "" : "s"}${extra ? ` (${extra})` : ""}. ${r.queued} waiting in total.` };
+}
+
+/**
+ * Staff void a member's trophy list (faked unlock times, hacked trophies): it stays on their profile,
+ * marked, but no leaderboard counts it. Or restore it. The member is told why; both are logged.
+ */
+export async function setListVoid(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requireUser("/staff");
+  if (!isStaff(me)) return { error: "Only staff can do this." };
+  const ug = await prisma.userGame.findUnique({
+    where: { id: String(fd.get("userGameId") ?? "") },
+    select: { id: true, userId: true, voidedAt: true, user: { select: { username: true } }, game: { select: { title: true, slug: true } } },
+  });
+  if (!ug) return { error: "That list is gone." };
+  const restore = fd.get("restore") === "1";
+  const reason = String(fd.get("reason") ?? "").trim().slice(0, 500);
+  if (!restore && reason.length < 5) return { error: "Say why: which times look wrong, or what the report showed." };
+  await prisma.userGame.update({
+    where: { id: ug.id },
+    data: restore ? { voidedAt: null, voidReason: null, voidedById: null } : { voidedAt: new Date(), voidReason: reason, voidedById: me.id },
+  });
+  await logStaff(me.id, restore ? "trophies.restore" : "trophies.void", { type: "USER", id: ug.userId }, `${ug.user.username}: ${ug.game.title}${restore ? "" : `. ${reason}`}`);
+  await prisma.notification.create({
+    data: {
+      userId: ug.userId,
+      kind: restore ? "RESTORED" : "VOIDED",
+      title: restore ? `Staff restored your ${ug.game.title} trophies` : `Staff voided your ${ug.game.title} trophies`,
+      body: restore ? "They count on the leaderboards again." : `They stay on your profile but don't count on any leaderboard. Reason: ${reason}`,
+      url: `/u/${ug.user.username}/${ug.game.slug}`,
+    },
+  });
+  bust("boards");
+  revalidatePath(`/u/${ug.user.username}`, "layout");
+  return { ok: restore ? "Restored: the list counts again." : "Voided: it no longer counts on the leaderboards." };
 }

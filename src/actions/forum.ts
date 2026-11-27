@@ -1,5 +1,6 @@
 "use server";
 
+import { spamCheck } from "@/lib/spam";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -97,6 +98,8 @@ export async function createThread(_: FormState, fd: FormData): Promise<FormStat
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
   if (hate) return { error: hate };
+  const spam = await spamCheck(user, "thread", `${fd.get("title") ?? ""} ${fd.get("body") ?? ""}`);
+  if (spam) return { error: spam };
   if (!(await rateLimit("forum-thread", 5, 10 * 60_000, user.id))) {
     return { error: "You've started a lot of threads just now. Try again in a few minutes." };
   }
@@ -135,6 +138,8 @@ export async function replyToThread(_: FormState, fd: FormData): Promise<FormSta
   if (unverified) return { error: unverified };
   const hate = hateSpeechError(...formText(fd));
   if (hate) return { error: hate };
+  const spam = await spamCheck(user, "reply", String(fd.get("body") ?? ""));
+  if (spam) return { error: spam };
   if (!(await rateLimit("forum-post", 10, 60_000, user.id))) return { error: "Slow down a little and try again in a minute." };
   const threadId = String(fd.get("threadId"));
   const parsed = body.safeParse(fd.get("body"));
