@@ -6,7 +6,9 @@ import {
   getUserTrophiesEarnedForTitle,
   type ProfileFromUserNameResponse,
 } from "psn-api";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
+import { getSetting, setSetting } from "../site-settings";
 import { pointsFor, ULTRA_RARE_MAX } from "../trophies";
 import { importTitles } from "./catalogue";
 import { countryFromNpId } from "./npid";
@@ -102,7 +104,32 @@ const TITLES_PAGE = 800;
  * free database. The full list is still read for games played, completion
  * and ultra rares, and every game in it joins the catalogue.
  */
-export const KEEP_TITLES = 300;
+export const KEEP_TITLES = 100;
+
+const TRIMMED_KEY = `titles-trimmed-${KEEP_TITLES}`;
+
+/**
+ * Brings players stored before the cap came down (300 to 100) under it, a batch of players per run, newest
+ * lists kept. Once nobody is over the cap it notes that in SiteSetting and stops looking.
+ */
+export async function trimStoredTitles(players = 80) {
+  if (await getSetting(TRIMMED_KEY)) return { trimmed: 0, done: true };
+  const over = await prisma.$queryRaw<{ accountId: string }[]>`
+    SELECT "accountId" FROM "PsnPlayerTitle" GROUP BY "accountId" HAVING COUNT(*) > ${KEEP_TITLES} LIMIT ${players}`;
+  if (!over.length) {
+    await setSetting(TRIMMED_KEY, new Date().toISOString());
+    return { trimmed: 0, done: true };
+  }
+  const ids = over.map((o) => o.accountId);
+  const deleted = await prisma.$executeRaw`
+    DELETE FROM "PsnPlayerTitle" t USING (
+      SELECT "accountId", "npCommunicationId",
+        ROW_NUMBER() OVER (PARTITION BY "accountId" ORDER BY "lastUpdated" DESC NULLS LAST) AS rn
+      FROM "PsnPlayerTitle" WHERE "accountId" IN (${Prisma.join(ids)})
+    ) x
+    WHERE t."accountId" = x."accountId" AND t."npCommunicationId" = x."npCommunicationId" AND x.rn > ${KEEP_TITLES}`;
+  return { trimmed: deleted, players: ids.length, done: false };
+}
 
 /** Every trophy list a player has, newest first: one PSN request per 800 lists. */
 async function allTitles(accountId: string) {

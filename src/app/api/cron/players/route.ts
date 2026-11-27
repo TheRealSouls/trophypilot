@@ -1,7 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { cronRefusal } from "@/lib/cron-auth";
 import { prisma } from "@/lib/db";
-import { discoverPlayers, refreshPlayer, refreshSummary } from "@/lib/psn/players";
+import { discoverPlayers, refreshPlayer, refreshSummary, trimStoredTitles } from "@/lib/psn/players";
 import { toPsnError } from "@/lib/psn/real";
 import { getProvider, isDemoMode } from "@/lib/psn/sync";
 import { keepListsFresh } from "@/lib/psn/catalogue";
@@ -18,7 +18,7 @@ import { sendSessionReminders } from "@/lib/session-reminders";
  * Call with `Authorization: Bearer $CRON_SECRET`, e.g. every 10 minutes. Each refresh
  * also reads the full games list (games played, average completion) and counts
  * ultra rares in up to 40 more lists (see countUltraRares). Only the newest
- * 300 lists per player are kept as rows (KEEP_TITLES).
+ * 100 lists per player are kept as rows (KEEP_TITLES).
  * Each run costs up to about 50 PSN requests per refreshed player (2 to 3
  * for the profile and games list, up to 5 platinum dates, up to 40 lists) and 2 per
  * discovered one. It also loads the trophy lists of the newest games and
@@ -158,5 +158,8 @@ async function runPlayersJob() {
     grown: Math.max(0, Number(process.env.PSN_GROWN_LISTS_PER_RUN) || 5),
   }).catch((err) => ({ error: toPsnError(err).message }));
 
-  return { refreshed, summarised: summarised.length, imported, discovery, lists, clubs, reminders };
+  // Players stored under the old, larger cap, trimmed to the current one a batch at a time.
+  const trimmed = await trimStoredTitles().catch((err) => ({ error: String(err) }));
+
+  return { refreshed, summarised: summarised.length, imported, discovery, lists, clubs, reminders, trimmed };
 }
